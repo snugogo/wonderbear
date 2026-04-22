@@ -1,0 +1,459 @@
+// ============================================================================
+// WonderBear v7 Prisma schema — 12 tables
+//
+// Field derivation sources (authoritative):
+//   - API_CONTRACT.md §五 (Device) / §六 (Child) / §七 (Story) / §九 (Sub) / §十一 (OEM/OTA/Telemetry)
+//   - API_CONTRACT.md §十三 (type aliases — DeviceStatus, ActivationCodeStatus, StoryStatus ...)
+//   - v7 `6_API接口功能清单.md` §19 (schema key fields) + §十五 (seller)
+//
+// Key v7-vs-StepA semantic differences baked in here:
+//   - `Device.storiesLeft` lives on Device (not Subscription) — one-time 6-book
+//     bonus travels with the device, survives unbind (transfer), and is not
+//     refilled on re-bind.
+//   - `ActivationCode` is its own table with a status machine
+//     (issued / activated / transferred / revoked).
+//   - `Parent.passwordHash` is nullable — registration via email code is the
+//     primary path, password is opt-in.
+//   - `Subscription` tracks pdfExportsLeft + pdfExportsResetAt; storiesLeft
+//     is NOT here.
+//   - `TelemetryEvent` indexed on (deviceId, timestamp) for efficient retention
+//     sweeps; params stored as Jsonb.
+//
+// All IDs are cuid except deviceId (hardware-supplied) and activation code
+// values (human-scannable short codes).
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// 1. Device — the physical TV/projector unit
+// ---------------------------------------------------------------------------
+model Device {
+  id              String   @id @default(cuid())
+  // deviceId is hardware-generated, 8-128 chars [A-Za-z0-9_-]
+  deviceId        String   @unique
+  // Denormalized snapshot of the activation code string used (for audit/display).
+  // The FK to ActivationCode is activationCodeId.
+  activationCode  String?
+  activationCodeId String? @unique
+  activationCodeRef ActivationCode? @relation(fields: [activationCodeId], references: [id])
+
+  // Ownership — nullable so unbound/transferred devices can exist
+  parentId        String?
+  parent          Parent?  @relation(fields: [parentId], references: [id], onDelete: SetNull)
+
+  // Which child is currently "selected" on this device
+  activeChildId   String?
+  activeChild     Child?   @relation("DeviceActiveChild", fields: [activeChildId], references: [id], onDelete: SetNull)
+
+  // OEM / batch info
+  oemId           String?
+  oemConfig       OemConfig? @relation(fields: [oemId], references: [oemId], onDelete: SetNull)
+  batchCode       String?
+
+  // State machine: 'registered' | 'activated_unbound' | 'bound'
+  //              | 'unbound_transferable' | 'disabled'
+  status          String   @default("activated_unbound")
+
+  // One-time 6-book free quota, survives unbind/transfer. Refilled only on
+  // FIRST bind of an activated_unbound device.
+  storiesLeft     Int      @default(0)
+
+  // Hardware & firmware
+  model           String   @default("GP15")
+  firmwareVer     String?
+  osVersion       String?
+  hwFingerprint   String?
+  boundAt         DateTime?
+  lastSeenAt      DateTime?
+
+  // Relations
+  stories         Story[]
+  alerts          ContentAlert[]
+  telemetry       TelemetryEvent[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([parentId])
+  @@index([oemId])
+  @@index([status])
+  @@index([lastSeenAt])
+}
+
+// ---------------------------------------------------------------------------
+// 2. ActivationCode — pre-printed code, consumed by Device on first activation
+// ---------------------------------------------------------------------------
+model ActivationCode {
+  id              String   @id @default(cuid())
+  // Human-scannable short code, 6-12 alphanumeric chars
+  code            String   @unique
+
+  // Batch & channel
+  batchId         String?
+  sellerId        String?
+  seller          Seller?  @relation(fields: [sellerId], references: [id], onDelete: SetNull)
+  oemId           String?
+
+  // State machine: 'issued' | 'activated' | 'transferred' | 'revoked'
+  status          String   @default("issued")
+
+  // Which device consumed this code. On unbind, Device.activationCodeId is
+  // cleared AND status flips to 'transferred'. usedByDeviceId stays as the
+  // last user for audit.
+  usedByDeviceId  String?
+  device          Device?
+
+  // Optional bonus: if this batch grants extra subscription months on first
+  // bind (e.g. promotional codes), this drives that logic in batch 3/5.
+  bonusMonths     Int      @default(0)
+
+  // Admin notes + auditing
+  revokedReason   String?
+  activatedAt     DateTime?
+  transferredAt   DateTime?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([batchId])
+  @@index([sellerId])
+  @@index([oemId])
+  @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// 3. Parent — end-user family account
+// ---------------------------------------------------------------------------
+model Parent {
+  id              String   @id @default(cuid())
+  // Normalized to lowercase + trimmed at write time
+  email           String   @unique
+  // Nullable: account may be code-login-only
+  passwordHash    String?
+
+  // Locale drives email template + default error message language
+  locale          String   @default("en")
+  // Global BGM toggle (TV reads this via heartbeat)
+  playBgm         Boolean  @default(true)
+
+  // Anti-brute-force: incremented on failed password login, cleared on success.
+  // Account-level lock triggers error 10008 when >=5.
+  failedLoginCount Int     @default(0)
+  lockedUntil     DateTime?
+
+  // Relations
+  children        Child[]
+  devices         Device[]
+  subscription    Subscription?
+  pdfTasks        PdfTask[]
+  alerts          ContentAlert[]
+
+  lastLoginAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// 4. Child — a kid profile under a Parent (max 4 enforced in code)
+// ---------------------------------------------------------------------------
+model Child {
+  id              String   @id @default(cuid())
+  parentId        String
+  parent          Parent   @relation(fields: [parentId], references: [id], onDelete: Cascade)
+
+  name            String
+  age             Int
+  // 'male' | 'female' | 'prefer_not_say' | null
+  gender          String?
+  // Emoji code or URL
+  avatar          String   @default("🐻")
+
+  // Language learning pair
+  primaryLang     String   @default("en")
+  // 'none' means single-language mode
+  secondLang      String   @default("none")
+
+  birthday        DateTime?
+  // Gamification (earned by playing/favoriting stories)
+  coins           Int      @default(0)
+  // Which ElevenLabs voice preset to use for this child's stories
+  voiceId         String?
+
+  stories         Story[]
+  activeOnDevices Device[] @relation("DeviceActiveChild")
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([parentId])
+}
+
+// ---------------------------------------------------------------------------
+// 5. Story — AI-generated 12-page picture book
+// ---------------------------------------------------------------------------
+model Story {
+  id                    String   @id @default(cuid())
+  childId               String
+  child                 Child    @relation(fields: [childId], references: [id], onDelete: Cascade)
+  // Denormalized for faster "list by device" queries without join
+  deviceId              String?
+  device                Device?  @relation(fields: [deviceId], references: [deviceId], onDelete: SetNull)
+
+  title                 String
+  titleLearning         String?
+  coverUrl              String?
+  coverUrlHd            String?
+
+  // 12-page body. Shape: StoryPage[] per API_CONTRACT §7.6
+  pages                 Json     @default("[]")
+  // { summary, rounds: [{q,a}] }
+  dialogue              Json     @default("{}")
+  // Character description used to seed consistent image generation across pages
+  characterDescription  String?
+
+  // Metadata block, keeps schema narrow. { primaryLang, learningLang, duration, provider, ... }
+  metadata              Json     @default("{}")
+
+  // 'queued' | 'generating' | 'completed' | 'failed'
+  status                String   @default("queued")
+  // 'queue' | 'llm' | 'image' | 'tts' | 'assembly' | 'done'
+  stage                 String   @default("queue")
+  pagesGenerated        Int      @default(0)
+  failureCode           Int?
+  failureMessage        String?
+
+  isPublic              Boolean  @default(false)
+  favorited             Boolean  @default(false)
+  playCount             Int      @default(0)
+  // Total cost attributed to this story in cents (LLM + image + TTS). Sum of
+  // ImageGenLog.costCents + LLM/TTS billing. Used for per-user cost dashboards.
+  genCostCents          Int      @default(0)
+
+  imageLogs             ImageGenLog[]
+
+  createdAt             DateTime @default(now())
+  completedAt           DateTime?
+  updatedAt             DateTime @updatedAt
+
+  @@index([childId, createdAt(sort: Desc)])
+  @@index([deviceId])
+  @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// 6. Subscription — one per Parent, tracks Stripe/PayPal + PDF quota
+// ---------------------------------------------------------------------------
+model Subscription {
+  id                  String   @id @default(cuid())
+  parentId            String   @unique
+  parent              Parent   @relation(fields: [parentId], references: [id], onDelete: Cascade)
+
+  // 'free' | 'monthly' | 'yearly'
+  plan                String   @default("free")
+  // 'free' | 'active' | 'canceled' | 'expired' | 'past_due'
+  status              String   @default("free")
+  // 'stripe' | 'paypal' | null
+  provider            String?
+
+  stripeCustomerId    String?
+  stripeSubId         String?
+  paypalSubId         String?
+
+  // Subscribers get unlimited stories (quota check skipped). This field is
+  // ONLY for PDF export quota (monthly bucket).
+  pdfExportsLeft      Int      @default(0)
+  pdfExportsResetAt   DateTime?
+
+  // End of current paid period (when it expires if canceled, or next renewal)
+  currentPeriodEnd    DateTime?
+  expiresAt           DateTime?
+  cancelAtPeriodEnd   Boolean  @default(false)
+  canceledAt          DateTime?
+  cancelReason        String?
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([stripeSubId])
+  @@index([paypalSubId])
+  @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// 7. PdfTask — async job to composite one or more stories into a PDF
+// ---------------------------------------------------------------------------
+model PdfTask {
+  id              String   @id @default(cuid())
+  parentId        String
+  parent          Parent   @relation(fields: [parentId], references: [id], onDelete: Cascade)
+
+  // Array of Story.id values (1-2 stories per export per §10.1)
+  storyIds        Json     @default("[]")
+  includeCover    Boolean  @default(true)
+  // 'primary' | 'learning' | 'both'
+  language        String   @default("both")
+
+  // 'queued' | 'generating' | 'completed' | 'failed'
+  status          String   @default("queued")
+  progress        Int      @default(0)
+  fileUrl         String?
+  // R2 object key, kept separately from signed URL (regenerate on download)
+  fileKey         String?
+  fileSizeBytes   Int?
+  // Signed URL expiry
+  expiresAt       DateTime?
+  errorCode       Int?
+  errorMessage    String?
+
+  completedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([parentId, createdAt(sort: Desc)])
+  @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// 8. ContentAlert — content-safety 3-level filter hits (PII-redacted)
+// ---------------------------------------------------------------------------
+model ContentAlert {
+  id            String   @id @default(cuid())
+  deviceId      String?
+  device        Device?  @relation(fields: [deviceId], references: [deviceId], onDelete: SetNull)
+  parentId      String?
+  parent        Parent?  @relation(fields: [parentId], references: [id], onDelete: SetNull)
+  childId       String?
+
+  // 1 | 2 | 3 (level 3 is "blocked + alert parent")
+  level         Int
+  // Broad category, no raw user text stored (PII redaction)
+  category      String
+  // Short redacted summary ("violence keyword hit" etc), max 200 chars
+  redactedNote  String?
+  // What pipeline stage caught it: 'dialogue_input' | 'llm_output' | 'image_prompt'
+  source        String
+
+  createdAt     DateTime @default(now())
+
+  @@index([deviceId, createdAt(sort: Desc)])
+  @@index([parentId, createdAt(sort: Desc)])
+  @@index([level])
+}
+
+// ---------------------------------------------------------------------------
+// 9. ImageGenLog — per-page per-provider monitoring for 3-way fallback tuning
+// ---------------------------------------------------------------------------
+model ImageGenLog {
+  id           String   @id @default(cuid())
+  storyId      String
+  story        Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  pageNum      Int
+  // 'openai' | 'gemini' | 'fal'
+  provider     String
+  // Which fallback tier this was — 1 = primary, 2 = secondary, 3 = tertiary
+  tier         Int
+  success      Boolean
+  durationMs   Int
+  costCents    Int      @default(0)
+  // If failed, error code from our side (mapped to §二 30002 etc)
+  errorCode    Int?
+  errorMessage String?
+
+  createdAt    DateTime @default(now())
+
+  @@index([storyId])
+  @@index([provider, success, createdAt(sort: Desc)])
+}
+
+// ---------------------------------------------------------------------------
+// 10. Seller — distributor / reseller account (Phase 1 末, batch 7)
+// ---------------------------------------------------------------------------
+model Seller {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  passwordHash  String
+  companyName   String
+  // ISO country code(s), comma-separated if multi
+  regionCode    String
+  // 'pending' | 'active' | 'suspended'
+  status        String   @default("pending")
+  contactName   String?
+  contactPhone  String?
+
+  codes         ActivationCode[]
+
+  lastLoginAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([status])
+  @@index([regionCode])
+}
+
+// ---------------------------------------------------------------------------
+// 11. OemConfig — per-OEM branding/theming bundle
+// ---------------------------------------------------------------------------
+model OemConfig {
+  id                  String   @id @default(cuid())
+  // Stable OEM identifier — Device.oemId points here by value
+  oemId               String   @unique
+
+  // Multi-language brand name: { zh, en, pl, ro }
+  brandName           Json     @default("{}")
+  logoUrl             String?
+  // { primary, secondary, accent, ... } hex strings
+  colors              Json     @default("{}")
+  // Menu overrides: which features to show/hide per OEM
+  menus               Json     @default("{}")
+  // Version tag for TV shell to know when to pull new assets
+  assetBundleVersion  String   @default("1.0.0")
+  assetBundleUrl      String?
+
+  // Parent H5 base URL for TV QR binding links.
+  // MUST NOT include trailing slash. TV appends `/#/register?device=...&code=...`.
+  // Default `h5.wonderbear.app` is the production WonderBear domain for non-OEM devices.
+  // Per API_CONTRACT §14.5 (TV QR binding URL spec).
+  h5BaseUrl           String   @default("https://h5.wonderbear.app")
+
+  // Enabled flag (disabled OEMs still return device register OK but with null config)
+  active              Boolean  @default(true)
+
+  devices             Device[]
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// 12. TelemetryEvent — device-side analytics events (high write volume)
+// ---------------------------------------------------------------------------
+// Kept narrow + heavily indexed. Retention sweep (e.g. drop > 90d) runs as
+// cron job in batch 6. If volume becomes problematic, Postgres table
+// partitioning by month is the planned escalation — schema shape already
+// supports it via (deviceId, timestamp) compound index.
+model TelemetryEvent {
+  id          String   @id @default(cuid())
+  deviceId    String
+  device      Device   @relation(fields: [deviceId], references: [deviceId], onDelete: Cascade)
+
+  // 'device_boot' | 'page_view' | 'story_generated' | 'story_played'
+  // | 'payment_attempted' | 'error' | 'performance' | 'custom'
+  type        String
+  // Client-supplied event timestamp (may differ from receivedAt if device was offline)
+  timestamp   DateTime
+  params      Json     @default("{}")
+
+  receivedAt  DateTime @default(now())
+
+  @@index([deviceId, timestamp(sort: Desc)])
+  @@index([type, timestamp(sort: Desc)])
+}

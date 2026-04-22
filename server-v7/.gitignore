@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+package-lock.json.backup
+
+# Environment — NEVER commit actual secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pino-*.log
+
+# Prisma local artifacts
+prisma/*.db
+prisma/*.db-journal
+prisma/migrations/dev.db*
+
+# Build / runtime
+dist/
+build/
+.cache/
+coverage/
+.nyc_output/
+tmp/
+temp/
+
+# Local storage for dev (we use R2 in prod)
+storage/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
