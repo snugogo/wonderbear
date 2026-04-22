@@ -49,6 +49,7 @@ export default {
     codeSent: '验证码已发送,请查收邮件',
     registerSuccess: '账户创建成功,欢迎!',
     loginSuccess: '登录成功',
+    deviceBoundOverrideConfirm: '该设备已绑定另一个账户,是否强制覆盖并绑到当前账户?',
 
     invalidEmail: '请输入有效的邮箱地址',
     invalidCode: '验证码为 6 位数字',

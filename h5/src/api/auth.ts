@@ -11,7 +11,11 @@ export const authApi = {
     return http.post<SendCodeResp>('/api/auth/send-code', params);
   },
 
-  /** 4.2 注册家长账户(带设备绑定)*/
+  /**
+   * 4.2 注册家长账户
+   * 批次 2 约束:只建 Parent,device 始终为 null(后续 H5 主动调 /api/device/bind)。
+   * deviceId / activationCode 仍建议传,服务端做类型校验。
+   */
   register(params: {
     email: string;
     code: string;
@@ -19,7 +23,6 @@ export const authApi = {
     deviceId: string;
     activationCode: string;
     locale: Locale;
-    forceOverride?: boolean;
   }) {
     return http.post<RegisterResp>('/api/auth/register', params);
   },

@@ -92,12 +92,15 @@ import { computed, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import { showToast, showSuccessToast } from 'vant';
+import { showDialog } from 'vant';
 import AuthLayout from '@/layouts/AuthLayout.vue';
 import CodeInput from '@/components/CodeInput.vue';
 import { authApi } from '@/api/auth';
+import { deviceApi } from '@/api/device';
 import { useAuthStore } from '@/stores/auth';
 import { useCountdown } from '@/composables/useCountdown';
 import { useApiError } from '@/composables/useApiError';
+import { BusinessError } from '@/api/http';
 import { EMAIL_REGEX, PASSWORD_REGEX, CODE_COOLDOWN, CODE_LENGTH } from '@/config';
 import { i18n } from '@/i18n';
 import type { Locale } from '@/types';
@@ -168,23 +171,59 @@ async function onSubmit() {
     // 是否扫码来的(有 deviceCtx)
     const cameFromQR = !!authStore.deviceCtx?.deviceId;
 
+    // 批次 2 的 register 只建 Parent,device 始终是 null;这里把 parentToken + parent 写入 store
     authStore.setAuth(resp.parentToken, resp.parent, resp.device);
-    // 注意:扫码场景下 deviceCtx 暂不清,onboard/done 里再清;直接注册立即清
-    if (!cameFromQR) {
-      authStore.clearDeviceContext();
-    }
-    showSuccessToast(t('auth.registerSuccess'));
 
-    // 扫码来的 → 进入引导建孩子链路;否则直接去 Home
+    // 扫码场景 → 紧接着调 /api/device/bind 完成真正绑定(批次 3)
     if (cameFromQR) {
+      await bindDeviceAfterRegister();
       router.replace({ name: 'OnboardChild' });
     } else {
+      authStore.clearDeviceContext();
+      showSuccessToast(t('auth.registerSuccess'));
       router.replace({ name: 'Home' });
     }
   } catch (e) {
     showToast(fmtErr(e));
   } finally {
     submitting.value = false;
+  }
+}
+
+/**
+ * 注册成功后立即绑定设备(批次 3 /api/device/bind):
+ *  - 首次绑定:activatedQuota=true,发 6 本免费故事
+ *  - 20003 已绑别家:询问家长是否强制覆盖(forceOverride: true)
+ *  - 其他错误只提示,不阻断 OnboardChild(孩子是独立数据)
+ */
+async function bindDeviceAfterRegister(force = false) {
+  const ctx = authStore.deviceCtx;
+  if (!ctx?.deviceId || !ctx.activationCode) return;
+  try {
+    const r = await deviceApi.bind({
+      deviceId: ctx.deviceId,
+      activationCode: ctx.activationCode,
+      forceOverride: force || undefined,
+    });
+    authStore.setDevice(r.device);
+    showSuccessToast(t('auth.registerSuccess'));
+  } catch (e) {
+    if (e instanceof BusinessError && e.code === 20003 && !force) {
+      try {
+        await showDialog({
+          title: t('errors.20003'),
+          message: t('auth.deviceBoundOverrideConfirm'),
+          confirmButtonText: t('common.confirm'),
+          cancelButtonText: t('common.cancel'),
+          showCancelButton: true,
+        });
+        await bindDeviceAfterRegister(true);
+        return;
+      } catch {
+        // 用户拒绝覆盖,仍然进入 OnboardChild(账户/孩子可用,只是未绑设备)
+      }
+    }
+    showToast(fmtErr(e));
   }
 }
 </script>

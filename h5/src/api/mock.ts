@@ -354,13 +354,9 @@ route('POST', '/api/auth/register', async (data) => {
       createdAt: nowIso(),
       activated: !!deviceId,
     },
-    device: {
-      id: genId(),
-      deviceId: deviceId || 'tv_gp15_mock',
-      status: 'bound',
-      boundAt: nowIso(),
-      storiesLeft: 6,
-    },
+    // 对齐批次 2 实际:device 始终 null,H5 紧接着调 /api/device/bind
+    device: null,
+    tokenExpiresAt: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
   };
   return ok(resp);
 });
@@ -390,6 +386,7 @@ route('POST', '/api/auth/login-code', async (data) => {
         pdfExportsLeft: subDb.pdfExportsLeft,
       },
     },
+    tokenExpiresAt: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
   };
   return ok(resp);
 });
@@ -424,6 +421,7 @@ route('POST', '/api/auth/login-password', async (data) => {
         pdfExportsLeft: subDb.pdfExportsLeft,
       },
     },
+    tokenExpiresAt: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
   } satisfies LoginResp);
 });
 

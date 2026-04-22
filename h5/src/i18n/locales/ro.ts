@@ -49,6 +49,7 @@ export default {
     codeSent: 'Cod trimis. Verifică-ți e-mailul.',
     registerSuccess: 'Cont creat. Bun venit!',
     loginSuccess: 'Autentificat cu succes',
+    deviceBoundOverrideConfirm: 'Acest dispozitiv este legat de alt cont. Forțezi preluarea pe contul curent?',
 
     invalidEmail: 'Introdu o adresă de e-mail validă',
     invalidCode: 'Codul trebuie să aibă 6 cifre',

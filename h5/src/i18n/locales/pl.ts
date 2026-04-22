@@ -49,6 +49,7 @@ export default {
     codeSent: 'Kod wysłany. Sprawdź skrzynkę e-mail.',
     registerSuccess: 'Konto utworzone. Witamy!',
     loginSuccess: 'Zalogowano pomyślnie',
+    deviceBoundOverrideConfirm: 'To urządzenie jest powiązane z innym kontem. Wymusić zmianę na bieżące konto?',
 
     invalidEmail: 'Podaj poprawny adres e-mail',
     invalidCode: 'Kod musi mieć 6 cyfr',

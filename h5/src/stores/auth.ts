@@ -48,13 +48,22 @@ export const useAuthStore = defineStore('auth', () => {
   });
 
   // ---- actions ----
-  function setAuth(nextToken: string, nextParent: ParentLite | Parent, nextDevice?: Device) {
+  function setAuth(
+    nextToken: string,
+    nextParent: ParentLite | Parent,
+    nextDevice?: Device | null
+  ) {
     token.value = nextToken;
     parent.value = nextParent;
     if (nextDevice) device.value = nextDevice;
     storage.set(STORAGE_KEYS.TOKEN, nextToken);
     storage.set(STORAGE_KEYS.PARENT, nextParent);
     storage.set(STORAGE_KEYS.LAST_EMAIL, nextParent.email);
+  }
+
+  /** 独立更新 device(/api/device/bind 返回后用) */
+  function setDevice(nextDevice: Device | null) {
+    device.value = nextDevice;
   }
 
   /** 用 /api/parent/me 的完整响应覆盖 store(替换 ParentLite → Parent) */
@@ -111,6 +120,7 @@ export const useAuthStore = defineStore('auth', () => {
     isSubscribed,
     // actions
     setAuth,
+    setDevice,
     setFullParent,
     setDeviceContext,
     clearDeviceContext,

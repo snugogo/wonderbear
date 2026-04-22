@@ -1,4 +1,4 @@
-# WonderBear v7 · 家长 H5 · v0.6.0
+# WonderBear v7 · 家长 H5 · v0.6.1
 
 移动端 H5,**严格对齐 `API_CONTRACT v1.0` + patch v2/v3 + H5_HANDOFF**。
 扫码入口 → 邮箱注册 → 引导建孩子 → 交回 TV,核心链路丝滑闭环。
@@ -77,15 +77,36 @@ npm run dev
 > 实战做法:先桌面浏览器打开页面发码、看 console 拿码,再手机操作整个流程。
 > Stage 2 服务端做完后,验证码会在服务端终端打印,流程更顺。
 
-### 模式 B:真连本地服务端
+### 模式 B:真连本地服务端(v0.6.1 起默认开启)
 
-`.env.development` 改为:
-```
-VITE_USE_MOCK=false
-VITE_API_BASE_URL=http://localhost:3000
+**默认状态**:`.env.development` 已设 `VITE_USE_MOCK=false`,开箱即真连 `http://localhost:3000`。
+
+**联调前置**(先把服务端跑起来):
+```bash
+cd ../server-v7
+docker-compose up -d           # PG + Redis
+npm install
+cp .env.example .env           # 按需改 DB/REDIS/RESEND 连接串
+npm run prisma:migrate:deploy  # 首次要
+npm run dev                    # 起在 :3000
+# 看到 "Server listening at http://0.0.0.0:3000" 即 OK
 ```
 
-服务端跑起来后,流程同上,验证码看**服务端终端**输出。
+**H5 跑起来**(另开终端):
+```bash
+cd ../h5
+npm run dev                    # :5174
+```
+
+**验证码拿码方式**(未配 `RESEND_API_KEY` 时):服务端终端会用横幅打印 `Code: 823461`,也会写进 `request.log.warn({ mailer:'dev-mode', ... })`,`grep Code:` 即可。H5 页面只会展示"验证码已发送,请查收邮件",手动把码填回。
+
+**对齐契约** —— 实际接口形态看 `server-v7/docs/spec/API_ACTUAL_FORMAT.md`:
+- `/api/auth/register` 批次 2 只建 Parent,`device: null`;H5 注册成功后会**紧接着调** `/api/device/bind` 完成绑定 + 发 6 本免费故事
+- 如果设备已被别家绑定 → 返回 `20003`,H5 弹确认框询问是否 `forceOverride: true`
+- 401 进入单飞 `/api/auth/refresh` 流程,失败自动清 token 拉回登录
+- 所有 token / parent / child 等字段以 `API_ACTUAL_FORMAT.md` 的真实 JSON 为准
+
+**回退到纯 mock**(服务端挂了临时调样式时):`.env.development` 设 `VITE_USE_MOCK=true` 重启 `npm run dev`。
 
 ### 预置测试账号(Mock 模式)
 

@@ -211,7 +211,12 @@ export interface SendCodeResp {
   nextRetryAfter: number;
 }
 
-/** 注册响应(§4.2) */
+/**
+ * 注册响应(§4.2 / 批次 2 实际)
+ * 批次 2 的 /api/auth/register 只建 Parent,device 始终为 null,
+ * H5 拿到 parentToken 后必须再调 /api/device/bind(批次 3)完成真正绑定 + 发放 6 本额度。
+ * 参考:server-v7/docs/spec/API_ACTUAL_FORMAT.md 4.2
+ */
 export interface RegisterResp {
   parentToken: string;
   parent: {
@@ -221,16 +226,14 @@ export interface RegisterResp {
     createdAt: string;
     activated: boolean;
   };
-  device: {
-    id: string;
-    deviceId: string;
-    status: DeviceStatus;
-    boundAt: string;
-    storiesLeft: number;
-  };
+  device: Device | null;
+  tokenExpiresAt: string;
 }
 
-/** 登录响应(§4.3 + 4.4) */
+/**
+ * 登录响应(§4.3 + 4.4 / 批次 2 实际)
+ * 参考:server-v7/docs/spec/API_ACTUAL_FORMAT.md 4.3 / 4.4
+ */
 export interface LoginResp {
   parentToken: string;
   parent: {
@@ -240,4 +243,5 @@ export interface LoginResp {
     activated: boolean;
     subscription: SubscriptionSummary | null;
   };
+  tokenExpiresAt: string;
 }

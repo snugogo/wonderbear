@@ -49,6 +49,7 @@ export default {
     codeSent: 'Code sent. Check your inbox.',
     registerSuccess: 'Account created. Welcome!',
     loginSuccess: 'Signed in successfully',
+    deviceBoundOverrideConfirm: 'This device is bound to another account. Force override and bind to current account?',
 
     invalidEmail: 'Please enter a valid email',
     invalidCode: 'Code must be 6 digits',
