@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1280, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <title>WonderBear</title>
+    <style>
+      /* Inline critical CSS to avoid flash before bundle loads */
+      html, body, #app {
+        margin: 0;
+        padding: 0;
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+        background: #1a0f0a;
+        color: #fff5e6;
+        font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      #app { display: flex; align-items: center; justify-content: center; }
+      .boot-loader {
+        font-size: 24px;
+        opacity: 0.6;
+        letter-spacing: 0.1em;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div class="boot-loader">WonderBear</div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

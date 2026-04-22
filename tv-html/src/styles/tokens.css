@@ -1,0 +1,55 @@
+/* WonderBear design tokens. Avoid CSS custom properties — Sass-like define via :root for now;
+   if real device proves CSS variables work, keep this. Otherwise refactor to compile-time. */
+
+:root {
+  /* Resolution (1280×720 native) */
+  --vp-w: 1280px;
+  --vp-h: 720px;
+
+  /* Color — warm watercolor palette */
+  --c-bg-deep:        #1a0f0a;     /* very dark warm brown for letterboxing */
+  --c-bg-canvas:      #2b1a0f;     /* default screen bg */
+  --c-bg-warm:        #3d2418;     /* card bg */
+  --c-cream:          #fff5e6;     /* primary text */
+  --c-cream-soft:     rgba(255, 245, 230, 0.7);
+  --c-cream-faint:    rgba(255, 245, 230, 0.4);
+  --c-amber:          #ffc857;     /* focus outline + accents */
+  --c-amber-soft:     rgba(255, 200, 87, 0.4);
+  --c-coral:          #ff7e5f;     /* primary CTA */
+  --c-mint:           #7ed6a5;     /* success */
+  --c-rose:           #ff9aa2;     /* hearts/favorite */
+
+  /* Typography (sized for 1280×720 viewing distance ~2-3m) */
+  --fs-xs:   16px;
+  --fs-sm:   20px;
+  --fs-md:   24px;
+  --fs-lg:   32px;
+  --fs-xl:   48px;
+  --fs-2xl:  64px;
+  --fs-display: 80px;
+
+  /* Spacing */
+  --sp-1:  4px;
+  --sp-2:  8px;
+  --sp-3:  16px;
+  --sp-4:  24px;
+  --sp-5:  32px;
+  --sp-6:  48px;
+  --sp-7:  64px;
+
+  /* Radius */
+  --r-sm: 8px;
+  --r-md: 16px;
+  --r-lg: 24px;
+  --r-xl: 32px;
+
+  /* Shadow */
+  --shadow-card: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-focus: 0 0 0 4px var(--c-amber), 0 0 24px var(--c-amber-soft);
+
+  /* Motion */
+  --t-fast: 120ms;
+  --t-base: 240ms;
+  --t-slow: 400ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+}

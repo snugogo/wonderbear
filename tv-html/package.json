@@ -1,0 +1,26 @@
+{
+  "name": "wonderbear-tv",
+  "version": "0.3.1",
+  "private": true,
+  "type": "module",
+  "description": "WonderBear TV-side HTML running inside GP15 projector WebView",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "vue": "^3.4.21",
+    "pinia": "^2.1.7",
+    "vue-i18n": "^9.13.1",
+    "qrcode": "^1.5.3"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.4",
+    "@types/qrcode": "^1.5.5",
+    "typescript": "~5.4.5",
+    "vite": "^5.2.10",
+    "vue-tsc": "^2.0.13"
+  }
+}
