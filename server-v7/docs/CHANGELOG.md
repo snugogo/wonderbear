@@ -4,6 +4,75 @@
 
 ---
 
+## 2026-04-23 · 批次 3 完成 — 设备 + 孩子 + 家长模块
+
+**来源**:批次 3 开发窗口
+
+**优先级**:P0(解锁批次 4 故事生成的所有"某个 child / 某个 device"上下文)
+
+**新增代码**(3 个 routes 文件 + 1 个 smoke 扩展 + 1 个 e2e 脚本):
+
+```
+src/routes/
+├── device.js     ✅ 10 个接口(register / status / bind / unbind / heartbeat /
+│                    ack-command / active-child(GET+POST) / :id/reboot / list /
+│                    refresh-token)
+├── child.js      ✅ 5 个接口(POST / PATCH / DELETE / list / :id)
+└── parent.js     ✅ 2 个接口(GET /me / PATCH /me)
+
+test/smoke/
+└── batch3.mjs    ✅ 108 条批次 3 断言,run.mjs 末尾 dynamic import
+
+scripts/
+└── verify-e2e.sh ✅ 活环境端到端:register → send-code → parent register →
+                     bind → list → heartbeat → parent/me(7 步)
+```
+
+**smoke 累计**:`Passed: 280 / Failed: 0`(批次 1 的 72 + 批次 2 的 100 + 批次 3 的 108)。
+
+**关键决策**:
+
+1. **"register 只建 Parent,bind 才扣额度"单一入口**(与批次 2 对齐):
+   `/api/device/bind` 检测 `device.status === 'activated_unbound'` 则首次绑定,
+   `storiesLeft = 6` 且 `activatedQuota: true`;其他状态(如 `unbound_transferable`)
+   保留原 `storiesLeft`,`activatedQuota: false`。避免批次 2 / 批次 3 双重计数。
+
+2. **6 本免费额度随设备走**(创始人 Phase 1 产品定义):
+   - `/api/device/unbind` 不清空 `storiesLeft`,仅改 status + 解开 parentId/activeChildId
+   - 设备被另一个 parent 重新绑时继承原剩余额度,不再发 6 本
+   - 激活码同步 `status = 'transferred'`
+
+3. **命令队列**:`/api/device/:id/reboot` 用 Redis list (`device:commands:<deviceCuid>`) + TTL 300s。
+   心跳拉取,`/api/device/ack-command/:id` 通过 `lrem` 消费。没 ack 的命令下次心跳还会被返回。
+   未来批次 6 的固件 OTA / 推送消息走同一队列,`type` 字段扩展枚举即可。
+
+4. **`/api/device/active-child`(POST) 双 token**:device token 自带 deviceId,body 只要
+   `childId`;parent token 要同时带 `{ deviceId, childId }`。`/api/child/:id` GET 同样支持
+   双 token,device token 只能读自己的 activeChild(防越权)。
+
+5. **`/api/device/unbind` 需二次校验**:`confirmCode` 必须是此前 `/api/auth/send-code
+   { purpose: 'login' }` 发给 parent 邮箱的 6 位码(复用登录验证码基础设施,不新建 purpose)。
+
+6. **Parent.activated 是派生字段**:数据库没有独立列;`/api/auth/register`、`/api/auth/login-code`、
+   `/api/auth/login-password`、`/api/parent/me` 每次都现算 `devices.length > 0`。
+
+7. **Child 限制**:1 parent ≤ 4 child、`age ∈ [3, 8]`、`primaryLang/secondLang` 白名单
+   `[zh, en, pl, ro]`(+secondLang 允许 'none')。软删除规则:先清空所有
+   `Device.activeChildId` 引用再删 Child(stories 因 schema cascade 清除)。
+
+8. **deviceId / activationCode 格式**(统一校验工具):
+   - deviceId:`^[A-Za-z0-9_-]{8,128}$`
+   - activationCode:`^[A-Za-z0-9]{6,12}$`
+
+**文档同步**:
+- `docs/spec/API_ACTUAL_FORMAT.md` 批次 3 章节全填 —— 17 个接口的 curl + JSON 实例
+- TV / H5 联调清单挂在同文件末尾(激活三步流程 + token 互换规则 + 额度继承机制)
+
+**批次 4 必须传话**:LLM + 生图 prompt 走 `docs/spec/PROMPT_SPEC_v7_1.md` 的 v7.1 版
+(不是 v7 完整交付包里的旧版 §10)。这条传达链由每个 HANDOFF_BATCH<N>.md 继续传给后续窗口。
+
+---
+
 ## 2026-04-22 · 批次 2 完成 — 认证模块 + Resend dev-mode
 
 **来源**:批次 2 开发窗口

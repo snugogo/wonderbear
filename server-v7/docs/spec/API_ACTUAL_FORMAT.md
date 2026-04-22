@@ -316,20 +316,634 @@ curl -s -X POST http://localhost:3000/api/auth/logout \
 
 ---
 
-## 批次 3:设备 + 孩子模块(待实现后填充)
+## 批次 3:设备 + 孩子 + 家长模块(已完成 2026-04-23)
 
-> **后端实现完批次 3 后,在这里追加**:
-> - POST /api/device/register
-> - GET  /api/device/status
-> - POST /api/device/bind
-> - POST /api/device/unbind
-> - POST /api/device/heartbeat
-> - GET  /api/device/active-child
-> - POST /api/child
-> - PATCH /api/child/:id
-> - GET  /api/child/list
+**smoke**:`node test/smoke/run.mjs` → Passed: 280 / Failed: 0(批次 1+2+3 累计)
 
-TODO
+**路由清单**(全部实现):
+- 设备:`register / status / bind / unbind / heartbeat / ack-command / active-child(GET+POST) / :id/reboot / list / refresh-token`
+- 孩子:`POST / PATCH :id / DELETE :id / GET /list / GET /:id`
+- 家长:`GET /me / PATCH /me`
+
+**关键决策**(与批次 2 的交接点):
+- `/api/auth/register` 只建 Parent,`device: null`,不扣额度。
+- `/api/device/bind` 执行"首次绑定发 6 本 + 记录绑定"的核心事务。`activated_unbound → bound` 时 `storiesLeft = 6`;`unbound_transferable → bound` 时 `storiesLeft` 保留不变(额度跟设备走,不跟账户走)。
+- 1 parent 最多 4 device、1 parent 最多 4 child(超出分别返回 20008 / 30010)。
+- `/api/device/:id/reboot` 写 Redis `device:commands:<deviceCuid>` list(TTL 300s),`/api/device/heartbeat` 读取后随响应返回,`/api/device/ack-command/:id` 从 list 中 `lrem` 删除。
+- `/api/device/active-child` 的 POST 同时接受 parent token(必须带 `deviceId`)和 device token(`deviceId` 从 token 推断)。
+- `/api/parent/me` 的 `activated` 字段 = `devices.length > 0`(派生,非数据库字段)。
+- `/api/device/unbind` 要求二次校验:`confirmCode` 必须是此前由 `/api/auth/send-code` 发送的 `purpose='login'` 邮箱验证码。
+
+---
+
+### 5.1 `POST /api/device/register`
+
+**说明**:TV 首次开机 + 激活码写入后调用。无需鉴权。如果同一 `deviceId` 已经注册过(例如出厂重置重开),返回一个新 token 并保留原 status。同一激活码被另一台设备抢用返回 20004。
+
+**curl**:
+```bash
+curl -s -X POST http://localhost:3000/api/device/register \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "deviceId": "GP15-SN-A1B2C3D4",
+    "activationCode": "WB12345",
+    "hwFingerprint": "ab:cd:ef:12:34:56",
+    "model": "GP15",
+    "firmwareVer": "1.0.0",
+    "osVersion": "Android 11",
+    "batchCode": "batch-2026-04"
+  }' | jq
+```
+
+**Response 200(新设备)**:
+```json
+{
+  "code": 0,
+  "data": {
+    "deviceToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "device": {
+      "id": "cm_dev_abc123",
+      "deviceId": "GP15-SN-A1B2C3D4",
+      "status": "activated_unbound",
+      "boundAt": null,
+      "storiesLeft": 0
+    },
+    "oemConfig": null,
+    "tokenExpiresAt": "2026-05-23T00:59:00.000Z"
+  },
+  "requestId": "req_..."
+}
+```
+- `storiesLeft: 0` 此时尚未发,`/api/device/bind` 首次绑定时发 6。
+- `oemConfig: null` 表示走 WonderBear 默认品牌;OEM 激活码批次会在这里返回完整 `{ oemId, brandName, logoUrl, colors, menus, assetBundleUrl, h5BaseUrl }`。
+
+**错误示例**:
+- `deviceId` 格式不符(`^[A-Za-z0-9_-]{8,128}$`):`{"code":20007,"message":"设备 ID 格式错误"}`
+- 激活码格式不符(`^[A-Za-z0-9]{6,12}$`):`{"code":20002}`
+- 激活码不存在 / 已吊销:`{"code":20002,"details":{"reason":"revoked"}}`
+- 激活码已被别的设备用掉:`{"code":20004,"message":"激活码已被使用"}`
+- 设备已被禁用:`{"code":20006,"message":"设备已被禁用,请联系客服"}`
+
+---
+
+### 5.2 `GET /api/device/status`
+
+**认证**:`Authorization: Bearer <deviceToken>`
+
+**curl**:
+```bash
+curl -s http://localhost:3000/api/device/status \
+  -H 'Authorization: Bearer eyJhbGci...' | jq
+```
+
+**Response 200**:
+```json
+{
+  "code": 0,
+  "data": {
+    "status": "activated_unbound",
+    "parent": null,
+    "activeChild": null
+  },
+  "requestId": "req_..."
+}
+```
+
+设备已绑定后:
+```json
+{
+  "code": 0,
+  "data": {
+    "status": "bound",
+    "parent": { "id": "cm_par_xxx", "email": "mom@example.com", "locale": "zh" },
+    "activeChild": {
+      "id": "cm_chd_xxx",
+      "parentId": "cm_par_xxx",
+      "name": "Luna",
+      "age": 5,
+      "primaryLang": "zh",
+      "secondLang": "en",
+      ...
+    }
+  }
+}
+```
+
+**错误**:无 token → `10001`;用 parent token → `10006`。
+
+---
+
+### 5.3 `POST /api/device/bind`
+
+**认证**:`Authorization: Bearer <parentToken>`
+
+**curl**:
+```bash
+curl -s -X POST http://localhost:3000/api/device/bind \
+  -H 'Authorization: Bearer eyJhbGci...' \
+  -H 'Content-Type: application/json' \
+  -d '{"deviceId":"GP15-SN-A1B2C3D4","activationCode":"WB12345"}' | jq
+```
+
+**Response 200(首次绑定)**:
+```json
+{
+  "code": 0,
+  "data": {
+    "device": {
+      "id": "cm_dev_abc",
+      "deviceId": "GP15-SN-A1B2C3D4",
+      "status": "bound",
+      "boundAt": "2026-04-23T01:10:33.221Z",
+      "storiesLeft": 6,
+      "oemConfig": null
+    },
+    "activatedQuota": true
+  },
+  "requestId": "req_..."
+}
+```
+
+**Response 200(重新绑定一台之前被 unbind 过的设备 —— 额度保留不变)**:
+```json
+{
+  "code": 0,
+  "data": {
+    "device": { "status": "bound", "storiesLeft": 4, ... },
+    "activatedQuota": false
+  }
+}
+```
+
+**错误**:
+- 不带 parent token:`10001`
+- 设备不存在:`20005`
+- 激活码不匹配(deviceId 对,但 code 不对):`20002`
+- 已绑给别的账户:`20003`(可带 `"forceOverride": true` 覆盖,慎用)
+- 账户已满 4 台:`20008`
+- 设备被禁用:`20006`
+
+---
+
+### 5.4 `POST /api/device/unbind`
+
+**认证**:`Authorization: Bearer <parentToken>` + 必须先调 `/api/auth/send-code { purpose: 'login' }` 拿 6 位验证码。
+
+**curl**:
+```bash
+# 步骤 1: 发验证码
+curl -X POST http://localhost:3000/api/auth/send-code \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"mom@example.com","purpose":"login","locale":"zh"}'
+# 步骤 2: 用验证码解绑
+curl -s -X POST http://localhost:3000/api/device/unbind \
+  -H 'Authorization: Bearer eyJhbGci...' \
+  -H 'Content-Type: application/json' \
+  -d '{"deviceId":"GP15-SN-A1B2C3D4","confirmCode":"654321"}' | jq
+```
+
+**Response 200**:
+```json
+{
+  "code": 0,
+  "data": {
+    "deviceId": "GP15-SN-A1B2C3D4",
+    "status": "unbound_transferable"
+  },
+  "requestId": "req_..."
+}
+```
+
+**服务端行为**:
+- `Device.parentId = null`、`Device.activeChildId = null`、`Device.status = 'unbound_transferable'`
+- `ActivationCode.status = 'transferred'`(设备下次被其他账户绑上去,无需新激活码,用原码即可)
+- `Device.storiesLeft` **保留**(额度跟设备走)
+
+**错误**:缺 `confirmCode` → `90001`;验证码错或过期 → `10002`;设备不在此 parent 名下 → `20005`。
+
+---
+
+### 5.5 `POST /api/device/heartbeat`
+
+**认证**:`Authorization: Bearer <deviceToken>`,每 5 分钟一次。
+
+**curl**:
+```bash
+curl -s -X POST http://localhost:3000/api/device/heartbeat \
+  -H 'Authorization: Bearer eyJhbGci...' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "currentScreen": "home",
+    "memoryUsageMb": 128,
+    "firmwareVer": "1.0.0",
+    "networkType": "wifi"
+  }' | jq
+```
+
+**Response 200(无命令)**:
+```json
+{
+  "code": 0,
+  "data": {
+    "pendingCommands": [],
+    "serverTime": "2026-04-23T01:15:00.000Z"
+  },
+  "requestId": "req_..."
+}
+```
+
+**Response 200(有 reboot 待执行)**:
+```json
+{
+  "code": 0,
+  "data": {
+    "pendingCommands": [
+      {
+        "id": "cmd_1745371234567_a1b2c3d4e",
+        "type": "reboot",
+        "issuedAt": "2026-04-23T01:14:30.123Z",
+        "expiresAt": "2026-04-23T01:19:30.123Z"
+      }
+    ],
+    "serverTime": "2026-04-23T01:15:00.000Z"
+  }
+}
+```
+
+**服务端行为**:写入 `Device.lastSeenAt = now()`,读取 Redis `device:commands:<cuid>` 的全部未 ack 命令随响应返回。
+
+---
+
+### 5.6 `POST /api/device/ack-command/:id`
+
+**认证**:`Authorization: Bearer <deviceToken>`
+
+**curl**:
+```bash
+curl -s -X POST http://localhost:3000/api/device/ack-command/cmd_1745371234567_a1b2c3d4e \
+  -H 'Authorization: Bearer eyJhbGci...' \
+  -H 'Content-Type: application/json' \
+  -d '{"result":"ok"}' | jq
+```
+
+**Response 200**:
+```json
+{ "code": 0, "data": null, "requestId": "req_..." }
+```
+
+**服务端行为**:从 `device:commands:<cuid>` list 中删除对应 JSON 条目。`result` / `error` 字段写入 request log 供排查。
+
+---
+
+### 5.7 `GET /api/device/active-child`
+
+**认证**:`Authorization: Bearer <deviceToken>`
+
+**curl**:
+```bash
+curl -s http://localhost:3000/api/device/active-child \
+  -H 'Authorization: Bearer eyJhbGci...' | jq
+```
+
+**Response 200**:
+```json
+{
+  "code": 0,
+  "data": {
+    "activeChild": { "id":"cm_chd_a", "name":"Luna", "age":5, ... },
+    "allChildren": [
+      { "id":"cm_chd_a", "name":"Luna", "age":5, ... },
+      { "id":"cm_chd_b", "name":"Sol",  "age":7, ... }
+    ]
+  },
+  "requestId": "req_..."
+}
+```
+
+---
+
+### 5.8 `POST /api/device/active-child`
+
+**认证**:接受 parent **或** device token。
+- device token:`deviceId` 从 token 推断,body 只要 `{ childId }`
+- parent token:body 必须同时给 `{ deviceId, childId }`
+
+**curl(device token)**:
+```bash
+curl -s -X POST http://localhost:3000/api/device/active-child \
+  -H 'Authorization: Bearer <deviceToken>' \
+  -H 'Content-Type: application/json' \
+  -d '{"childId":"cm_chd_a"}' | jq
+```
+
+**curl(parent token)**:
+```bash
+curl -s -X POST http://localhost:3000/api/device/active-child \
+  -H 'Authorization: Bearer <parentToken>' \
+  -H 'Content-Type: application/json' \
+  -d '{"deviceId":"GP15-SN-A1B2C3D4","childId":"cm_chd_a"}' | jq
+```
+
+**Response 200**:
+```json
+{
+  "code": 0,
+  "data": { "activeChild": { "id":"cm_chd_a", "name":"Luna", ... } },
+  "requestId": "req_..."
+}
+```
+
+**错误**:parent token 未带 `deviceId` → `90001`;child 不属于此 parent → `30009`。
+
+---
+
+### 5.9 `POST /api/device/:id/reboot`
+
+**认证**:`Authorization: Bearer <parentToken>`
+
+**参数**:`:id` 是设备的 **cuid**(`Device.id`),不是 `deviceId`。可以从 `GET /api/device/list` 拿到。
+
+**curl**:
+```bash
+curl -s -X POST http://localhost:3000/api/device/cm_dev_abc/reboot \
+  -H 'Authorization: Bearer eyJhbGci...' | jq
+```
+
+**Response 200**:
+```json
+{
+  "code": 0,
+  "data": {
+    "commandId": "cmd_1745371234567_a1b2c3d4e",
+    "queuedAt": "2026-04-23T01:14:30.123Z",
+    "willExecuteWithin": 300
+  },
+  "requestId": "req_..."
+}
+```
+
+`willExecuteWithin` 秒 = 命令在 Redis 的 TTL(默认 300s / 5 分钟,与心跳周期对齐)。若期间 TV 没心跳,命令静默过期。
+
+**错误**:设备不在此 parent 名下 → `20005`。
+
+---
+
+### 5.10 `GET /api/device/list`
+
+**认证**:`Authorization: Bearer <parentToken>`
+
+**curl**:
+```bash
+curl -s http://localhost:3000/api/device/list \
+  -H 'Authorization: Bearer eyJhbGci...' | jq
+```
+
+**Response 200**:
+```json
+{
+  "code": 0,
+  "data": {
+    "items": [
+      {
+        "id": "cm_dev_abc",
+        "deviceId": "GP15-SN-A1B2C3D4",
+        "status": "bound",
+        "boundAt": "2026-04-23T01:10:33.221Z",
+        "lastSeenAt": "2026-04-23T01:15:00.000Z",
+        "storiesLeft": 6,
+        "model": "GP15",
+        "firmwareVer": "1.0.0",
+        "online": true
+      }
+    ]
+  },
+  "requestId": "req_..."
+}
+```
+
+`online` 派生:`lastSeenAt` 距今 ≤ 10 分钟视为在线。
+
+---
+
+### 5.x `POST /api/device/refresh-token`
+
+**认证**:`Authorization: Bearer <deviceToken>`(即将过期或已刷新策略都走这里)。
+
+**Response 200**:
+```json
+{
+  "code": 0,
+  "data": {
+    "deviceToken": "eyJhbGci...NEW...",
+    "expiresAt": "2026-05-23T01:20:00.000Z"
+  },
+  "requestId": "req_..."
+}
+```
+
+---
+
+### 6.1 `POST /api/child`
+
+**认证**:`Authorization: Bearer <parentToken>`
+
+**curl**:
+```bash
+curl -s -X POST http://localhost:3000/api/child \
+  -H 'Authorization: Bearer eyJhbGci...' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name": "Bella",
+    "age": 4,
+    "gender": "female",
+    "avatar": "avatar_bear_crown",
+    "primaryLang": "zh",
+    "secondLang": "en",
+    "birthday": "2022-03-15"
+  }' | jq
+```
+
+**Response 201**:
+```json
+{
+  "code": 0,
+  "data": {
+    "child": {
+      "id": "cm_chd_abc",
+      "parentId": "cm_par_xyz",
+      "name": "Bella",
+      "age": 4,
+      "gender": "female",
+      "avatar": "avatar_bear_crown",
+      "primaryLang": "zh",
+      "secondLang": "en",
+      "birthday": "2022-03-15",
+      "coins": 0,
+      "voiceId": null,
+      "createdAt": "2026-04-23T01:20:00.000Z",
+      "updatedAt": "2026-04-23T01:20:00.000Z"
+    }
+  },
+  "requestId": "req_..."
+}
+```
+
+**校验规则 / 错误**:
+- `name` 空 → `90001`;`name.length > 20` → `90002`
+- `age` 不在 `[3, 8]` → `90002 { field:'age', min:3, max:8 }`
+- `gender` 不在 `[male, female, prefer_not_say]` → `90002`
+- `primaryLang` 不在 `[zh, en, pl, ro]` → `90002`
+- `secondLang` 不在 `[zh, en, pl, ro, none]` → `90002`
+- `birthday` 不是合法日期 → `90002 { format:'YYYY-MM-DD' }`
+- 已有 4 个孩子:`30010`
+
+---
+
+### 6.2 `PATCH /api/child/:id`
+
+**认证**:`Authorization: Bearer <parentToken>`
+
+**curl**:
+```bash
+curl -s -X PATCH http://localhost:3000/api/child/cm_chd_abc \
+  -H 'Authorization: Bearer eyJhbGci...' \
+  -H 'Content-Type: application/json' \
+  -d '{"age":5,"avatar":"avatar_bear_pilot","voiceId":"voice_alto"}' | jq
+```
+
+**Response 200**:`{ "code": 0, "data": { "child": {...更新后...} } }`
+
+**错误**:child 不属于此 parent 或不存在 → `30009`。
+
+---
+
+### 6.3 `DELETE /api/child/:id`
+
+**认证**:`Authorization: Bearer <parentToken>`
+
+**Response 200**:
+```json
+{ "code": 0, "data": { "deleted": true }, "requestId": "req_..." }
+```
+
+**服务端行为**:
+1. 清空所有 `Device.activeChildId` 对此 child 的引用
+2. 删除 Child 记录(stories 因 `onDelete: Cascade` 一并清除 —— 未来若改成软删留 story,需改 schema)
+
+---
+
+### 6.4 `GET /api/child/list`
+
+**认证**:`Authorization: Bearer <parentToken>`
+
+**Response 200**:
+```json
+{
+  "code": 0,
+  "data": {
+    "items": [ {...child...}, {...child...} ],
+    "total": 2,
+    "maxAllowed": 4
+  },
+  "requestId": "req_..."
+}
+```
+
+`items` 按 `createdAt` 升序。
+
+---
+
+### 6.5 `GET /api/child/:id`
+
+**认证**:接受 parent **或** device token。
+- parent token:必须是该 child 的 parent
+- device token:child 必须是该设备的 `activeChild`(防越权读)
+
+**Response 200**:
+```json
+{
+  "code": 0,
+  "data": {
+    "child": { ... },
+    "storiesCount": 3,
+    "lastStoryAt": "2026-04-22T20:15:00.000Z"
+  },
+  "requestId": "req_..."
+}
+```
+
+---
+
+### 6bis.1 `GET /api/parent/me`
+
+**认证**:`Authorization: Bearer <parentToken>`
+
+**Response 200**:
+```json
+{
+  "code": 0,
+  "data": {
+    "parent": {
+      "id": "cm_par_xyz",
+      "email": "mom@example.com",
+      "locale": "zh",
+      "activated": true,
+      "playBgm": true,
+      "createdAt": "2026-04-22T10:00:00.000Z",
+      "subscription": {
+        "plan": "monthly",
+        "status": "active",
+        "expiresAt": "2026-05-22T00:00:00.000Z",
+        "pdfExportsLeft": 2
+      },
+      "devicesCount": 1,
+      "childrenCount": 2
+    },
+    "devices": [ {...device summary...} ],
+    "children": [ {...child...}, {...child...} ]
+  },
+  "requestId": "req_..."
+}
+```
+
+`parent.activated` 派生自 `devices.length > 0`。
+
+---
+
+### 6bis.2 `PATCH /api/parent/me`
+
+**认证**:`Authorization: Bearer <parentToken>`
+
+**支持字段**:`locale`、`playBgm`、`password`(改密码时 `currentPassword` 必填)。
+
+**curl(改密码)**:
+```bash
+curl -s -X PATCH http://localhost:3000/api/parent/me \
+  -H 'Authorization: Bearer eyJhbGci...' \
+  -H 'Content-Type: application/json' \
+  -d '{"currentPassword":"OldPw123","password":"NewStrongPw99"}' | jq
+```
+
+**Response 200**:`{ "code": 0, "data": { "parent": {...更新后...} } }`
+
+**错误**:
+- 缺 `currentPassword`:`90001`
+- `currentPassword` 错 / 账户无密码:`10007`(反枚举,不泄露"账户无密码")
+- 新密码弱:`10009 { reason }`
+- `locale` 不合法:`90002`
+- `playBgm` 非布尔:`90002`
+
+---
+
+### 批次 3 对 TV / H5 的联调检查清单
+
+1. **三步激活**:TV `register`(拿 deviceToken)→ H5 扫码 + parent `register` + `login-code`(拿 parentToken)→ H5 调 `/api/device/bind`(首次:发 6 本额度 + `activatedQuota:true`)。
+2. **两种 token 共存**:`/api/device/active-child`(POST)和 `/api/child/:id`(GET)同时接受 parent 和 device token;其他设备端点要求 device token,其他家长端点要求 parent token(错配返回 `10006`)。
+3. **6 本免费额度的继承规则**:激活 → 未绑:0;首次绑:6;解绑(`unbound_transferable`):保留(例如还剩 4);重新被任意 parent 绑:继承原数(不重新发 6)。
+4. **命令队列**:`/reboot` 写 Redis + TTL 300s;设备 5 分钟一次心跳拉取;设备必须 `ack-command/:id` 显式消费,否则下次心跳还会返回。
+5. **Child 限制**:1 parent ≤ 4 child;`age ∈ [3, 8]`;`primaryLang/secondLang` 走固定白名单。
+6. **parent.activated** 字段不是数据库列,服务端每次请求时现算(`devices.length > 0`)。
+7. **`PATCH /api/parent/me` 改密码**:必须带 `currentPassword`,无密码账户走这条路径报 `10007`(与登录一致)。
 
 ---
 

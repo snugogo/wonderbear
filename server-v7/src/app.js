@@ -26,6 +26,9 @@ import authPlugin from './plugins/auth.js';
 
 import healthRoutes from './routes/health.js';
 import authRoutes from './routes/auth.js';
+import deviceRoutes from './routes/device.js';
+import childRoutes from './routes/child.js';
+import parentRoutes from './routes/parent.js';
 
 export async function buildApp() {
   const app = Fastify({
@@ -67,6 +70,10 @@ export async function buildApp() {
   // 4. Routes
   await app.register(healthRoutes);
   await app.register(authRoutes);
+  // Route files already declare full /api/* paths — no prefix here.
+  await app.register(deviceRoutes);
+  await app.register(childRoutes);
+  await app.register(parentRoutes);
 
   // 5. Friendly root landing
   app.get('/', async () => ({

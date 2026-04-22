@@ -341,6 +341,12 @@ async function main() {
   // =================================================================
   await runBatch2Tests();
 
+  // =================================================================
+  //                       BATCH 3 ASSERTIONS
+  // =================================================================
+  const { runBatch3Tests } = await import('./batch3.mjs');
+  await runBatch3Tests({ assert, section });
+
   // -----------------------------------------------------------------
   console.log(`\n==================`);
   console.log(`Passed: ${passed}`);
@@ -348,7 +354,7 @@ async function main() {
   if (failed > 0) {
     process.exit(1);
   }
-  console.log('✅ All batch 1 + batch 2 smoke assertions green\n');
+  console.log('✅ All batch 1 + batch 2 + batch 3 smoke assertions green\n');
 }
 
 // ===================================================================
