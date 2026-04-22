@@ -1,0 +1,117 @@
+/* ------- 基础重置 ------- */
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  background: var(--wb-bg);
+  color: var(--wb-text);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font-family: inherit;
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+/**
+ * 品牌色变量
+ *
+ * 主色遵循 H5_HANDOFF.md §UI/UX 要点:
+ *   --wb-primary: #FF8A3D(小熊橙)
+ *   --wb-secondary: #4A90E2(天空蓝)
+ *   --wb-bg: #FFF8F0(暖米白)
+ *
+ * 扩展色板来自素材对接文档 §附:颜色系统(TV/H5 共用,方便未来走 OEM 抽象层)
+ */
+:root {
+  /* 品牌主色(H5) */
+  --wb-primary: #FF8A3D;
+  --wb-primary-dark: #E87020;
+  --wb-primary-light: #FFD9B8;
+  --wb-secondary: #4A90E2;
+
+  /* 语义色 */
+  --wb-bg: #FFF8F0;
+  --wb-card: #FFFFFF;
+  --wb-text: #3C3C3C;
+  --wb-text-sub: #8C7E6A;
+  --wb-border: #F0E6D2;
+  --wb-success: #7FAE7F;
+  --wb-danger: #E8918A;
+  --wb-warning: #E8C878;
+
+  /* 素材文档色板(绘本水彩) */
+  --color-cream: #F5E6D3;
+  --color-peach: #F5BFA3;
+  --color-amber: #E8A658;
+  --color-soft-pink: #F4B5C4;
+  --color-sky: #B8D8E8;
+  --color-mint: #B8E0D2;
+  --color-gold: #E8C878;
+}
+
+/* ------- 覆盖 Vant 主题色 ------- */
+:root {
+  --van-primary-color: var(--wb-primary);
+  --van-button-primary-background: var(--wb-primary);
+  --van-button-primary-border-color: var(--wb-primary);
+  --van-tabs-bottom-bar-color: var(--wb-primary);
+  --van-checkbox-checked-icon-color: var(--wb-primary);
+  --van-field-label-color: var(--wb-text);
+}
+
+/* ------- 公共容器 ------- */
+.wb-page {
+  min-height: 100vh;
+  padding: 16px;
+  padding-top: calc(16px + env(safe-area-inset-top, 0));
+  background: var(--wb-bg);
+}
+
+.wb-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--wb-text);
+  margin: 0 0 8px;
+}
+
+.wb-subtitle {
+  font-size: 14px;
+  color: var(--wb-text-sub);
+  margin: 0 0 24px;
+}
+
+.wb-card {
+  background: var(--wb-card);
+  border-radius: 16px;
+  padding: 20px 16px;
+  box-shadow: 0 4px 20px rgba(255, 138, 61, 0.08);
+}
+
+.wb-link {
+  color: var(--wb-primary-dark);
+  font-weight: 600;
+}
+
+/* iOS Safari 输入框圆角投影 */
+input,
+textarea {
+  appearance: none;
+  -webkit-appearance: none;
+}
