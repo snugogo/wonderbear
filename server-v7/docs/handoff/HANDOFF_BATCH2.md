@@ -216,6 +216,27 @@ return ok({ parentToken: token, parent: { id, email, locale, ... } });
 - 输出 zip 给他下载,不要只贴代码片段
 - 重大决策前主动提案,不做甩手掌柜
 
+### 第五件事:协议补充 v3(dialogue/turn 接 audioBase64)
+
+**这条直接影响批次 4,但批次 2 完成时你写 HANDOFF_BATCH3/4 必须明确传下去**:
+
+`docs/spec/API_CONTRACT_PATCH_v3.md` 描述了 dialogue/turn 增加 audioBase64 字段的协议补充。
+**批次 4 实现时必须按 patch v3 走**(代码示例已写好,直接抄)。
+TV 端会用 audioBase64 路径,不再单独调 /api/asr/upload。
+
+### 第六件事:硬性新规则 — 每批次必须更新 API_ACTUAL_FORMAT.md
+
+**从批次 2 开始,这是验收硬指标**:
+
+完成本批次实现后,**必须**在 `docs/spec/API_ACTUAL_FORMAT.md` 对应章节追加:
+- 每个新接口的 curl 示例
+- 真实 response JSON 实例(在你本地跑测试拿到的)
+- 主要错误码触发示例(怎么构造请求触发 10001/20001/etc)
+
+**目的**:TV / H5 窗口联调前拉这份文档跟 API_CONTRACT 比对,提前发现差异。
+
+**不写就不算批次完成**。这是创始人 + TV 窗口共同确认的规则(见 CHANGELOG)。
+
 ---
 
 ## 最后一句

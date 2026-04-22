@@ -4,6 +4,48 @@
 
 ---
 
+## 2026-04-22 · v3 · dialogue/turn 增加 audioBase64 字段
+
+**来源**:TV 窗口 Q2 决策(创始人确认)
+
+**优先级**:P0(批次 4 实现 dialogue 时必须按这个走)
+
+**详细 patch**:`docs/spec/API_CONTRACT_PATCH_v3.md`
+
+**变更**:`POST /api/story/dialogue/:id/turn` 增加可选字段:
+- request 加 `audioBase64?: string` + `audioMimeType?: string`
+- response 加 `recognizedText?: string`
+- 二选一原则:userInput / audioBase64 至少传一个,优先 audioBase64
+
+**目的**:TV 投影仪儿童产品,7 轮对话累计省 1+ 秒延迟,产品体验改善显著。
+
+**白名单守住**:接口字段名仅新增、不删除、不重命名。`/api/asr/upload` 接口保留不动。
+
+**给批次 4 窗口接手包的 todo**:服务端实现 dialogue/turn 时,按 patch v3 走;
+代码示例已写在 patch 文档末尾。
+
+---
+
+## 2026-04-22 · 联调验证机制(API_ACTUAL_FORMAT)
+
+**来源**:TV 窗口 Q3 决策(创始人确认)
+
+**优先级**:P1(从批次 2 开始执行)
+
+**新文档**:`docs/spec/API_ACTUAL_FORMAT.md`
+
+**机制**:每个后端批次完成后,**必须**在 API_ACTUAL_FORMAT.md 对应章节追加:
+- 实际 curl 命令
+- 真实 response JSON 实例
+- 主要错误码触发示例
+
+**目的**:TV / H5 联调前 git pull 拉这份文档,跟 API_CONTRACT.md 比对,
+任何差异先手动适配,避免联调到一半发现字段名不对。
+
+**给所有未来批次窗口的硬规则**:不写就不算批次完成。
+
+---
+
 ## 2026-04-22 · 权威文档统一收编进 repo
 
 **来源**:创始人决策——"版本太多了,太乱了"
