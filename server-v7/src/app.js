@@ -22,8 +22,10 @@ import responseEnvelopePlugin from './plugins/responseEnvelope.js';
 import errorHandlerPlugin from './plugins/errorHandler.js';
 import prismaPlugin from './plugins/prisma.js';
 import redisPlugin from './plugins/redis.js';
+import authPlugin from './plugins/auth.js';
 
 import healthRoutes from './routes/health.js';
+import authRoutes from './routes/auth.js';
 
 export async function buildApp() {
   const app = Fastify({
@@ -59,8 +61,12 @@ export async function buildApp() {
   await app.register(prismaPlugin);
   await app.register(redisPlugin);
 
+  // 3b. Auth (depends on redis for blacklist; registers @fastify/jwt)
+  await app.register(authPlugin);
+
   // 4. Routes
   await app.register(healthRoutes);
+  await app.register(authRoutes);
 
   // 5. Friendly root landing
   app.get('/', async () => ({
