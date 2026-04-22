@@ -4,6 +4,86 @@
 
 ---
 
+## 2026-04-22 · 批次 2 完成 — 认证模块 + Resend dev-mode
+
+**来源**:批次 2 开发窗口
+
+**优先级**:P0(解锁所有需要 parent/device token 的后续批次)
+
+**新增代码**(7 个源文件 + 4 份邮件模板):
+
+```
+src/
+├── utils/
+│   ├── password.js          ✅ bcryptjs 轮数 12 + 强度校验
+│   ├── jwt.js               ✅ parent(7d)/device(30d)/seller(1d) 签发 + type 校验 + sha256 黑名单哈希
+│   ├── verifyCode.js        ✅ 6 位数字 + Redis key 布局 + 3 次错锁 + 60s 冷却 + 每小时 3 次上限
+│   └── mailer.js            ✅ Resend 封装;无 key 时 dev-mode(打日志 + console 横幅)
+├── plugins/
+│   └── auth.js              ✅ @fastify/jwt + 三个 authenticator 装饰器 + revokeToken
+├── routes/
+│   └── auth.js              ✅ 6 个接口全实现
+└── templates/
+    ├── verify-code.zh.html  ✅
+    ├── verify-code.en.html  ✅
+    ├── verify-code.pl.html  ✅
+    └── verify-code.ro.html  ✅
+```
+
+**关键决策(供后续批次对齐)**:
+
+1. **Resend dev-mode**(创始人 2026-04-22 决策):`RESEND_API_KEY` 未配置时不真发邮件,
+   模板仍完整渲染,验证码通过两个渠道打印:
+   - `logger.warn`(结构化,包含 to/code/locale/purpose)
+   - `console.log` 醒目横幅(四行带边框)
+   本地测试创始人从日志读码。配了 key 则走 Resend,失败抛 `EMAIL_SEND_FAILED (50005)`。
+
+2. **密码可选账户登录失败统一 10007**(创始人决策):
+   - 邮箱不存在 → `PASSWORD_WRONG (10007)`
+   - 账户 `passwordHash = null`(只验证码登录的账户)走 login-password → `PASSWORD_WRONG (10007)`
+   - 防邮箱枚举,不暴露"这个邮箱是否注册过"或"是否设置了密码"。
+
+3. **refresh 策略**(创始人答 Q2):签名通过 + 不在黑名单即可刷新,不做"距 exp X 分钟"的窗口约束。
+
+4. **批次 2 register 不做设备绑定**(创始人答 Q3):
+   - Schema 接受 `deviceId` / `activationCode` 字段(类型校验),但不查不写。
+   - Response 返回 `device: null`。
+   - H5 主流程是 register 成功后立刻调 `/api/device/bind`(批次 3),扣 6 本额度的逻辑
+     **只在 `/api/device/bind` 里实现一处**,避免批次 2 / 批次 3 重复实现。
+
+5. **反爆破(密码登录)**:5 次错误 → `lockedUntil = now + 15min`,`failedLoginCount` 重置为 0
+   (让解锁后有新的 5 次)。已锁账户即使输对密码也直接 `ACCOUNT_LOCKED (10008)`,
+   `details.unlockAt` 返回 ISO 时间戳。
+
+6. **Token 黑名单(logout)**:key = `auth:blacklist:${sha256(token)}`,value=`"1"`,
+   TTL = token 剩余有效期。认证器先验签 → 查黑名单 → 查 type,命中黑名单直接 `TOKEN_REVOKED (10010)`。
+
+**Redis key 布局**(所有后续批次使用同一套):
+
+```
+auth:verify:{email}:{purpose}       "{code}:{attemptsLeft}"   TTL 300
+auth:verify:cooldown:{email}        "1"                       TTL 60
+auth:verify:hourly:{email}          <int counter>              TTL 3600
+auth:blacklist:{sha256(token)}      "1"                       TTL = exp - now
+```
+
+**验收**:`node test/smoke/run.mjs` → **172 passed / 0 failed**(批次 1 的 72 条仍绿 + 批次 2 新增 100 条)。
+
+**白名单守住**:
+- 不修改 Prisma schema(Parent 表 `failedLoginCount` / `lockedUntil` 字段批次 0 已建)。
+- 不修改任何已有接口字段。
+- 不修改错误码表(第 11 个 10xxxx 码 `TOKEN_REVOKED` 在批次 1 就已登记,批次 2 只是首次使用)。
+
+**非阻塞遗留**:
+- `scripts/verify-e2e.sh` 本地端到端验证脚本 → 批次 3 写(那时设备绑定上线,链路才完整)。
+- 真实 Resend 发信测试 → 需要创始人在 Resend 后台完成 `wonderbear.app` 域名验证后再做。
+
+**API_ACTUAL_FORMAT 合规**:按 2026-04-22 联调验证机制(TV 窗口提出),
+批次 2 的 6 个 `/api/auth/*` 接口的真实 curl 命令 + response JSON 实例 +
+主要错误码触发示例,已补录到 `docs/spec/API_ACTUAL_FORMAT.md` §四(认证模块)。
+
+---
+
 ## 2026-04-22 · v3 · dialogue/turn 增加 audioBase64 字段
 
 **来源**:TV 窗口 Q2 决策(创始人确认)
