@@ -4,10 +4,13 @@
 
 ## 📁 spec/ — 权威规范
 
-代码必须遵守的规范文档,**任何接手新批次的窗口都要先读**。
+代码必须遵守的规范文档,**任何接手新批次的窗口都要先读相关章节**。
 
 | 文件 | 说明 |
 |---|---|
+| `API_CONTRACT.md` | **三窗口共用的硬契约**(server-v7 / H5 / TV)。字段名、错误码、响应格式以此为准 |
+| `SERVER_HANDOFF.md` | 服务端项目的初始上下文(背景、决策、技术栈) |
+| `REFACTOR_MAPPING_v7.md` | 7 个批次的开发路线图 + Step A 旧代码的去留映射 |
 | `PROMPT_SPEC_v7_1.md` | LLM + 生图 prompt 的权威版本(v7.1)。批次 4 写故事生成时必须按它实现 |
 | `API_CONTRACT_PATCH_v2.md` | OemConfig 加 h5BaseUrl 的协议补充。给创始人贴到外部 API_CONTRACT.md 用 |
 

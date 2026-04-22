@@ -1,21 +1,25 @@
 # SERVER 窗口交接 — 批次 2 接手包
 
 > **接手对象**:开新窗口跑 WonderBear server-v7 批次 2 的 Claude
-> **创建时间**:2026-04-21
-> **上一窗口完成度**:批次 0 + 批次 1 全部跑通,zip 已交付,72/72 smoke 全绿
-> **创始人本地状态**:zip 已下载,可能还没初始化 git(根据交流推进)
+> **创建时间**:2026-04-21,2026-04-22 更新(权威文档已收入 repo)
+> **上一窗口完成度**:批次 0 + 批次 1 全部跑通,72/72 smoke 全绿,代码 push GitHub
+> **GitHub repo**:https://github.com/snugogo/wonderbear
 
 ---
 
 ## 你接手时,**立刻**读这几份(按顺序)
 
-| 顺序 | 文档 | 路径 | 时长 |
-|---|---|---|---|
-| 1 | **本交接包** | 当前文件 | 5 分钟 |
-| 2 | **API_CONTRACT.md §四(认证模块)** | 创始人手里(`/mnt/user-data/uploads/.../API_CONTRACT.md` §4.1-4.6) | 20 分钟 |
-| 3 | v7 文档 §10 Prompt 工程(暂不细看,批次 4 才用) | 略 | 跳过 |
+所有规范文档**都在 repo 里**(`docs/spec/`),不需要创始人额外上传。
 
-不需要再读 SERVER_HANDOFF.md / REFACTOR_MAPPING_v7.md / v7 §6 — 这两轮窗口已经把决策全消化进代码了。
+| 顺序 | 文档 | 路径(repo 内) | 时长 |
+|---|---|---|---|
+| 1 | **本交接包** | `docs/handoff/HANDOFF_BATCH2.md` | 5 分钟 |
+| 2 | **API_CONTRACT.md §一/§二/§四** | `docs/spec/API_CONTRACT.md` | 25 分钟 |
+| 3 | **CHANGELOG.md** | `docs/CHANGELOG.md`(协议变更历史) | 5 分钟 |
+| 4 | docs/README.md(docs 索引) | `docs/README.md` | 2 分钟 |
+
+不需要读 SERVER_HANDOFF.md / REFACTOR_MAPPING_v7.md / v7 §6 — 决策已全消化进代码,
+但需要时这些都在 `docs/spec/`。
 
 ---
 
