@@ -184,6 +184,14 @@ export interface DeviceRegisterResp {
     storiesLeft: number;
   };
   oemConfig: OemConfig | null;
+  /** Per API_ACTUAL_FORMAT batch 3 §5.1 — ISO 8601 UTC. 30 days from issue. */
+  tokenExpiresAt: string;
+}
+
+/** Per API_ACTUAL_FORMAT batch 3 §5.x (new in batch 3). */
+export interface DeviceRefreshTokenResp {
+  deviceToken: string;
+  expiresAt: string;
 }
 
 export interface DeviceStatusResp {
@@ -340,22 +348,39 @@ export interface Story {
   coverUrl: string;
   coverUrlHd?: string;
   pages: StoryPage[];
+  /**
+   * Per API_ACTUAL_FORMAT batch 4 §7.6 — `summary` is the structured
+   * DialogueSummary object (mainCharacter / scene / conflict),
+   * NOT a pre-flattened string. UI that wants a one-liner must compose
+   * from these three fields.
+   */
   dialogue: {
-    summary: string;
+    summary: DialogueSummary;
     rounds: Array<{ q: string; a: string }>;
   };
+  /**
+   * Per API_ACTUAL_FORMAT batch 4 §7.6: `metadata` only reliably carries
+   * primaryLang / learningLang / provider. `duration` and `createdAt` are
+   * optional — not emitted by mock path; when present they reflect final
+   * assembled audio duration and story-record creation time respectively.
+   * `provider` includes 'mock' when dev-mode LLM/image/TTS keys are absent.
+   */
   metadata: {
     primaryLang: Locale;
     learningLang: Locale | 'none';
-    duration: number;
-    provider: 'openai' | 'gemini' | 'fal' | 'mixed';
-    createdAt: string;
+    provider: 'openai' | 'gemini' | 'fal' | 'mixed' | 'mock';
+    duration?: number;
+    createdAt?: string;
   };
   status: 'completed';
   isPublic: boolean;
   favorited: boolean;
   playCount: number;
   downloaded?: boolean;
+  /** Per API_ACTUAL_FORMAT batch 4 §7.6 — present at story top level. */
+  createdAt: string;
+  /** Per API_ACTUAL_FORMAT batch 4 §7.6 — set when status='completed'. */
+  completedAt?: string | null;
 }
 
 export interface StoryDetailResp {
@@ -572,6 +597,14 @@ class ApiClient {
   /** §5.8 — TV-side switch active child */
   deviceActiveChildSet(req: SetActiveChildReq) {
     return this.post<SetActiveChildResp>('/device/active-child', req);
+  }
+  /**
+   * §5.x (batch 3) — refresh an existing device token. Call when 10001
+   * TOKEN_EXPIRED is caught from any device-scoped endpoint; if this also
+   * fails, fall back to /device/register with stored activationCode.
+   */
+  deviceRefreshToken() {
+    return this.post<DeviceRefreshTokenResp>('/device/refresh-token', undefined);
   }
 
   // §7 story
