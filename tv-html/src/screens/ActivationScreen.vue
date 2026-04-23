@@ -185,16 +185,20 @@ onBeforeUnmount(() => {
   z-index: 1;
   padding-left: var(--sp-5);
 }
+/*
+ * WCAG AA: the hero sits over bg_activation's bright left-frame zone (~#FFE4B5).
+ * Cream text on that = 1.14:1 (hard fail). Dark brown = 11.03:1 (AAA).
+ * Kept the amber accent only on the code number in the QR card where it
+ * sits on cream, not watercolor. Verified with tools/contrast.mjs.
+ */
 .title {
   margin: 0 0 var(--sp-4);
-  background: linear-gradient(135deg, var(--c-cream) 0%, var(--c-amber) 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: #3C2A1E;
+  font-weight: 700;
 }
 .subtitle {
   margin: 0;
-  color: var(--c-cream-soft);
+  color: #5A3E2A;
   line-height: 1.4;
 }
 
@@ -262,8 +266,12 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
-  color: var(--c-cream-soft);
+  color: var(--c-cream);
   z-index: 1;
+  /* Pill chip so "等待绑定中..." always reads over wooden-floor bg zone. */
+  background: rgba(26, 15, 10, 0.55);
+  padding: 8px 18px;
+  border-radius: 999px;
 }
 .dot {
   width: 8px;

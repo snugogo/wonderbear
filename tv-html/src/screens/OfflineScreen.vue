@@ -136,15 +136,18 @@ onBeforeUnmount(() => {
   color: var(--c-cream);
   font-weight: 700;
   margin: 0;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.65);
 }
 .subtitle {
   color: var(--c-cream-soft);
   margin: 0;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
 }
 .hint {
   color: var(--c-cream-faint);
   margin: 0 0 var(--sp-4);
   letter-spacing: 0.04em;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
 }
 
 .retry-btn {

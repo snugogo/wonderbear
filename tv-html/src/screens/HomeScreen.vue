@@ -234,6 +234,21 @@ onMounted(async () => {
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   padding: 0 var(--sp-5);
+  /*
+   * WCAG AA: cream text sits over bg_home_cozy warm bright zones.
+   * Dark gradient fade gives the topbar its own contrast zone without
+   * hiding the watercolor — fades out smoothly into the card grid below.
+   */
+  background: linear-gradient(180deg,
+    rgba(26, 15, 10, 0.65) 0%,
+    rgba(26, 15, 10, 0.35) 70%,
+    rgba(26, 15, 10, 0) 100%);
+}
+.topbar .greeting,
+.topbar .logo,
+.topbar .switch-child,
+.topbar .coins {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 .topbar-left { display: flex; align-items: center; gap: var(--sp-3); }
 .avatar {

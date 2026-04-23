@@ -234,8 +234,18 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   padding: 0 var(--sp-6);
+  /* WCAG AA contrast strip over watercolor bg. */
+  background: linear-gradient(180deg,
+    rgba(26, 15, 10, 0.65) 0%,
+    rgba(26, 15, 10, 0.35) 70%,
+    rgba(26, 15, 10, 0) 100%);
 }
-.title { color: var(--c-cream); font-weight: 700; margin: 0; }
+.title {
+  color: var(--c-cream);
+  font-weight: 700;
+  margin: 0;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
 
 .content {
   flex: 1 1 auto;

@@ -271,6 +271,7 @@ onBeforeUnmount(() => {
   font-weight: 700;
   letter-spacing: 0.02em;
   margin: 0;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.65), 0 0 16px rgba(26, 15, 10, 0.45);
 }
 
 .progress-wrap {
@@ -297,10 +298,12 @@ onBeforeUnmount(() => {
 }
 .progress-text {
   color: var(--c-cream-soft);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
 }
 
 .elapsed {
   color: var(--c-cream-faint);
   letter-spacing: 0.06em;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
 }
 </style>

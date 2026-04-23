@@ -282,6 +282,7 @@ onBeforeUnmount(() => {
 
 .loading {
   color: var(--c-cream-soft);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
 }
 
 .content {
@@ -307,11 +308,13 @@ onBeforeUnmount(() => {
   color: var(--c-cream);
   font-weight: 700;
   margin: 0;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.65);
 }
 .message {
   color: var(--c-cream-soft);
   margin: 0 0 var(--sp-3);
   line-height: 1.5;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
 }
 .support {
   color: var(--c-amber);

@@ -215,7 +215,10 @@ onBeforeUnmount(() => {
   border-radius: 999px;
   letter-spacing: 0.08em;
 }
-.story-title { color: var(--c-cream-soft); }
+.story-title {
+  color: var(--c-cream-soft);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
 
 .reader {
   position: relative;

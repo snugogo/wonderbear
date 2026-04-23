@@ -89,3 +89,29 @@ body[data-dev='1'] * { cursor: auto !important; }
 .wb-focus-feedback.is-focused .icon-floatable {
   animation: bear-float 2.8s ease-in-out infinite;
 }
+
+/*
+ * Text-over-watercolor legibility (WCAG AA).
+ * Watercolor bg images have bright zones (~#FFE4B5) where cream text drops
+ * to 1.14:1 contrast. Attach .wb-text-on-bg to any cream/light text that
+ * sits directly over a bg_ image — adds a dark halo that lifts the
+ * effective contrast past AA normal (4.5:1) across bright AND dark zones,
+ * without touching the designer's chosen color palette.
+ */
+.wb-text-on-bg {
+  text-shadow:
+    0 1px 3px rgba(26, 15, 10, 0.75),
+    0 0 16px rgba(26, 15, 10, 0.55);
+}
+
+/*
+ * Status pill — use for inline status strings sitting over bg watercolor
+ * (e.g. "等待绑定中...", "离线中"). Gives the text its own dark chip
+ * background so contrast is guaranteed regardless of bg zone.
+ */
+.wb-status-pill {
+  background: rgba(26, 15, 10, 0.55);
+  padding: 6px 14px;
+  border-radius: 999px;
+  backdrop-filter: none; /* GP15 has no GPU budget for blur */
+}
