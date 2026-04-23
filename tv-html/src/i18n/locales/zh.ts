@@ -106,6 +106,14 @@ export default {
     backHome: '回首页',
   },
 
+  hint: {
+    crossRow: '换一行',
+    sameRow: '同一行',
+    confirm: '选这个',
+    back: '返回',
+    voiceKey: '按住说话',
+  },
+
   dev: {
     panelTitle: '开发者面板',
     simulateVoiceDown: '模拟语音键(按下)',

@@ -25,6 +25,7 @@ import { useFocusable, getCurrentFocusId, onFocusChange } from '@/services/focus
 import { setLocale } from '@/i18n';
 import type { Locale } from '@/utils/errorCodes';
 import { asset } from '@/utils/assets';
+import HintBar from '@/components/HintBar.vue';
 
 const child = useChildStore();
 const device = useDeviceStore();
@@ -201,6 +202,12 @@ onBeforeUnmount(() => {
         <span class="t-lg">{{ t('error.backHome') }}</span>
       </button>
     </main>
+
+    <HintBar :hints="[
+      { keys: ['↑','↓'], label: t('hint.crossRow') },
+      { keys: ['OK'], label: t('hint.confirm') },
+      { keys: ['Back'], label: t('hint.back') },
+    ]" />
   </div>
 </template>
 
@@ -253,7 +260,8 @@ onBeforeUnmount(() => {
   flex-direction: column;
   align-items: center;
   gap: var(--sp-4);
-  padding: 0 var(--sp-6) var(--sp-5);
+  /* Bottom pad reserves 56px for HintBar strip. */
+  padding: 0 var(--sp-6) 72px;
   overflow-y: auto;
 }
 

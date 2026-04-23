@@ -107,6 +107,14 @@ export default {
     backHome: 'Home',
   },
 
+  hint: {
+    crossRow: 'Switch row',
+    sameRow: 'Same row',
+    confirm: 'Select',
+    back: 'Back',
+    voiceKey: 'Hold to talk',
+  },
+
   dev: {
     panelTitle: 'Dev Panel',
     simulateVoiceDown: 'Voice key down',

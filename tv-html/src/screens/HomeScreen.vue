@@ -16,6 +16,7 @@ import { useScreenStore } from '@/stores/screen';
 import { useBgmStore } from '@/stores/bgm';
 import { useI18n } from 'vue-i18n';
 import MenuCard from '@/components/MenuCard.vue';
+import HintBar from '@/components/HintBar.vue';
 import type { FocusableNeighbors } from '@/services/focus';
 import { asset } from '@/utils/assets';
 
@@ -26,13 +27,12 @@ const bgm = useBgmStore();
 const { t } = useI18n();
 
 /*
- * TV_TASKS_v6 task 1 + v1.1 P0-2:
- * The six home-card icons (ui/ui_home_*.webp) are still in "P0 A / 状态 ⏳"
- * per NAMING_CONTRACT.md. We ship a letter placeholder and the final asset
- * path is already wired. When USE_ICON_ASSETS flips to true, MenuCard
- * auto-renders <img> without any other code change.
+ * 2026-04-23: flipped to true after CDN verification.
+ * All 6 ui/ui_home_*.webp confirmed 200 on jsDelivr
+ * (create / stories_map / library / explore / profile / cast).
+ * MenuCard auto-renders <img>; letter placeholder removed from Home.
  */
-const USE_ICON_ASSETS = false;
+const USE_ICON_ASSETS = true;
 
 interface MenuItem {
   id: string;
@@ -180,6 +180,13 @@ onMounted(async () => {
         @enter="handleEnter"
       />
     </div>
+
+    <!-- Bottom remote-control hint strip (non-interactive). -->
+    <HintBar :hints="[
+      { keys: ['↑','↓'], label: t('hint.crossRow') },
+      { keys: ['←','→'], label: t('hint.sameRow') },
+      { keys: ['OK'],    label: t('hint.confirm') },
+    ]" />
   </div>
 </template>
 
@@ -287,6 +294,7 @@ onMounted(async () => {
   grid-template-columns: repeat(3, 1fr);
   grid-template-rows: 1fr 1fr;
   gap: var(--sp-4);
-  padding: var(--sp-4) var(--sp-6) var(--sp-6);
+  /* Bottom padding leaves room for the 56px HintBar so cards don't sit under it. */
+  padding: var(--sp-4) var(--sp-6) 72px;
 }
 </style>

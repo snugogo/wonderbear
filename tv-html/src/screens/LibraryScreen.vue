@@ -23,6 +23,7 @@ import type { FocusableNeighbors } from '@/services/focus';
 import { ERR } from '@/utils/errorCodes';
 import { asset } from '@/utils/assets';
 import StoryCard from '@/components/StoryCard.vue';
+import HintBar from '@/components/HintBar.vue';
 
 const PAGE_SIZE = 20;
 const COLUMNS = 3;
@@ -130,6 +131,12 @@ onBeforeUnmount(() => {
         />
       </div>
     </main>
+
+    <HintBar :hints="[
+      { keys: ['↑','↓','←','→'], label: t('hint.sameRow') },
+      { keys: ['OK'], label: t('hint.confirm') },
+      { keys: ['Back'], label: t('hint.back') },
+    ]" />
   </div>
 </template>
 
@@ -184,7 +191,8 @@ onBeforeUnmount(() => {
 
 .grid-wrap {
   flex: 1 1 auto;
-  padding: 0 var(--sp-6) var(--sp-5);
+  /* Bottom pad reserves 56px for HintBar strip. */
+  padding: 0 var(--sp-6) 72px;
   overflow: hidden;
   display: flex;
   align-items: flex-start;
