@@ -4,6 +4,102 @@
 
 ---
 
+## 2026-04-23 · 批次 4 完成 — 故事生成模块
+
+**来源**:批次 4 开发窗口
+
+**优先级**:P0(故事是 WonderBear 的核心产品功能)
+
+**新增代码**(2 utils + 4 services + 1 queue + 2 routes + 1 plugin + 1 smoke 扩展):
+
+```
+src/utils/
+├── storyPrompt.js       Prompt 工厂 + 三通道 sanitizer(PROMPT_SPEC v7.1 权威版)
+│                        STYLE_SUFFIXES default = projector-optimized
+│                        (vibrant saturated colors + high contrast +
+│                         projection-display optimized),严禁 aged paper/
+│                         muted tones/sepia/earth tones
+└── contentSafety.js     3-level filter (ok/warn/blocked) + 中英关键词字典
+
+src/services/
+├── llm.js               Gemini 2.0 Flash 主 + USE_MOCK_AI=1 mock 回退,
+│                        generateDialogueTurn / generateStoryJson(12 页)
+├── imageGen.js          FAL → Imagen → OpenAI → placeholder 3 层回退,
+│                        每次尝试走 ImageGenLog;mock 返回确定性 URL
+├── tts.js               ElevenLabs Multilingual v2 + sha256 缓存 + mock,
+│                        mock://tts/<hash>.mp3 + durationMs
+└── asr.js               Whisper + mock 确定性识别,buffer < 4 字节即 fail
+
+src/queues/
+└── storyJob.js          In-process pipeline queue → llm → image(12 页)
+                         → tts → assembly → done;高/普通两个 FIFO lane;
+                         LLM 成功才扣 Device.storiesLeft(非订阅者)
+
+src/plugins/
+└── storyQueue.js        装饰 fastify.storyQueue = createStoryQueue(prisma)
+
+src/routes/
+├── story.js             dialogue/start, dialogue/:id/turn(patch v3 audioBase64
+│                        + recognizedText), generate, :id/status, :id,
+│                        :id/favorite, :id/play-stat, DELETE :id, list(9 个接口)
+└── tts.js               /api/tts/synthesize(50/小时限流)+ /api/tts/voices
+
+test/smoke/
+└── batch4.mjs           115 条批次 4 断言,run.mjs 末尾 dynamic import
+```
+
+**smoke 累计**:`Passed: 395 / Failed: 0`(批次 1 的 72 + 批次 2 的 100 + 批次 3 的 108 + 批次 4 的 115)。
+
+**关键决策**:
+
+1. **Prompt 严格遵循 PROMPT_SPEC v7.1**(创始人"禁止倒车"):风格后缀走"projector-optimized"
+   vibrant/saturated/luminous,不是 v7.0 的 paper-texture。`FORBIDDEN_STYLE_WORDS` 双重清洗
+   即使 LLM 误输出 `aged paper` / `sepia` / `muted tones` 也会被删。
+2. **三路生图降级**:`FAL($0.04) → Imagen($0.04) → OpenAI($0.05) → placeholder`,每次尝试
+   写 `ImageGenLog`,三路全挂仍返回占位图并记 ContentAlert。
+3. **Sanitizer 三通道**:fal/imagen 只做 basic replace;openai 加组合检测(DANGEROUS_COMBOS_OPENAI)
+   + `aggressiveRewrite`(bedroom→sunny meadow,night→golden afternoon)。
+4. **In-process queue**(创始人"别过度工程"):`activeJobs` Map dedupe,Phase 1 < 1 QPS 足够;
+   切 BullMQ 放 Phase 2。
+5. **LLM 成功才扣额度**(保守策略,故事没成型就不扣):`Device.storiesLeft -= 1` 由
+   storyJob 在 LLM stage 成功后用 `updateMany({ id, storiesLeft: { gt: 0 } })` 执行,
+   只对非订阅者生效。图像 / TTS 阶段失败不回滚(故事内容已生成,后续可重拍)。
+   订阅 `status === 'active'` 全程跳过 quota 检查,yearly 档优先级 `high`。
+6. **日限 Redis 计数**(`rate:story-gen:<deviceId>:<YYYY-MM-DD>` TTL 24h):
+   非订阅者 3 本/天,超限 → `30005 DAILY_LIMIT_REACHED`。值在 `generate` 入队前
+   乐观加一,失败不回退(防止刷接口)。
+7. **Dialogue session**(`dialog:session:<id>` TTL 30min):rounds[] + summary,
+   `generate` 一次消费。
+8. **audioBase64 patch v3**:`/api/story/dialogue/:id/turn` 支持二选一字段,
+   响应增加 `recognizedText`(仅 audio 路径)。ASR 失败 → `30011 ASR_FAILED`。
+9. **双 token 读 story**:`/api/story/list`、`GET /api/story/:id`、`/favorite`、`DELETE :id`
+   同时接受 parent+device,device 只看自己 deviceId 的,parent 聚合自己 children 的,
+   别家 / 不存在 → `30007`(防枚举)。
+10. **路由注册顺序**:Fastify 允许 `/api/story/list` 和 `/api/story/:id` 共存(literal
+    优先于动态段),无需拆分到两个文件。所有 9 个 story 接口 + 路由 query 参数
+    `onlyFavorited` / `sort` / `cursor` / `limit` 统一在 `routes/story.js`。
+
+11. **Mock 模式触发**:`USE_MOCK_AI=1` 或 `GEMINI_API_KEY` 未设置时自动走 mock。
+    mock 输出都是基于种子(storyId/pageNum/text hash)确定性的,使 smoke 能离线跑。
+    真实 key 存在时 **不会** 走 mock(防止 prod 意外降级)。
+
+**Redis 新增 key**:
+```
+dialog:session:<dialogueId>          TTL 1800s(30 分钟)
+rate:story-gen:<deviceId>:<date>     TTL 86400s(日限计数)
+rate:tts:<deviceId>:<hour>           TTL 3600s(50/小时限流)
+```
+
+**新增/启用错误码**:`30001 STORY_GEN_FAILED`、`30002 IMAGE_GEN_ALL_FAILED`、
+`30003 TTS_FAILED`、`30004 QUOTA_EXHAUSTED`、`30005 DAILY_LIMIT_REACHED`、
+`30006 CONTENT_SAFETY_BLOCKED`、`30007 STORY_NOT_FOUND`、`30008 STORY_NOT_READY`、
+`30011 ASR_FAILED`、`30012 DIALOGUE_ROUND_OVERFLOW`。
+
+**下一个批次**:批次 5 **订阅 + 支付**(Stripe / RevenueCat webhook、优惠码、plan 升降级)。
+HANDOFF_BATCH5.md 已生成,**必须沿用 PROMPT_SPEC v7.1,不得回退到任何 v7.0 变体或发明 v7.2**。
+
+---
+
 ## 2026-04-23 · 批次 3 完成 — 设备 + 孩子 + 家长模块
 
 **来源**:批次 3 开发窗口

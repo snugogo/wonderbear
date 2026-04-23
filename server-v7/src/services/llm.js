@@ -1,0 +1,282 @@
+// ============================================================================
+// services/llm.js — LLM calls for dialogue + story expansion
+//
+// Two entry points:
+//   - generateDialogueTurn({ systemPrompt, history, userInput, round, roundCount })
+//       → { text, textLearning, done }
+//   - generateStoryJson({ systemPrompt, dialogueSummary, childProfile })
+//       → full 12-page story JSON (see PROMPT_SPEC_v7_1 §2.1)
+//
+// Both functions operate in ONE OF two modes:
+//   1. MOCK mode (default when GEMINI_API_KEY is not set or USE_MOCK_AI=true)
+//      → deterministic output, no network I/O, used for smoke tests + local dev
+//   2. LIVE mode (GEMINI_API_KEY set + USE_MOCK_AI not set)
+//      → calls Gemini 2.0 Flash REST API directly via fetch (no extra dep)
+//
+// The mock mode produces responses that structurally match the live contract,
+// so integration tests run the same code path as production.
+// ============================================================================
+
+import env from '../config/env.js';
+
+const GEMINI_URL =
+  'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+
+export function isMockMode() {
+  if (process.env.USE_MOCK_AI === 'true' || process.env.USE_MOCK_AI === '1') return true;
+  if (!env.GEMINI_API_KEY) return true;
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// Dialogue turn
+// ---------------------------------------------------------------------------
+
+/**
+ * @param {object} args
+ * @param {string} args.systemPrompt
+ * @param {Array<{role:'user'|'assistant', text:string}>} [args.history]
+ * @param {string} args.userInput           Child's current turn
+ * @param {number} args.round               1-based current round
+ * @param {number} args.roundCount          Total rounds expected
+ * @param {'zh'|'en'|'pl'|'ro'} [args.primaryLang]
+ * @param {'zh'|'en'|'pl'|'ro'|'none'} [args.learningLang]
+ * @returns {Promise<{ nextQuestion:{text:string,textLearning:string|null}, done:boolean }>}
+ */
+export async function generateDialogueTurn(args) {
+  if (isMockMode()) return mockDialogueTurn(args);
+  return liveDialogueTurn(args);
+}
+
+function mockDialogueTurn({ round, roundCount, primaryLang = 'en', learningLang = 'none' }) {
+  const questionsByRound = {
+    zh: [
+      '主角会有一个什么样的好朋友呢?',
+      '他们会去哪里冒险呢?',
+      '他们会遇到什么有趣的事?',
+      '他们会怎么解决呢?',
+      '最后他们回家了吗?',
+      '这个故事的结局是开心的吧?',
+      '要给这个故事起个什么名字?',
+    ],
+    en: [
+      'Who will be the hero\'s best friend?',
+      'Where will they go on their adventure?',
+      'What fun thing will they find there?',
+      'How will they solve the little problem?',
+      'Do they come home in the end?',
+      'Is the ending a happy one?',
+      'What should we call this story?',
+    ],
+    pl: [
+      'Kto będzie najlepszym przyjacielem bohatera?',
+      'Dokąd wyruszą na przygodę?',
+      'Co zabawnego tam znajdą?',
+      'Jak rozwiążą mały problem?',
+      'Czy wrócą do domu?',
+      'Czy zakończenie jest szczęśliwe?',
+      'Jak nazwiemy tę historię?',
+    ],
+    ro: [
+      'Cine va fi cel mai bun prieten al eroului?',
+      'Unde vor merge într-o aventură?',
+      'Ce lucru distractiv vor găsi acolo?',
+      'Cum vor rezolva mica problemă?',
+      'Se vor întoarce acasă?',
+      'Este finalul unul fericit?',
+      'Cum să numim această poveste?',
+    ],
+  };
+  const langBank = questionsByRound[primaryLang] || questionsByRound.en;
+  const learningBank = learningLang !== 'none' ? questionsByRound[learningLang] : null;
+
+  const done = round >= roundCount;
+  const idx = Math.min(round - 1, langBank.length - 1);
+
+  return {
+    nextQuestion: done
+      ? null
+      : {
+          text: langBank[idx] || langBank[0],
+          textLearning: learningBank ? learningBank[idx] || null : null,
+        },
+    done,
+  };
+}
+
+async function liveDialogueTurn({ systemPrompt, history = [], userInput, round, roundCount }) {
+  const messages = [
+    { role: 'user', parts: [{ text: systemPrompt }] },
+    { role: 'model', parts: [{ text: 'Understood. I am Little Bear.' }] },
+    ...history.map((h) => ({
+      role: h.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: h.text }],
+    })),
+    { role: 'user', parts: [{ text: `Round ${round}/${roundCount}\nChild: ${userInput}` }] },
+  ];
+
+  const resp = await fetch(`${GEMINI_URL}?key=${env.GEMINI_API_KEY}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: messages,
+      generationConfig: {
+        temperature: 0.85,
+        maxOutputTokens: 400,
+        responseMimeType: 'application/json',
+      },
+    }),
+  });
+  if (!resp.ok) throw new Error(`Gemini dialogue HTTP ${resp.status}`);
+  const data = await resp.json();
+  const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(`Gemini dialogue returned non-JSON: ${raw.slice(0, 200)}`);
+  }
+  return {
+    nextQuestion: parsed.nextQuestion ?? null,
+    done: round >= roundCount,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Story 12-page expansion
+// ---------------------------------------------------------------------------
+
+/**
+ * @param {object} args
+ * @param {string} args.systemPrompt
+ * @param {object} args.dialogueSummary   { mainCharacter, scene, conflict, rounds: [{q,a}] }
+ * @param {object} args.childProfile      { name, age, primaryLang, secondLang }
+ * @returns {Promise<{ title:string, titleEn:string, characterDescription:string, pages: StoryPage[] }>}
+ */
+export async function generateStoryJson(args) {
+  if (isMockMode()) return mockStoryJson(args);
+  return liveStoryJson(args);
+}
+
+function mockStoryJson({ dialogueSummary, childProfile }) {
+  const child = childProfile || {};
+  const name = child.name || 'Little One';
+  const age = child.age || 5;
+  const primary = child.primaryLang || 'en';
+  const learning = child.secondLang || 'none';
+  const character = dialogueSummary?.mainCharacter || name;
+  const scene = dialogueSummary?.scene || 'a sunny meadow';
+  const conflict = dialogueSummary?.conflict || 'finding a lost friend';
+
+  const beats = [
+    `Meet our hero ${character} in a cheerful morning`,
+    `${character} steps outside full of curiosity`,
+    `A new friend appears in the scene`,
+    `The friends notice something unusual`,
+    `They set off toward ${scene}`,
+    `A small challenge appears`,
+    `They try their first clever idea`,
+    `They help each other through the ${conflict}`,
+    `A warm surprise awaits them`,
+    `Everyone celebrates together`,
+    `The friends walk home under the sunset`,
+    `A cozy ending, ready for dreams`,
+  ];
+
+  const titleMap = {
+    zh: `${name}和彩虹森林的冒险`,
+    en: `${name}\'s Rainbow Forest Adventure`,
+    pl: `Przygoda ${name} w Tęczowym Lesie`,
+    ro: `Aventura ${name} în Pădurea Curcubeu`,
+  };
+
+  const titleEn = titleMap.en;
+
+  const pages = beats.map((beat, i) => {
+    const pageNum = i + 1;
+    const makeText = (loc) => {
+      if (!loc || loc === 'none') return '';
+      const bank = {
+        zh: `这是第${pageNum}页:${character}在${scene}里遇到了新的惊喜,大家一起笑了起来。`,
+        en: `Page ${pageNum}: ${character} meets a new surprise in ${scene}, and everyone laughs together.`,
+        pl: `Strona ${pageNum}: ${character} spotyka nową niespodziankę w ${scene} i wszyscy się śmieją.`,
+        ro: `Pagina ${pageNum}: ${character} întâlnește o surpriză nouă în ${scene}, și toți râd împreună.`,
+      };
+      return bank[loc] || bank.en;
+    };
+
+    return {
+      pageNum,
+      text: {
+        zh: makeText('zh'),
+        en: makeText('en'),
+        pl: makeText('pl'),
+        ro: makeText('ro'),
+      },
+      imagePrompt:
+        `A cheerful ${age}-year-old character named ${name} with warm smile and bright eyes, ` +
+        `in a sunlit meadow with a small friendly fox beside, colorful wildflowers, ` +
+        `soft rolling hills, golden afternoon light, joyful mood`,
+      emotion: ['happy', 'wonder', 'excited', 'cozy', 'adventurous', 'peaceful'][i % 6],
+      beat,
+    };
+  });
+
+  return {
+    title: titleMap[primary] || titleMap.en,
+    titleEn,
+    characterDescription:
+      `A cheerful ${age}-year-old with warm brown hair, rosy cheeks, ` +
+      'bright colorful clothes, big curious eyes, small and cuddly',
+    pages,
+    _primaryLang: primary,
+    _learningLang: learning,
+  };
+}
+
+async function liveStoryJson({ systemPrompt, dialogueSummary, childProfile }) {
+  const body = {
+    contents: [
+      { role: 'user', parts: [{ text: systemPrompt }] },
+      {
+        role: 'user',
+        parts: [
+          {
+            text: [
+              'Child profile:',
+              JSON.stringify(childProfile),
+              '',
+              'Dialogue summary:',
+              JSON.stringify(dialogueSummary),
+              '',
+              'Now produce the 12-page story JSON as specified.',
+            ].join('\n'),
+          },
+        ],
+      },
+    ],
+    generationConfig: {
+      temperature: 0.85,
+      maxOutputTokens: 4096,
+      responseMimeType: 'application/json',
+    },
+  };
+  const resp = await fetch(`${GEMINI_URL}?key=${env.GEMINI_API_KEY}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) throw new Error(`Gemini story HTTP ${resp.status}`);
+  const data = await resp.json();
+  const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(`Gemini story returned non-JSON: ${raw.slice(0, 200)}`);
+  }
+  if (!Array.isArray(parsed.pages) || parsed.pages.length !== 12) {
+    throw new Error(`Gemini story returned ${parsed?.pages?.length ?? 0} pages, expected 12`);
+  }
+  return parsed;
+}
