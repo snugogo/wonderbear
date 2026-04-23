@@ -4,9 +4,9 @@
     <div class="content">
       <EmptyState
         asset="bear.confused"
+        fallback-asset="bear.idle"
         :title="t('subscribe.cancelPageTitle')"
         :desc="t('subscribe.cancelPageDesc')"
-        fallback-emoji="🤔"
       >
         <template #action>
           <div class="actions">

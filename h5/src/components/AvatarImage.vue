@@ -1,41 +1,46 @@
 <template>
   <span class="avatar-img" :style="boxStyle">
     <img
-      v-if="!broken"
       :src="src"
-      :alt="stem"
-      @error="broken = true"
+      :alt="stem || 'avatar'"
       class="img"
+      @error="onImgError"
     />
-    <span v-else class="fallback" :style="{ fontSize: `${size * 0.65}px` }">{{ emoji }}</span>
   </span>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
-import { avatarUrl } from '@/config/assets';
+import { computed, ref, watch } from 'vue';
+import { avatarUrl, DEFAULT_AVATAR_STEM } from '@/config/assets';
 
 interface Props {
   /** 头像 stem,如 'avatar_cat' */
-  stem: string;
+  stem?: string | null;
   /** 显示尺寸(px) */
   size?: number;
 }
-const props = withDefaults(defineProps<Props>(), { size: 64 });
+const props = withDefaults(defineProps<Props>(), { size: 64, stem: '' });
 
-const broken = ref(false);
-const src = computed(() => avatarUrl(props.stem));
+const triedFallback = ref(false);
+const src = ref(avatarUrl(props.stem));
 
-/** 按 stem 选合适的 emoji 兜底 */
-const emoji = computed(() => {
-  const s = props.stem;
-  if (s.includes('cat')) return '🐱';
-  if (s.includes('dog')) return '🐶';
-  if (s.includes('rabbit')) return '🐰';
-  if (s.includes('fox')) return '🦊';
-  if (s.includes('owl')) return '🦉';
-  return '🧸';
-});
+watch(
+  () => props.stem,
+  (next) => {
+    triedFallback.value = false;
+    src.value = avatarUrl(next);
+  }
+);
+
+function onImgError(e: Event) {
+  // 单次降级到默认头像;再挂就让浏览器显示 alt 文字 + CSS 圆形兜底色
+  if (!triedFallback.value) {
+    triedFallback.value = true;
+    src.value = avatarUrl(DEFAULT_AVATAR_STEM);
+  } else {
+    (e.target as HTMLImageElement).style.visibility = 'hidden';
+  }
+}
 
 const boxStyle = computed(() => ({
   width: `${props.size}px`,
@@ -56,8 +61,5 @@ const boxStyle = computed(() => ({
   width: 100%;
   height: 100%;
   object-fit: cover;
-}
-.fallback {
-  line-height: 1;
 }
 </style>

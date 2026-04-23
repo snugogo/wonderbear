@@ -9,9 +9,9 @@
     <EmptyState
       v-else-if="devices.length === 0"
       asset="h5.scanQrGuide"
+      fallback-asset="bear.qrPeek"
       :title="t('devices.empty')"
       :desc="t('devices.emptyDesc')"
-      fallback-emoji="📱"
     />
 
     <div v-else class="list">

@@ -26,7 +26,7 @@
           :alt="story.title"
           @error="coverBroken = true"
         />
-        <span v-else class="cover-fallback">📖</span>
+        <span v-else class="cover-fallback" aria-hidden="true" />
         <div class="cover-mask">
           <h2 class="title">{{ story.title }}</h2>
           <p v-if="story.titleLearning" class="title-sub">{{ story.titleLearning }}</p>
@@ -51,7 +51,7 @@
                   :alt="`Page ${p.pageNum}`"
                   @error="pageBroken[p.pageNum] = true"
                 />
-                <span v-else>🎨</span>
+                <span v-else class="page-img-fallback" aria-hidden="true" />
               </div>
               <p class="page-text">{{ p.text }}</p>
               <p v-if="p.textLearning" class="page-text-learning">{{ p.textLearning }}</p>
@@ -170,8 +170,11 @@ onMounted(load);
   object-fit: cover;
 }
 .cover-fallback {
-  font-size: 80px;
-  opacity: 0.4;
+  display: block;
+  width: 100%;
+  height: 100%;
+  background:
+    linear-gradient(135deg, var(--wb-primary-light), var(--wb-primary) 140%);
 }
 .cover-mask {
   position: absolute;
@@ -232,7 +235,13 @@ onMounted(load);
   height: 100%;
   object-fit: cover;
 }
-.page-img.broken { font-size: 56px; }
+.page-img-fallback {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background:
+    linear-gradient(135deg, var(--wb-primary-light), var(--wb-primary) 140%);
+}
 .page-text {
   margin: 0 0 6px;
   font-size: 15px;

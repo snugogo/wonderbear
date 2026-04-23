@@ -22,9 +22,9 @@
     <EmptyState
       v-else-if="stories.length === 0"
       asset="h5.emptyStories"
+      fallback-asset="bear.read"
       :title="t('stories.empty')"
       :desc="t('stories.emptyDesc')"
-      fallback-emoji="📖"
     />
 
     <div v-else class="list">
@@ -41,7 +41,7 @@
             :alt="s.title"
             @error="coverBroken[s.id] = true"
           />
-          <span v-else class="cover-fallback">📖</span>
+          <span v-else class="cover-fallback" aria-hidden="true" />
         </div>
         <div class="info">
           <div class="title">{{ s.title }}</div>
@@ -174,7 +174,13 @@ onMounted(load);
   height: 100%;
   object-fit: cover;
 }
-.cover-fallback { font-size: 32px; }
+.cover-fallback {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background:
+    linear-gradient(135deg, var(--wb-primary-light), var(--wb-primary) 140%);
+}
 .info {
   flex: 1;
   display: flex;

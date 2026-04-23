@@ -1,15 +1,8 @@
 <template>
   <div class="avatar-picker">
-    <!-- 当前选中大图 -->
+    <!-- 当前选中大图:AvatarImage 组件统一兜底,避免 emoji -->
     <div class="current">
-      <img
-        v-if="!currentBroken"
-        :src="currentSrc"
-        :alt="modelValue"
-        class="current-img"
-        @error="currentBroken = true"
-      />
-      <span v-else class="current-fallback">🧸</span>
+      <AvatarImage :stem="modelValue" :size="96" class="current-img-wrap" />
     </div>
 
     <!-- 预设网格 -->
@@ -35,27 +28,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
-import { avatarUrl, PRESET_AVATARS } from '@/config/assets';
+import { PRESET_AVATARS } from '@/config/assets';
 import AvatarImage from './AvatarImage.vue';
 
 interface Props {
   /** 当前选中头像 stem,如 'avatar_bear_classic' */
   modelValue: string;
 }
-const props = defineProps<Props>();
+defineProps<Props>();
 defineEmits<(e: 'update:modelValue', stem: string) => void>();
-
-const currentBroken = ref(false);
-const currentSrc = computed(() => avatarUrl(props.modelValue));
-
-// 切换时重置 broken 状态,让新选的头像也能触发 error 事件
-watch(
-  () => props.modelValue,
-  () => {
-    currentBroken.value = false;
-  }
-);
 </script>
 
 <style scoped>
@@ -69,24 +50,9 @@ watch(
   justify-content: center;
   padding: 8px 0;
 }
-.current-img {
-  width: 96px;
-  height: 96px;
-  border-radius: 50%;
-  object-fit: cover;
+.current-img-wrap :deep(.avatar-img) {
   border: 4px solid var(--wb-primary);
-  background: var(--wb-primary-light);
-}
-.current-fallback {
-  width: 96px;
-  height: 96px;
-  border-radius: 50%;
-  background: var(--wb-primary-light);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 56px;
-  border: 4px solid var(--wb-primary);
+  box-sizing: content-box;
 }
 
 .grid {

@@ -248,7 +248,8 @@ onMounted(async () => {
     form.gender = child.gender ?? 'prefer_not_say';
     form.avatar = child.avatar;
     form.primaryLang = child.primaryLang;
-    form.secondLang = child.secondLang;
+    // 服务端可能把 'none' 存为 null,读回时兜底为 'none'
+    form.secondLang = (child.secondLang ?? 'none') as Locale | 'none';
     form.birthday = child.birthday || '';
   } catch (e) {
     showToast(fmtErr(e));

@@ -68,9 +68,9 @@
       <template v-else-if="phase === 'done'">
         <EmptyState
           asset="h5.pdfReady"
+          fallback-asset="bear.cheer"
           :title="t('pdf.statusCompleted')"
           :desc="''"
-          fallback-emoji="📄"
         >
           <template #action>
             <div class="actions">
@@ -94,9 +94,9 @@
       <template v-else>
         <EmptyState
           asset="bear.errorOops"
+          fallback-asset="bear.confused"
           :title="t('pdf.statusFailed')"
           :desc="t('pdf.timeoutDesc')"
-          fallback-emoji="😅"
         >
           <template #action>
             <van-button round plain @click="resetForm">{{ t('common.retry') }}</van-button>

@@ -58,7 +58,7 @@ export default {
   },
 
   home: {
-    hello: '你好 👋',
+    hello: '你好',
     deviceBound: '设备 {id} 已绑定',
     signOut: '退出登录',
     noChildTitle: '还没有孩子档案',
@@ -175,7 +175,7 @@ export default {
 
     successTitle: '正在激活订阅...',
     successDesc: '通常需要几秒钟,请稍候。',
-    successDone: '订阅成功 🎉',
+    successDone: '订阅成功',
     successTimeout: '仍在处理中。如果已扣款但 5 分钟内未生效,请联系客服并附上支付凭据。',
 
     cancelPageTitle: '已取消支付',

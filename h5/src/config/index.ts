@@ -21,10 +21,10 @@ export const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
 /**
  * 资源基址(素材对接文档 §一)
  * dev:本地 /assets
- * prod:CDN
+ * prod:jsDelivr CDN(assets 仓库 main 分支)
  */
 export const ASSETS_BASE = import.meta.env.PROD
-  ? 'https://assets.wonderbear.app/static'
+  ? (import.meta.env.VITE_ASSETS_BASE_URL || 'https://cdn.jsdelivr.net/gh/snugogo/wonderbear@main/assets')
   : '/assets';
 
 /** 支持的语言列表 */

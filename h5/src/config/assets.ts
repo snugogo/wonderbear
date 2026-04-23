@@ -21,7 +21,8 @@ type AssetFolder =
   | 'avatar'
   | 'h5'
   | 'icon'
-  | 'marketing';
+  | 'marketing'
+  | 'svg';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const registry = {
@@ -45,6 +46,9 @@ const registry = {
       qrPeek: 'bear_qr_peek',
       poland: 'bear_poland',
       romania: 'bear_romania',
+      readingHero: 'bear_reading_hero',
+      sit: 'bear_sit',
+      bowCurtain: 'bear_bow_curtain',
     },
   },
 
@@ -101,6 +105,55 @@ const registry = {
       pdfReady: 'h5_pdf_ready',
       shareLink: 'h5_share_link',
       errorNetwork: 'h5_error_network',
+    },
+  },
+
+  // ---- UI 精细图(WebP) ----
+  ui: {
+    folder: 'ui' as AssetFolder,
+    ext: 'webp',
+    items: {
+      mic: 'ui_mic',
+      loading: 'ui_loading',
+      charBubble: 'ui_char_bubble',
+      fingerPoint: 'ui_finger_point',
+      qrFrame: 'ui_qr_frame',
+      checkmark: 'ui_checkmark',
+      heartFavorite: 'ui_heart_favorite',
+      download: 'ui_download',
+    },
+  },
+
+  // ---- 装饰元素 ----
+  deco: {
+    folder: 'deco' as AssetFolder,
+    ext: 'webp',
+    items: {
+      confetti: 'deco_confetti',
+      hearts: 'deco_hearts',
+      stars: 'deco_stars',
+      sparkles: 'deco_sparkles',
+      cloud: 'deco_cloud',
+      dots: 'deco_dots',
+      coins: 'deco_coins',
+      podium: 'deco_podium',
+      ribbon: 'deco_ribbon',
+    },
+  },
+
+  // ---- SVG 图标(单色线形) ----
+  svg: {
+    folder: 'svg' as AssetFolder,
+    ext: 'svg',
+    items: {
+      arrowBack: 'ui_arrow_back',
+      check: 'ui_check',
+      checkCircle: 'ui_check_circle',
+      envelope: 'ui_envelope',
+      settings: 'ui_settings',
+      starOutline: 'ui_star_outline',
+      starFilled: 'ui_star_filled',
+      logoMono: 'logo_mono',
     },
   },
 } as const;

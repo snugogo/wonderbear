@@ -16,13 +16,11 @@
         </div>
       </div>
       <img
-        v-if="!bearBroken"
         :src="asset('bear.welcome')"
         alt=""
         class="welcome-bear"
-        @error="bearBroken = true"
+        @error="onBearErr"
       />
-      <span v-else class="welcome-bear fallback">🧸</span>
     </div>
 
     <!-- 没孩子时的醒目引导(可能是 onboard 跳过来的) -->
@@ -32,13 +30,11 @@
       @click="router.push({ name: 'OnboardChild' })"
     >
       <img
-        v-if="!bannerBroken"
         :src="asset('h5.emptyChildren')"
         class="banner-img"
         alt=""
-        @error="bannerBroken = true"
+        @error="onBannerErr"
       />
-      <span v-else class="banner-img fallback">🧒</span>
       <div class="banner-text">
         <div class="banner-title">{{ t('home.noChildTitle') }}</div>
         <div class="banner-desc">{{ t('home.noChildDesc') }}</div>
@@ -85,9 +81,27 @@ import { asset } from '@/config/assets';
 const { t } = useI18n();
 const authStore = useAuthStore();
 const router = useRouter();
-const bearBroken = ref(false);
-const bannerBroken = ref(false);
 const loadingMe = ref(true);
+
+/** 图加载失败时退回 app icon,绝不回 emoji */
+function onBearErr(e: Event) {
+  const img = e.target as HTMLImageElement;
+  if (!img.dataset.fallback) {
+    img.dataset.fallback = '1';
+    img.src = '/assets/icon/app_icon_master.webp';
+  } else {
+    img.style.visibility = 'hidden';
+  }
+}
+function onBannerErr(e: Event) {
+  const img = e.target as HTMLImageElement;
+  if (!img.dataset.fallback) {
+    img.dataset.fallback = '1';
+    img.src = asset('bear.emptyBox');
+  } else {
+    img.style.visibility = 'hidden';
+  }
+}
 
 // 硬件 deviceId 可能很长,截取显示
 const shortDeviceId = computed(() => {
@@ -125,7 +139,7 @@ const menuItems = computed(() => [
     icon: 'gold-coin-o',
     color: '#E8A658',
     bg: 'rgba(232, 200, 120, 0.3)',
-    badge: authStore.isSubscribed ? '✓' : '',
+    badge: authStore.isSubscribed ? '●' : '',
   },
   {
     name: 'Devices',
@@ -234,13 +248,6 @@ async function onLogout() {
   object-fit: contain;
   flex-shrink: 0;
 }
-.welcome-bear.fallback {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 56px;
-  line-height: 1;
-}
 
 /* 没孩子的醒目引导卡 */
 .no-child-banner {
@@ -263,12 +270,6 @@ async function onLogout() {
   height: 48px;
   object-fit: contain;
   flex-shrink: 0;
-}
-.banner-img.fallback {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 36px;
 }
 .banner-text {
   flex: 1;

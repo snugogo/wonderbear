@@ -25,9 +25,9 @@
       <EmptyState
         v-else-if="children.length === 0"
         asset="h5.emptyChildren"
+        fallback-asset="bear.emptyBox"
         :title="t('children.emptyTitle')"
         :desc="t('children.emptyDesc')"
-        fallback-emoji="🧒"
       >
         <template #action>
           <van-button type="primary" round icon="plus" @click="onAdd">

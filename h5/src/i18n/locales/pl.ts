@@ -58,7 +58,7 @@ export default {
   },
 
   home: {
-    hello: 'Cześć 👋',
+    hello: 'Cześć',
     deviceBound: 'Urządzenie {id} połączone',
     signOut: 'Wyloguj się',
     noChildTitle: 'Brak profilu dziecka',
@@ -175,7 +175,7 @@ export default {
 
     successTitle: 'Aktywujemy Twoją subskrypcję...',
     successDesc: 'To zwykle trwa kilka sekund. Proszę czekać.',
-    successDone: 'Jesteś subskrybentem 🎉',
+    successDone: 'Jesteś subskrybentem',
     successTimeout: 'Nadal przetwarzamy. Jeśli płatność została pobrana, ale subskrypcja nie pojawi się w ciągu 5 minut, skontaktuj się z obsługą.',
 
     cancelPageTitle: 'Płatność anulowana',

@@ -15,9 +15,9 @@
       <EmptyState
         v-else-if="status === 'done'"
         asset="h5.successSubscribed"
+        fallback-asset="bear.cheer"
         :title="t('subscribe.successDone')"
         :desc="''"
-        fallback-emoji="🎉"
       >
         <template #action>
           <van-button type="primary" round @click="router.replace('/home')">
@@ -30,9 +30,9 @@
       <EmptyState
         v-else
         asset="bear.confused"
+        fallback-asset="bear.idle"
         :title="t('subscribe.successTitle')"
         :desc="t('subscribe.successTimeout')"
-        fallback-emoji="🤔"
       >
         <template #action>
           <van-button round @click="router.replace('/subscribe')">

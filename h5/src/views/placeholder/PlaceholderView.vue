@@ -8,9 +8,9 @@
 
     <EmptyState
       :asset="emptyAsset"
+      :fallback-asset="fallbackAsset"
       :title="t('placeholder.comingSoon')"
       :desc="t('placeholder.desc')"
-      :fallback-emoji="emoji"
     >
       <template #action>
         <van-button type="primary" round size="small" @click="onHome">
@@ -34,28 +34,28 @@ const router = useRouter();
 const title = computed(() => (route.meta.title as string) || 'WonderBear');
 
 /**
- * 按 meta.placeholderKey 选合适的插画和 emoji 兜底
- * key → (h5 插画 asset key, emoji)
+ * 按 meta.placeholderKey 选合适的插画 + 备选
+ * 全部走图,绝不降级到 emoji(EmptyState 组件内部最终兜底为 CSS 圆)
  */
-const MAP: Record<string, { asset: string; emoji: string }> = {
-  children: { asset: 'h5.emptyChildren', emoji: '🧒' },
-  subscribe: { asset: 'h5.paymentStripe', emoji: '💳' },
-  subscribeSuccess: { asset: 'h5.successSubscribed', emoji: '🎉' },
-  stories: { asset: 'h5.emptyStories', emoji: '📖' },
-  pdf: { asset: 'h5.pdfReady', emoji: '📄' },
-  devices: { asset: 'h5.scanQrGuide', emoji: '📱' },
-  settings: { asset: 'bear.idle', emoji: '⚙️' },
-  history: { asset: 'h5.emptyStories', emoji: '🕐' },
-  help: { asset: 'bear.confused', emoji: '❓' },
+const MAP: Record<string, { asset: string; fallback: string }> = {
+  children: { asset: 'h5.emptyChildren', fallback: 'bear.emptyBox' },
+  subscribe: { asset: 'h5.paymentStripe', fallback: 'bear.idle' },
+  subscribeSuccess: { asset: 'h5.successSubscribed', fallback: 'bear.cheer' },
+  stories: { asset: 'h5.emptyStories', fallback: 'bear.read' },
+  pdf: { asset: 'h5.pdfReady', fallback: 'bear.happy' },
+  devices: { asset: 'h5.scanQrGuide', fallback: 'bear.qrPeek' },
+  settings: { asset: 'bear.idle', fallback: 'bear.welcome' },
+  history: { asset: 'h5.emptyStories', fallback: 'bear.read' },
+  help: { asset: 'bear.confused', fallback: 'bear.idle' },
 };
 
 const emptyAsset = computed(() => {
   const key = route.meta.placeholderKey as string | undefined;
   return key ? MAP[key]?.asset : undefined;
 });
-const emoji = computed(() => {
+const fallbackAsset = computed(() => {
   const key = route.meta.placeholderKey as string | undefined;
-  return key ? MAP[key]?.emoji || '🐻' : '🐻';
+  return (key && MAP[key]?.fallback) || 'bear.confused';
 });
 
 function onBack() {

@@ -58,7 +58,7 @@ export default {
   },
 
   home: {
-    hello: 'Hello 👋',
+    hello: 'Hello',
     deviceBound: 'Device {id} linked',
     signOut: 'Sign out',
     noChildTitle: 'No child profile yet',
@@ -178,7 +178,7 @@ export default {
 
     successTitle: 'Activating your subscription...',
     successDesc: 'This usually takes a few seconds. Please wait.',
-    successDone: 'You are subscribed 🎉',
+    successDone: 'You are subscribed',
     successTimeout: "Still processing. If you've been charged but don't see your subscription in 5 minutes, contact support with your payment receipt.",
 
     cancelPageTitle: 'Payment canceled',

@@ -28,7 +28,7 @@
           alt=""
           @error="imgBroken = true"
         />
-        <span v-else class="hero-img fallback">🎉</span>
+        <span v-else class="hero-img fallback" aria-hidden="true" />
       </div>
 
       <h1 class="title">{{ t('onboard.doneTitle') }}</h1>
@@ -167,8 +167,9 @@ function onAddAnother() {
   display: block;
 }
 .hero-img.fallback {
-  font-size: 120px;
-  line-height: 1;
+  display: block;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--wb-primary-light), var(--wb-primary) 140%);
 }
 .title {
   margin: 0 0 20px;

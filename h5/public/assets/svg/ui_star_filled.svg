@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- 光晕 -->
+  <polygon points="24,5 29,18 43,18 32,27 36,41 24,33 12,41 16,27 5,18 19,18" fill="#FFF3D0" transform="scale(1.08) translate(-2,-2)"/>
+  <!-- 实心星 -->
+  <polygon points="24,5 29,18 43,18 32,27 36,41 24,33 12,41 16,27 5,18 19,18" fill="#E8C878" stroke="#E8A658" stroke-width="1.5" stroke-linejoin="round"/>
+</svg>

@@ -22,12 +22,12 @@
     <div class="intro">
       <img
         v-if="!imgBroken"
-        :src="asset('bear.reading_hero')"
+        :src="asset('bear.readingHero')"
         class="intro-img"
         alt=""
         @error="imgBroken = true"
       />
-      <span v-else class="intro-img fallback">🧸</span>
+      <span v-else class="intro-img fallback" aria-hidden="true" />
       <h1 class="intro-title">{{ t('onboard.childTitle') }}</h1>
       <p class="intro-desc">{{ t('onboard.childDesc') }}</p>
     </div>
@@ -278,8 +278,8 @@ function onSkip() {
   display: block;
 }
 .intro-img.fallback {
-  font-size: 96px;
-  line-height: 1;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #F5E6D3, var(--wb-primary-light));
 }
 .intro-title {
   margin: 0 0 6px;

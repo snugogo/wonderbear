@@ -58,7 +58,7 @@ export default {
   },
 
   home: {
-    hello: 'Salut 👋',
+    hello: 'Salut',
     deviceBound: 'Dispozitiv {id} asociat',
     signOut: 'Deconectează-te',
     noChildTitle: 'Niciun profil de copil',
@@ -175,7 +175,7 @@ export default {
 
     successTitle: 'Activăm abonamentul tău...',
     successDesc: 'De obicei durează câteva secunde. Te rugăm să aștepți.',
-    successDone: 'Ești abonat 🎉',
+    successDone: 'Ești abonat',
     successTimeout: 'Încă procesăm. Dacă ai fost taxat dar nu vezi abonamentul în 5 minute, contactează suportul.',
 
     cancelPageTitle: 'Plată anulată',
