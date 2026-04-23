@@ -80,57 +80,89 @@ export function createStoryQueue(prisma, options = {}) {
         },
       });
 
-      const pagesWithImages = [];
-      let totalCostCents = 0;
       const pages = storyJson.pages;
+      const pagesWithImages = new Array(pages.length);
+      let totalCostCents = 0;
 
-      // Simple sequential loop; could parallelize with Promise.all and a
-      // semaphore — deferred to Phase 2 tuning.
-      for (let i = 0; i < pages.length; i++) {
-        const page = pages[i];
-        const imgResult = await generatePageImage({
-          imagePrompt: page.imagePrompt,
-          characterDesc: storyJson.characterDescription,
-          pageNum: page.pageNum,
-          seed: `${storyId}:${page.pageNum}`,
-          onAttempt: async (att) => {
-            try {
-              await prisma.imageGenLog.create({
-                data: {
-                  storyId,
-                  pageNum: page.pageNum,
-                  provider: att.provider,
-                  tier: att.tier,
-                  success: att.success,
-                  durationMs: att.durationMs,
-                  costCents: att.costCents,
-                  errorCode: att.errorCode,
-                  errorMessage: att.errorMessage,
-                },
-              });
-            } catch {
-              // log failure is non-fatal
-            }
-          },
-        });
+      // -- helper: invoke image generator for one page and record the result ---
+      const logAttempt = (pageNum) => async (att) => {
+        try {
+          await prisma.imageGenLog.create({
+            data: {
+              storyId,
+              pageNum,
+              provider: att.provider,
+              tier: att.tier,
+              success: att.success,
+              durationMs: att.durationMs,
+              costCents: att.costCents,
+              errorCode: att.errorCode,
+              errorMessage: att.errorMessage,
+            },
+          });
+        } catch {
+          // log failure is non-fatal
+        }
+      };
 
-        pagesWithImages.push({
-          pageNum: page.pageNum,
-          imageUrl: imgResult.imageUrl,
-          imageUrlHd: imgResult.imageUrlHd,
-          text: page.text?.[job.childProfile.primaryLang] || page.text?.en || '',
-          textLearning:
-            job.childProfile.secondLang && job.childProfile.secondLang !== 'none'
-              ? page.text?.[job.childProfile.secondLang] || null
-              : null,
-          emotion: page.emotion,
-        });
-        totalCostCents += imgResult.costCents;
+      const materializePage = (page, imgResult) => ({
+        pageNum: page.pageNum,
+        imageUrl: imgResult.imageUrl,
+        imageUrlHd: imgResult.imageUrlHd,
+        text: page.text?.[job.childProfile.primaryLang] || page.text?.en || '',
+        textLearning:
+          job.childProfile.secondLang && job.childProfile.secondLang !== 'none'
+            ? page.text?.[job.childProfile.secondLang] || null
+            : null,
+        emotion: page.emotion,
+      });
 
+      // ---------- Cover first (page 1) — text2image (OpenAI → Gemini) -------
+      const coverSrc = pages.find((p) => p.pageNum === 1) || pages[0];
+      const coverIdx = pages.indexOf(coverSrc);
+      const coverResult = await generatePageImage({
+        imagePrompt: coverSrc.imagePrompt,
+        characterDesc: storyJson.characterDescription,
+        pageNum: coverSrc.pageNum,
+        seed: `${storyId}:${coverSrc.pageNum}`,
+        onAttempt: logAttempt(coverSrc.pageNum),
+      });
+      pagesWithImages[coverIdx] = materializePage(coverSrc, coverResult);
+      totalCostCents += coverResult.costCents;
+      await prisma.story.update({
+        where: { id: storyId },
+        data: { pagesGenerated: 1 },
+      });
+
+      // ---------- Pages 2-12 — img2img conditioned on the cover URL --------
+      // Run up to maxPagesConcurrent at once so the founder-demo latency is
+      // acceptable (12 pages sequential at ~6s each = 72s; parallel = ~30s).
+      const referenceImageUrl = coverResult.imageUrl;
+      const restIndices = pages
+        .map((_, i) => i)
+        .filter((i) => i !== coverIdx);
+      const concurrency = maxPagesConcurrent;
+      let finished = 1;
+      for (let batchStart = 0; batchStart < restIndices.length; batchStart += concurrency) {
+        const batch = restIndices.slice(batchStart, batchStart + concurrency);
+        await Promise.all(batch.map(async (i) => {
+          const page = pages[i];
+          const imgResult = await generatePageImage({
+            imagePrompt: page.imagePrompt,
+            characterDesc: storyJson.characterDescription,
+            pageNum: page.pageNum,
+            referenceImageUrl,
+            seed: `${storyId}:${page.pageNum}`,
+            onAttempt: logAttempt(page.pageNum),
+          });
+          pagesWithImages[i] = materializePage(page, imgResult);
+          totalCostCents += imgResult.costCents;
+        }));
+        finished += batch.length;
         await prisma.story.update({
           where: { id: storyId },
-          data: { pagesGenerated: i + 1 },
-        });
+          data: { pagesGenerated: finished },
+        }).catch(() => {});
       }
 
       // ---------- Stage: image → tts ----------

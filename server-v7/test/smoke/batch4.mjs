@@ -735,9 +735,14 @@ export async function runBatch4Tests({ assert, section }) {
     assert(b.code === 0, 'GET story (parent): success');
     assert(b.data?.story?.downloaded === undefined, 'parent view: no downloaded flag');
 
-    // Image log was written
-    assert(app.prisma._imageLogs().length >= 12, 'imageGenLog: ≥12 rows');
-    assert(app.prisma._imageLogs()[0].provider === 'fal', 'imageGenLog: first attempt was FAL');
+    // Image log was written. Cover (page 1) now runs OpenAI first, pages 2-12
+    // run FAL kontext (img2img) with the cover as reference.
+    const logs = app.prisma._imageLogs();
+    assert(logs.length >= 12, 'imageGenLog: ≥12 rows');
+    const p1 = logs.find((l) => l.pageNum === 1);
+    assert(p1 && p1.provider === 'openai', 'imageGenLog: page 1 first attempt was openai (cover)');
+    const anyKontext = logs.find((l) => l.provider === 'fal-kontext');
+    assert(anyKontext, 'imageGenLog: at least one page used fal-kontext (img2img)');
 
     await app.close();
   }
