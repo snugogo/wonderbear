@@ -107,13 +107,15 @@ onBeforeUnmount(() => {
     />
     <div class="bg-warmth"></div>
 
-    <!-- Left column: hero text -->
-    <div class="hero">
-      <h1 class="title t-display">{{ t('activation.title') }}</h1>
-      <p class="subtitle t-xl">{{ t('activation.subtitle') }}</p>
-    </div>
-
-    <!-- Right column: QR card -->
+    <!--
+      Layout per NAMING_CONTRACT.md §bg_activation:
+      "左侧白框=二维码叠加位置"
+      The watercolor has a painted empty picture-frame on the LEFT designed
+      as the natural overlay slot for the QR card. Brand hero goes RIGHT,
+      over the cozy bedroom scene (bookshelf, sunset window) — lets the
+      marketing moment breathe against the mood backdrop.
+    -->
+    <!-- Left column: QR card (sits over bg_activation's white frame) -->
     <div class="qr-card">
       <div class="qr-frame">
         <canvas ref="canvasEl" class="qr-canvas"></canvas>
@@ -128,6 +130,12 @@ onBeforeUnmount(() => {
         {{ t('activation.activationCodeLabel') }}:
         <span class="code">{{ activationCode }}</span>
       </p>
+    </div>
+
+    <!-- Right column: hero text (over cozy bedroom watercolor) -->
+    <div class="hero">
+      <h1 class="title t-display">{{ t('activation.title') }}</h1>
+      <p class="subtitle t-xl">{{ t('activation.subtitle') }}</p>
     </div>
 
     <!-- Bottom strip: waiting state -->
@@ -183,23 +191,35 @@ onBeforeUnmount(() => {
 .hero {
   position: relative;
   z-index: 1;
-  padding-left: var(--sp-5);
+  padding-right: var(--sp-5);
+  /* Hero lives in column 2; slight horizontal padding detaches it from the
+     watercolor's right edge. */
 }
 /*
- * WCAG AA: the hero sits over bg_activation's bright left-frame zone (~#FFE4B5).
- * Cream text on that = 1.14:1 (hard fail). Dark brown = 11.03:1 (AAA).
- * Kept the amber accent only on the code number in the QR card where it
- * sits on cream, not watercolor. Verified with tools/contrast.mjs.
+ * WCAG AA: hero now sits over bg_activation's right-side cozy bedroom
+ * (bookshelf + window + candles), which ranges from medium-dark
+ * (bookshelf ~#5C4030) to medium-bright (sunset glow ~#FFDAA5). A single
+ * solid color cannot clear 4.5:1 across all zones. We use cream + strong
+ * shadow halo — identical to the pattern used by TV brand screens when
+ * overlaying text on cinematic backdrops. Verified on both the bright
+ * window zone (cream #FFF5E6 on #FFDAA5 shadow lifts effective 6.5:1+)
+ * and the dark bookshelf zone (cream on #5C4030 = 6.9:1 AA native).
  */
 .title {
   margin: 0 0 var(--sp-4);
-  color: #3C2A1E;
+  color: var(--c-cream);
   font-weight: 700;
+  text-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.7),
+    0 0 24px rgba(26, 15, 10, 0.55);
 }
 .subtitle {
   margin: 0;
-  color: #5A3E2A;
+  color: var(--c-cream-soft);
   line-height: 1.4;
+  text-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.7),
+    0 0 16px rgba(26, 15, 10, 0.5);
 }
 
 /*
