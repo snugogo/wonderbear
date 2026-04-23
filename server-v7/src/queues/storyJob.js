@@ -137,7 +137,14 @@ export function createStoryQueue(prisma, options = {}) {
       // ---------- Pages 2-12 — img2img conditioned on the cover URL --------
       // Run up to maxPagesConcurrent at once so the founder-demo latency is
       // acceptable (12 pages sequential at ~6s each = 72s; parallel = ~30s).
-      const referenceImageUrl = coverResult.imageUrl;
+      // If cover fell through to placeholder, the "referenceImageUrl" is fake
+      // (placeholder.webp) and FAL Kontext img2img will 422. In that case force
+      // pages 2-12 through text2image (consistency lost but story completes).
+      const coverIsPlaceholder = coverResult.provider === 'placeholder';
+      const referenceImageUrl = coverIsPlaceholder ? null : coverResult.imageUrl;
+      if (coverIsPlaceholder) {
+        console.warn(`[storyJob ${storyId}] cover is placeholder — pages 2-12 forced to text2image`);
+      }
       const restIndices = pages
         .map((_, i) => i)
         .filter((i) => i !== coverIdx);
@@ -152,6 +159,7 @@ export function createStoryQueue(prisma, options = {}) {
             characterDesc: storyJson.characterDescription,
             pageNum: page.pageNum,
             referenceImageUrl,
+            forceText2Image: coverIsPlaceholder,
             seed: `${storyId}:${page.pageNum}`,
             onAttempt: logAttempt(page.pageNum),
           });
