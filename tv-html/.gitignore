@@ -7,3 +7,6 @@ dist/
 .vscode/
 .idea/
 *.tsbuildinfo
+
+# Local headless screenshot output (tools/snap.mjs)
+.snaps/
