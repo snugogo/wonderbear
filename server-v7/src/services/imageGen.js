@@ -525,6 +525,12 @@ async function callFalText(prompt) {
   return { imageUrl: url, imageUrlHd: url };
 }
 
+// Public alias — Page 1 fallback B (text2image, no reference image needed).
+// Wrapper around the existing FAL flux/dev call; per workorder §6.
+export async function callFalFluxT2I(prompt) {
+  return callFalText(prompt);
+}
+
 async function safeText(resp) {
   try { return await resp.text(); } catch { return ''; }
 }
