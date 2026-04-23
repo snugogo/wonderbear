@@ -437,7 +437,7 @@ export interface OemConfigResp {
 class ApiClient {
   private baseUrl: string;
   private deviceToken: string | null;
-  private locale: Locale = 'zh';
+  private locale: Locale = 'en';
   private authErrorHandler: ((err?: ApiError) => void) | null = null;
   private requestIdObserver: ((id: string) => void) | null = null;
 

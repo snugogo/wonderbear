@@ -288,7 +288,7 @@ const NETWORK_OFFLINE_INFO: ErrorEntry = {
  * Look up error info. Falls back to a generic friendly entry for unknown codes.
  * NEVER expose the numeric code or English message to children.
  */
-export function getErrorInfo(code: number, locale: Locale = 'zh'): ErrorInfo {
+export function getErrorInfo(code: number, locale: Locale = 'en'): ErrorInfo {
   if (code === NETWORK_OFFLINE) {
     return {
       code,
