@@ -18,12 +18,30 @@ import { i18n, getLocale } from './i18n';
 import { bridge } from './services/bridge';
 import { startKeyRouter } from './services/focus';
 import { useDeviceStore } from './stores/device';
-import { useScreenStore } from './stores/screen';
+import { useScreenStore, type ScreenName } from './stores/screen';
 import { api } from './services/api';
 import { ApiError } from './services/api';
 import './styles/global.css';
 
+/**
+ * Gallery mode short-circuit. Activated by ?gallery=1 (dev only).
+ * Mounts GalleryView instead of App and skips all activation/refresh logic.
+ * Zero impact on normal bootstrap.
+ */
+async function bootstrapGallery(): Promise<void> {
+  const { default: GalleryView } = await import('./dev/GalleryView.vue');
+  const app = createApp(GalleryView);
+  app.use(createPinia());
+  app.use(i18n);
+  app.mount('#app');
+}
+
 async function bootstrap(): Promise<void> {
+  if (typeof window !== 'undefined'
+      && new URLSearchParams(window.location.search).get('gallery') === '1') {
+    return bootstrapGallery();
+  }
+
   const app = createApp(App);
   const pinia = createPinia();
   app.use(pinia);
@@ -85,6 +103,18 @@ async function bootstrap(): Promise<void> {
   }
 
   app.mount('#app');
+
+  // Dev-only: ?screen=<name> overrides the initial screen after mount.
+  // Used by GalleryView "独立全屏" button to deep-link into any screen.
+  if (typeof window !== 'undefined') {
+    const p = new URLSearchParams(window.location.search);
+    const want = p.get('screen');
+    const VALID: ScreenName[] = ['activation','home','dialogue','generating',
+      'story-cover','story-body','story-end','library','learning','profile','offline','error'];
+    if (want && (VALID as string[]).includes(want)) {
+      setTimeout(() => screen.go(want as ScreenName), 0);
+    }
+  }
 
   // Expose for dev console / debugging
   if (typeof window !== 'undefined') {
