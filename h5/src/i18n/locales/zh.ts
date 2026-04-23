@@ -209,6 +209,9 @@ export default {
     sortNewest: '最新',
     sortMostPlayed: '播放最多',
     sortFavorited: '已收藏',
+    onlyFavorited: '仅收藏',
+    loadingMore: '加载中……',
+    noMore: '没有更多了',
     plays: '播放 {n} 次',
     favorited: '已收藏',
     favorite: '收藏',
@@ -221,6 +224,7 @@ export default {
     detailTitle: '故事',
     exportPdf: '导出 PDF',
     cover: '封面',
+    summary: '故事梗概',
   },
 
   pdf: {

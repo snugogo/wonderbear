@@ -33,6 +33,12 @@
         </div>
       </div>
 
+      <!-- 故事梗概(三要素:主角 · 场景 · 冲突) -->
+      <div v-if="summaryLine" class="summary">
+        <div class="summary-label">{{ t('stories.summary') }}</div>
+        <div class="summary-text">{{ summaryLine }}</div>
+      </div>
+
       <!-- 12 页 swipe -->
       <div class="pages">
         <van-swipe
@@ -75,7 +81,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { showDialog, showSuccessToast, showToast } from 'vant';
@@ -92,6 +98,17 @@ const story = ref<Story | null>(null);
 const loading = ref(true);
 const coverBroken = ref(false);
 const pageBroken = reactive<Record<number, boolean>>({});
+
+/**
+ * 对话摘要 → 一行展示("主角 · 场景 · 冲突")
+ * mock / 服务端任一字段缺失都兜底跳过,`null` 时整行不渲染。
+ */
+const summaryLine = computed<string | null>(() => {
+  const s = story.value?.dialogue?.summary;
+  if (!s) return null;
+  const parts = [s.mainCharacter, s.scene, s.conflict].filter((x) => !!x?.trim());
+  return parts.length > 0 ? parts.join(' · ') : null;
+});
 
 async function load() {
   const id = route.params.id as string;
@@ -260,5 +277,26 @@ onMounted(load);
   height: 48px;
   font-size: 15px;
   font-weight: 600;
+}
+
+/* 故事梗概 */
+.summary {
+  background: var(--wb-card);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+.summary-label {
+  font-size: 12px;
+  color: var(--wb-text-sub);
+  margin-bottom: 4px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.summary-text {
+  font-size: 14px;
+  color: var(--wb-text);
+  line-height: 1.5;
 }
 </style>

@@ -209,6 +209,9 @@ export default {
     sortNewest: 'Najnowsze',
     sortMostPlayed: 'Najczęściej odtwarzane',
     sortFavorited: 'Ulubione',
+    onlyFavorited: 'Tylko ulubione',
+    loadingMore: 'Ładowanie…',
+    noMore: 'Brak kolejnych historii',
     plays: 'Odtworzeń: {n}',
     favorited: 'W ulubionych',
     favorite: 'Dodaj do ulubionych',
@@ -221,6 +224,7 @@ export default {
     detailTitle: 'Historia',
     exportPdf: 'Eksportuj PDF',
     cover: 'Okładka',
+    summary: 'Streszczenie',
   },
 
   pdf: {

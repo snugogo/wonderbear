@@ -212,6 +212,9 @@ export default {
     sortNewest: 'Newest',
     sortMostPlayed: 'Most played',
     sortFavorited: 'Favorited',
+    onlyFavorited: 'Favorites only',
+    loadingMore: 'Loading…',
+    noMore: 'No more stories',
     plays: '{n} plays',
     favorited: 'Favorited',
     favorite: 'Favorite',
@@ -224,6 +227,7 @@ export default {
     detailTitle: 'Story',
     exportPdf: 'Export PDF',
     cover: 'Cover',
+    summary: 'Summary',
   },
 
   pdf: {

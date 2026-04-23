@@ -209,6 +209,9 @@ export default {
     sortNewest: 'Cele mai noi',
     sortMostPlayed: 'Cele mai redate',
     sortFavorited: 'Favorite',
+    onlyFavorited: 'Doar favorite',
+    loadingMore: 'Se încarcă…',
+    noMore: 'Nu mai sunt povești',
     plays: '{n} redări',
     favorited: 'În favorite',
     favorite: 'Adaugă la favorite',
@@ -221,6 +224,7 @@ export default {
     detailTitle: 'Poveste',
     exportPdf: 'Exportă PDF',
     cover: 'Copertă',
+    summary: 'Rezumat',
   },
 
   pdf: {
