@@ -66,6 +66,9 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="offline-screen">
+    <!-- TV_TASKS v1.1 P0-1: bg_welcome warm watercolor (doubles for offline). -->
+    <img class="bg" :src="asset('bg/bg_welcome.webp')" alt="" aria-hidden="true" />
+
     <div class="content">
       <img class="bear" :src="asset('bear/bear_no_network.webp')" alt="">
       <h1 class="title t-2xl">{{ t('offline.title') }}</h1>
@@ -74,7 +77,7 @@ onBeforeUnmount(() => {
 
       <button
         ref="retryEl"
-        class="retry-btn"
+        class="retry-btn wb-focus-feedback"
         :class="{ 'is-focused': focusedId === 'offline-retry' }"
         :disabled="retrying"
         type="button"
@@ -90,11 +93,26 @@ onBeforeUnmount(() => {
 .offline-screen {
   width: 100%;
   height: 100%;
+  position: relative;
   background: var(--c-bg-canvas);
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
 }
+
+.bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.45;
+  z-index: 0;
+  user-select: none;
+  pointer-events: none;
+}
+.content { position: relative; z-index: 1; }
 
 .content {
   display: flex;
@@ -106,8 +124,9 @@ onBeforeUnmount(() => {
 }
 
 .bear {
-  width: 240px;
-  height: 240px;
+  /* TV_TASKS v1.1 P0-3: 240 -> 340. */
+  width: 340px;
+  height: 340px;
   object-fit: contain;
   filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.45));
   margin-bottom: var(--sp-3);
@@ -141,11 +160,11 @@ onBeforeUnmount(() => {
   font-family: inherit;
 }
 .retry-btn:disabled { cursor: not-allowed; opacity: 0.6; }
+/* Spring transform lives on .wb-focus-feedback.is-focused (global). */
 .retry-btn.is-focused {
   background: var(--c-amber);
   border-color: var(--c-amber);
   color: #1a0f0a;
-  transform: translateY(-2px) scale(1.04);
   box-shadow: var(--shadow-focus);
 }
 </style>

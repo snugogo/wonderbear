@@ -20,6 +20,7 @@ import { useDeviceStore } from '@/stores/device';
 import { useScreenStore } from '@/stores/screen';
 import { bridge } from '@/services/bridge';
 import { buildBindingUrl } from '@/utils/buildBindingUrl';
+import { asset } from '@/utils/assets';
 import { useI18n } from 'vue-i18n';
 
 const device = useDeviceStore();
@@ -91,7 +92,19 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="activation-screen">
-    <!-- Background watercolor placeholder. Real bg_welcome_fullscreen will replace this. -->
+    <!--
+      TV_TASKS v1.1 P0-1: use bg_activation.webp (⏳ in NAMING_CONTRACT §四).
+      The left half of the image is designed as a blank area for the QR card
+      to sit over. Until the designer delivers, the img 404s and onerror
+      hides it, exposing the warm gradient fallback underneath.
+    -->
+    <img
+      class="bg"
+      :src="asset('bg/bg_activation.webp')"
+      alt=""
+      aria-hidden="true"
+      onerror="this.style.display='none'"
+    />
     <div class="bg-warmth"></div>
 
     <!-- Left column: hero text -->
@@ -104,8 +117,11 @@ onBeforeUnmount(() => {
     <div class="qr-card">
       <div class="qr-frame">
         <canvas ref="canvasEl" class="qr-canvas"></canvas>
-        <!-- bear_qr_peek placeholder: amber dot for now -->
-        <div class="bear-peek" aria-hidden="true">🧸</div>
+        <!--
+          bear_qr_peek.webp is "✅ 已交付" in NAMING_CONTRACT.md (1024×1024).
+          The old bear emoji fallback has been fully retired per TV_TASKS rule #1.
+        -->
+        <img class="bear-peek" :src="asset('bear/bear_qr_peek.webp')" alt="" />
       </div>
       <p class="scan-hint t-md">{{ t('activation.scanHint') }}</p>
       <p class="code-line t-sm">
@@ -132,6 +148,18 @@ onBeforeUnmount(() => {
   align-items: center;
   padding: 0 var(--sp-7);
   gap: var(--sp-7);
+}
+
+.bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.9;
+  z-index: 0;
+  user-select: none;
+  pointer-events: none;
 }
 
 .bg-warmth {
@@ -162,17 +190,22 @@ onBeforeUnmount(() => {
   line-height: 1.4;
 }
 
+/*
+ * TV_TASKS v1.1 performance rule: GP15 has no GPU budget for backdrop-filter.
+ * We keep the glass look using only rgba + border. Solid translucent cream
+ * gives the QR card enough contrast on top of bg_activation's painted area.
+ */
 .qr-card {
   position: relative;
   z-index: 1;
-  background: rgba(255, 245, 230, 0.05);
-  border: 1px solid rgba(255, 200, 87, 0.25);
+  background: rgba(255, 248, 240, 0.88);
+  border: 1px solid rgba(232, 166, 88, 0.35);
   border-radius: var(--r-xl);
   padding: var(--sp-5);
   text-align: center;
   width: 380px;
   margin: 0 auto;
-  backdrop-filter: blur(12px);
+  box-shadow: 0 12px 32px rgba(60, 42, 30, 0.25);
 }
 .qr-frame {
   position: relative;
@@ -188,30 +221,28 @@ onBeforeUnmount(() => {
 }
 .bear-peek {
   position: absolute;
-  bottom: -16px;
-  right: -16px;
-  font-size: 56px;
-  background: var(--c-cream);
-  border-radius: 50%;
-  width: 72px;
-  height: 72px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: var(--shadow-card);
+  bottom: -32px;
+  right: -32px;
+  width: 140px;
+  height: 140px;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.35));
 }
 .scan-hint {
   margin: var(--sp-4) 0 var(--sp-2);
-  color: var(--c-cream);
+  color: #3C2A1E;
+  font-weight: 600;
 }
 .code-line {
-  color: var(--c-cream-soft);
+  color: rgba(60, 42, 30, 0.7);
   margin: 0;
 }
 .code {
   font-family: monospace;
   letter-spacing: 0.15em;
-  color: var(--c-amber);
+  color: #FF8A3D;
   font-weight: bold;
 }
 

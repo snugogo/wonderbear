@@ -7,11 +7,20 @@
 import { ref, computed, onBeforeUnmount } from 'vue';
 import { useFocusable, getCurrentFocusId, onFocusChange } from '@/services/focus';
 import type { FocusableNeighbors } from '@/services/focus';
+import { asset } from '@/utils/assets';
 
 interface Props {
   id: string;
   label: string;
-  emoji: string;
+  /**
+   * Letter placeholder rendered while the per-card icon asset is still in
+   * NAMING_CONTRACT.md status "⏳" (e.g. ui/ui_home_create.webp). Once the
+   * designer pushes the real icon, flip USE_ICON_ASSETS in HomeScreen and
+   * MenuCard auto-switches to the image — no other code change needed.
+   */
+  letter?: string;
+  /** Relative asset path, e.g. 'ui/ui_home_create.webp'. Empty uses letter. */
+  icon?: string;
   enabled: boolean;
   autoFocus?: boolean;
   neighbors?: FocusableNeighbors;
@@ -19,6 +28,8 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  letter: '',
+  icon: '',
   autoFocus: false,
   neighbors: () => ({}),
   comingSoonLabel: '',
@@ -46,15 +57,29 @@ onBeforeUnmount(() => unsub());
 
 const cardClasses = computed(() => ({
   'menu-card': true,
+  'wb-focus-feedback': true,
   disabled: !props.enabled,
   'is-focused': focused.value,
 }));
+
+const iconUrl = computed<string>(() => (props.icon ? asset(props.icon) : ''));
 </script>
 
 <template>
   <div ref="cardEl" :class="cardClasses">
-    <div class="card-art" :class="{ 'bear-float': focused }">
-      <span class="emoji">{{ emoji }}</span>
+    <!--
+      `bear-float` keeps the original "focused card = icon bobs up and down"
+      interaction (PRD §4.2 + TV_TASKS_v6 task 1 strict preservation rule).
+      icon-floatable tracks the project-wide .wb-focus-feedback float rule.
+    -->
+    <div class="card-art icon-floatable" :class="{ 'bear-float': focused }">
+      <img
+        v-if="iconUrl"
+        class="card-icon"
+        :src="iconUrl"
+        :alt="label"
+      >
+      <div v-else class="card-icon-placeholder" aria-hidden="true">{{ letter }}</div>
     </div>
     <div class="card-label t-lg">{{ label }}</div>
     <div v-if="!enabled && comingSoonLabel" class="card-soon t-sm">
@@ -87,15 +112,41 @@ const cardClasses = computed(() => ({
 .menu-card.disabled { opacity: 0.45; }
 
 .card-art {
-  width: 120px;
-  height: 120px;
+  width: 200px;
+  height: 200px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: rgba(255, 255, 255, 0.04);
   border-radius: 50%;
+  overflow: hidden;
 }
-.emoji { font-size: 72px; line-height: 1; }
+.card-icon {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+}
+/*
+ * Letter placeholder — used until designer delivers ui/ui_home_*.webp
+ * (tracked as "P0 A / 状态 ⏳" in NAMING_CONTRACT.md).
+ * A warm amber disc with the card's initial letter keeps the home page
+ * legible on TV at 2-3m distance without any emoji.
+ */
+.card-icon-placeholder {
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ffe4cc, #ffd9b8);
+  color: #ff8a3d;
+  font-size: 80px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
 .card-label { color: var(--c-cream); text-align: center; }
 .card-soon { color: var(--c-cream-faint); font-style: italic; }
 </style>

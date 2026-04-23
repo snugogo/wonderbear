@@ -19,7 +19,7 @@ export default {
   activation: {
     title: '欢迎来到 WonderBear',
     subtitle: '和小熊一起,探索新故事',
-    scanHint: '📱 家长扫码,让小熊认识你',
+    scanHint: '家长扫码,让小熊认识你',
     waitingHint: '等爸爸妈妈扫码完成,熊熊就来啦',
     fallbackUrl: '扫不到?在浏览器打开',
     activationCodeLabel: '激活码',
@@ -45,7 +45,7 @@ export default {
 
   dialogue: {
     progress: '第 {current} 个问题,共 {total} 个',
-    pressVoiceKey: '按一下遥控器的 🎤 键告诉我',
+    pressVoiceKey: '按一下遥控器的话筒键告诉我',
     listening: '熊熊在听…',
     thinking: '熊熊在想…',
     speaking: '熊熊在说…',
@@ -64,7 +64,7 @@ export default {
 
   story: {
     pageOf: '第 {current} 页 / 共 {total} 页',
-    finished: '故事讲完啦,晚安❤',
+    finished: '故事讲完啦,晚安',
     playAgain: '再听一次',
     backToLibrary: '回小书屋',
   },

@@ -104,14 +104,13 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="learning-screen">
-    <!-- Background: muted version of current page image -->
-    <img
-      v-if="currentPage"
-      class="bg-image"
-      :src="currentPage.imageUrl"
-      alt=""
-      aria-hidden="true"
-    >
+    <!--
+      TV_TASKS v1.1 P0-1: bg_meadow provides a calm, focused green field
+      for reading mode. Previously we re-used the current page image with a
+      blur filter, which violated the "no filter animations / no blur on
+      low-end GP15" rule (static blur still forces a large render buffer).
+    -->
+    <img class="bg-image" :src="asset('bg/bg_meadow.webp')" alt="" aria-hidden="true" />
 
     <div class="overlay" />
 
@@ -144,7 +143,7 @@ onBeforeUnmount(() => {
     <footer class="actions">
       <button
         ref="replayEl"
-        class="action-btn primary"
+        class="action-btn primary wb-focus-feedback"
         :class="{ 'is-focused': focusedId === 'learning-replay' }"
         type="button"
         @click="replayPage"
@@ -154,7 +153,7 @@ onBeforeUnmount(() => {
       </button>
       <button
         ref="exitEl"
-        class="action-btn"
+        class="action-btn wb-focus-feedback"
         :class="{ 'is-focused': focusedId === 'learning-exit' }"
         type="button"
         @click="exitReading"
@@ -177,13 +176,13 @@ onBeforeUnmount(() => {
 }
 
 .bg-image {
+  /* No filter: GP15 can't afford blur() — already a static PNG bg. */
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  filter: blur(20px) saturate(0.8);
-  opacity: 0.35;
+  opacity: 0.45;
   user-select: none;
   pointer-events: none;
 }
@@ -289,11 +288,11 @@ onBeforeUnmount(() => {
   background: rgba(255, 200, 87, 0.18);
   border-color: var(--c-amber-soft);
 }
+/* Spring transform lives on .wb-focus-feedback.is-focused (global). */
 .action-btn.is-focused {
   background: var(--c-amber);
   border-color: var(--c-amber);
   color: #1a0f0a;
-  transform: translateY(-2px) scale(1.04);
   box-shadow: var(--shadow-focus);
 }
 .btn-icon { width: 28px; height: 28px; object-fit: contain; }

@@ -98,6 +98,9 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="library-screen">
+    <!-- TV_TASKS v1.1 P0-1: bg_room watercolor backdrop. -->
+    <img class="bg" :src="asset('bg/bg_room.webp')" alt="" aria-hidden="true" />
+
     <header class="topbar">
       <h1 class="title t-xl">{{ t('library.title') }}</h1>
       <div v-if="total > 0" class="capacity t-sm">
@@ -134,10 +137,25 @@ onBeforeUnmount(() => {
 .library-screen {
   width: 100%;
   height: 100%;
+  position: relative;
   background: var(--c-bg-canvas);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
+
+.bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.5;
+  z-index: 0;
+  user-select: none;
+  pointer-events: none;
+}
+.topbar, .grid-wrap { position: relative; z-index: 1; }
 
 .topbar {
   flex: 0 0 auto;

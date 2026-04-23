@@ -99,6 +99,8 @@ bootstrap().catch((e) => {
   // Render minimal error message instead of leaving the boot loader stuck
   const root = document.getElementById('app');
   if (root) {
-    root.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:#ff9aa2;font-size:18px">Boot failed — please restart the device</div>';
+    // TV_TASKS v1.1 P1-3: boot-fail text bumped from 18px -> 32px
+    // (minimum readable body size at TV viewing distance).
+    root.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:#ff9aa2;font-size:32px;padding:24px;text-align:center;line-height:1.4">Boot failed &mdash; please restart the device</div>';
   }
 });

@@ -39,6 +39,7 @@ onBeforeUnmount(() => unsub());
 
 const cardClasses = computed(() => ({
   'story-card': true,
+  'wb-focus-feedback': true,
   'is-focused': focused.value,
 }));
 </script>
@@ -46,7 +47,15 @@ const cardClasses = computed(() => ({
 <template>
   <div ref="cardEl" :class="cardClasses">
     <img class="cover" :src="item.coverUrl" :alt="item.title">
-    <div v-if="item.favorited" class="fav-badge">★</div>
+    <!--
+      TV_TASKS rule #1: the literal star character is a banned symbol.
+      Inline SVG star renders until ui_star_filled.svg is bundled.
+    -->
+    <div v-if="item.favorited" class="fav-badge" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="currentColor" class="fav-star">
+        <path d="M12 2l2.9 6.6 7.1.7-5.3 4.9 1.6 7-6.3-3.8L5.7 21l1.6-7L2 9.3l7.1-.7L12 2z" />
+      </svg>
+    </div>
     <div class="card-foot">
       <div class="card-title t-md">{{ item.title }}</div>
     </div>
@@ -64,9 +73,9 @@ const cardClasses = computed(() => ({
   transition: all var(--t-fast) var(--ease-out);
   cursor: pointer;
 }
+/* Spring transform lives on .wb-focus-feedback.is-focused (global). */
 .story-card.is-focused {
   border-color: var(--c-amber);
-  transform: translateY(-4px) scale(1.03);
   box-shadow: var(--shadow-focus);
 }
 .cover {
@@ -78,17 +87,17 @@ const cardClasses = computed(() => ({
   position: absolute;
   top: var(--sp-2);
   right: var(--sp-2);
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   background: rgba(255, 154, 162, 0.95);
   color: white;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 22px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.4);
 }
+.fav-star { width: 26px; height: 26px; }
 .card-foot {
   position: absolute;
   left: 0;

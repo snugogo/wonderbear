@@ -120,6 +120,9 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="profile-screen">
+    <!-- TV_TASKS v1.1 P0-1: bg_room watercolor. -->
+    <img class="bg" :src="asset('bg/bg_room.webp')" alt="" aria-hidden="true" />
+
     <header class="topbar">
       <h1 class="title t-xl">{{ t('profile.title') }}</h1>
     </header>
@@ -142,7 +145,7 @@ onBeforeUnmount(() => {
       <section class="settings">
         <button
           ref="bgmEl"
-          class="setting-row"
+          class="setting-row wb-focus-feedback"
           :class="{ 'is-focused': focusedId === 'profile-bgm' }"
           type="button"
           @click="toggleBgm"
@@ -158,28 +161,28 @@ onBeforeUnmount(() => {
           <div class="lang-options">
             <button
               ref="langZhEl"
-              class="lang-btn"
+              class="lang-btn wb-focus-feedback"
               :class="{ 'is-focused': focusedId === 'profile-lang-zh', active: locale === 'zh' }"
               type="button"
               @click="changeLocale('zh')"
             >中文</button>
             <button
               ref="langEnEl"
-              class="lang-btn"
+              class="lang-btn wb-focus-feedback"
               :class="{ 'is-focused': focusedId === 'profile-lang-en', active: locale === 'en' }"
               type="button"
               @click="changeLocale('en')"
             >EN</button>
             <button
               ref="langPlEl"
-              class="lang-btn"
+              class="lang-btn wb-focus-feedback"
               :class="{ 'is-focused': focusedId === 'profile-lang-pl', active: locale === 'pl' }"
               type="button"
               @click="changeLocale('pl')"
             >PL</button>
             <button
               ref="langRoEl"
-              class="lang-btn"
+              class="lang-btn wb-focus-feedback"
               :class="{ 'is-focused': focusedId === 'profile-lang-ro', active: locale === 'ro' }"
               type="button"
               @click="changeLocale('ro')"
@@ -190,7 +193,7 @@ onBeforeUnmount(() => {
 
       <button
         ref="homeEl"
-        class="home-btn"
+        class="home-btn wb-focus-feedback"
         :class="{ 'is-focused': focusedId === 'profile-home' }"
         type="button"
         @click="goHome"
@@ -205,11 +208,25 @@ onBeforeUnmount(() => {
 .profile-screen {
   width: 100%;
   height: 100%;
+  position: relative;
   background: var(--c-bg-canvas);
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
+
+.bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.5;
+  z-index: 0;
+  user-select: none;
+  pointer-events: none;
+}
+.topbar, .content { position: relative; z-index: 1; }
 
 .topbar {
   flex: 0 0 auto;
@@ -329,11 +346,11 @@ onBeforeUnmount(() => {
   color: var(--c-cream);
   border-color: var(--c-amber-soft);
 }
+/* Spring transform lives on .wb-focus-feedback.is-focused (global). */
 .lang-btn.is-focused {
   background: var(--c-amber);
   color: #1a0f0a;
   border-color: var(--c-amber);
-  transform: translateY(-2px);
   box-shadow: var(--shadow-focus);
 }
 
@@ -350,11 +367,11 @@ onBeforeUnmount(() => {
   min-width: 240px;
   transition: all var(--t-fast) var(--ease-out);
 }
+/* Spring transform lives on .wb-focus-feedback.is-focused (global). */
 .home-btn.is-focused {
   background: var(--c-amber);
   border-color: var(--c-amber);
   color: #1a0f0a;
-  transform: translateY(-2px) scale(1.04);
   box-shadow: var(--shadow-focus);
 }
 </style>

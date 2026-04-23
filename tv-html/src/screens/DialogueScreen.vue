@@ -517,8 +517,9 @@ onBeforeUnmount(() => {
 }
 
 .bear-wrap {
-  width: 240px;
-  height: 240px;
+  /* TV_TASKS v1.1 P0-3: 240 -> 380 so the dialogue partner fills the stage. */
+  width: 380px;
+  height: 380px;
   display: flex;
   align-items: center;
   justify-content: center;

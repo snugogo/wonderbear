@@ -98,7 +98,7 @@ onBeforeUnmount(() => {
       <div class="actions">
         <button
           ref="playAgainEl"
-          class="action-btn primary"
+          class="action-btn primary wb-focus-feedback"
           :class="{ 'is-focused': focusedId === 'end-play-again' }"
           type="button"
           @click="playAgain"
@@ -107,7 +107,7 @@ onBeforeUnmount(() => {
         </button>
         <button
           ref="libraryEl"
-          class="action-btn"
+          class="action-btn wb-focus-feedback"
           :class="{ 'is-focused': focusedId === 'end-library' }"
           type="button"
           @click="backToLibrary"
@@ -154,9 +154,10 @@ onBeforeUnmount(() => {
 }
 
 .bear-wrap {
+  /* TV_TASKS v1.1 P0-3: 280 -> 420 for the curtain-call bear. */
   position: relative;
-  width: 280px;
-  height: 280px;
+  width: 420px;
+  height: 420px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -224,11 +225,11 @@ onBeforeUnmount(() => {
   background: rgba(255, 200, 87, 0.18);
   border-color: var(--c-amber-soft);
 }
+/* Spring transform lives on .wb-focus-feedback.is-focused (global). */
 .action-btn.is-focused {
   background: var(--c-amber);
   border-color: var(--c-amber);
   color: #1a0f0a;
-  transform: translateY(-2px) scale(1.04);
   box-shadow: var(--shadow-focus);
 }
 </style>

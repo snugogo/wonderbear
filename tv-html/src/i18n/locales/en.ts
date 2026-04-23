@@ -20,7 +20,7 @@ export default {
   activation: {
     title: 'Welcome to WonderBear',
     subtitle: 'Discover new stories with the bear',
-    scanHint: '📱 Scan to let the bear meet you',
+    scanHint: 'Scan to let the bear meet you',
     waitingHint: 'Once your grown-up scans, the bear will know you',
     fallbackUrl: "Can't scan? Open in browser",
     activationCodeLabel: 'Activation code',
@@ -46,7 +46,7 @@ export default {
 
   dialogue: {
     progress: 'Question {current} of {total}',
-    pressVoiceKey: 'Press the 🎤 key to tell me',
+    pressVoiceKey: 'Press the microphone key to tell me',
     listening: 'Bear is listening…',
     thinking: 'Bear is thinking…',
     speaking: 'Bear is speaking…',
@@ -65,7 +65,7 @@ export default {
 
   story: {
     pageOf: 'Page {current} of {total}',
-    finished: 'The end. Goodnight ❤',
+    finished: 'The end. Goodnight.',
     playAgain: 'Play again',
     backToLibrary: 'Back to library',
   },

@@ -222,9 +222,10 @@ onBeforeUnmount(() => {
 }
 
 .bear-wrap {
+  /* TV_TASKS v1.1 P0-3: 280 -> 420 for a hero "painting your story" bear. */
   position: relative;
-  width: 280px;
-  height: 280px;
+  width: 420px;
+  height: 420px;
   display: flex;
   align-items: center;
   justify-content: center;

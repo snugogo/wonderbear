@@ -19,14 +19,15 @@
   --c-mint:           #7ed6a5;     /* success */
   --c-rose:           #ff9aa2;     /* hearts/favorite */
 
-  /* Typography (sized for 1280×720 viewing distance ~2-3m) */
-  --fs-xs:   16px;
-  --fs-sm:   20px;
-  --fs-md:   24px;
-  --fs-lg:   32px;
-  --fs-xl:   48px;
-  --fs-2xl:  64px;
-  --fs-display: 80px;
+  /* Typography — TV_TASKS_v6 task 4 + v1.1 P1-3: body text MUST be >= 32px so
+     it is readable at 2-3m viewing distance. */
+  --fs-xs:   16px;   /* DevConsole only */
+  --fs-sm:   28px;   /* auxiliary / captions / hints */
+  --fs-md:   32px;   /* body text — TV minimum */
+  --fs-lg:   40px;   /* buttons / emphasised body */
+  --fs-xl:   56px;   /* section subtitles */
+  --fs-2xl:  72px;   /* large titles */
+  --fs-display: 96px; /* hero display */
 
   /* Spacing */
   --sp-1:  4px;

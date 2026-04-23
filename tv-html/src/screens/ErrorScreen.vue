@@ -192,6 +192,9 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="error-screen">
+    <!-- TV_TASKS v1.1 P0-1: bg_welcome watercolor backdrop (warm, non-scary). -->
+    <img class="bg" :src="asset('bg/bg_welcome.webp')" alt="" aria-hidden="true" />
+
     <!-- Auto-exit actions render almost nothing during the brief beat before redirect -->
     <div v-if="plan.autoExit" class="loading t-md">{{ t('common.loading') }}</div>
 
@@ -202,7 +205,24 @@ onBeforeUnmount(() => {
       <p class="message t-lg">{{ info.message }}</p>
 
       <p v-if="plan.showSupport && supportEmail" class="support t-md">
-        ✉ {{ supportEmail }}
+        <!--
+          TV_TASKS rule #1: the envelope glyph is banned as an emoji symbol.
+          Render as inline SVG until ui_envelope.svg lands (NAMING_CONTRACT C5).
+        -->
+        <svg
+          class="email-icon"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <rect x="3" y="5" width="18" height="14" rx="2" />
+          <path d="M3 7l9 6 9-6" />
+        </svg>
+        <span>{{ supportEmail }}</span>
       </p>
 
       <p v-if="plan.showCountdown && countdown > 0" class="countdown t-sm">
@@ -213,7 +233,7 @@ onBeforeUnmount(() => {
         <button
           v-if="plan.showRetry"
           ref="retryEl"
-          class="action-btn primary"
+          class="action-btn primary wb-focus-feedback"
           :class="{ 'is-focused': focusedId === 'error-retry' }"
           type="button"
           @click="doRetry"
@@ -223,7 +243,7 @@ onBeforeUnmount(() => {
         <button
           v-if="plan.showHome"
           ref="homeEl"
-          class="action-btn"
+          class="action-btn wb-focus-feedback"
           :class="{ 'is-focused': focusedId === 'error-home' }"
           type="button"
           @click="goHome"
@@ -239,11 +259,26 @@ onBeforeUnmount(() => {
 .error-screen {
   width: 100%;
   height: 100%;
+  position: relative;
   background: var(--c-bg-canvas);
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
 }
+
+.bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.45;
+  z-index: 0;
+  user-select: none;
+  pointer-events: none;
+}
+.loading, .content { position: relative; z-index: 1; }
 
 .loading {
   color: var(--c-cream-soft);
@@ -260,8 +295,9 @@ onBeforeUnmount(() => {
 }
 
 .bear {
-  width: 220px;
-  height: 220px;
+  /* TV_TASKS v1.1 P0-3: 220 -> 340. Source is 1024x1024 so no quality loss. */
+  width: 340px;
+  height: 340px;
   object-fit: contain;
   filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.45));
   margin-bottom: var(--sp-2);
@@ -281,6 +317,16 @@ onBeforeUnmount(() => {
   color: var(--c-amber);
   letter-spacing: 0.05em;
   margin: 0 0 var(--sp-3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+}
+.email-icon {
+  width: 36px;
+  height: 36px;
+  color: var(--c-amber);
+  flex: 0 0 auto;
 }
 .countdown {
   color: var(--c-amber);
@@ -310,11 +356,11 @@ onBeforeUnmount(() => {
   background: rgba(255, 200, 87, 0.18);
   border-color: var(--c-amber-soft);
 }
+/* transform scale lives on .wb-focus-feedback.is-focused (global). */
 .action-btn.is-focused {
   background: var(--c-amber);
   border-color: var(--c-amber);
   color: #1a0f0a;
-  transform: translateY(-2px) scale(1.04);
   box-shadow: var(--shadow-focus);
 }
 </style>
