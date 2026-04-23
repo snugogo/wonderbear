@@ -687,7 +687,7 @@ route('POST', '/api/stripe/portal-session', async (data) => {
 
 route('GET', '/api/story/list', async (data) => {
   await sleep(200);
-  let items = [...storyDb.values()].map<StorySummary>((s) => ({
+  let all = [...storyDb.values()].map<StorySummary>((s) => ({
     id: s.id,
     title: s.title,
     coverUrl: s.coverUrl,
@@ -697,13 +697,21 @@ route('GET', '/api/story/list', async (data) => {
     favorited: s.favorited,
     primaryLang: s.metadata.primaryLang,
   }));
-  if (data.onlyFavorited) items = items.filter((s) => s.favorited);
-  // sort
-  if (data.sort === 'most_played') items.sort((a, b) => b.playCount - a.playCount);
+  if (data.onlyFavorited) all = all.filter((s) => s.favorited);
+  // sort(默认 newest)
+  if (data.sort === 'most_played') all.sort((a, b) => b.playCount - a.playCount);
   else if (data.sort === 'favorited')
-    items.sort((a, b) => Number(b.favorited) - Number(a.favorited));
-  else items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  return ok({ items, nextCursor: null, total: items.length });
+    all.sort((a, b) => Number(b.favorited) - Number(a.favorited));
+  else all.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  const total = all.length;
+  // cursor 分页(mock 用 offset 编码成字符串)
+  const limit = Math.min(Math.max(Number(data.limit) || 20, 1), 50);
+  const offset = data.cursor ? Number(data.cursor) || 0 : 0;
+  const items = all.slice(offset, offset + limit);
+  const nextOffset = offset + items.length;
+  const nextCursor = nextOffset < total ? String(nextOffset) : null;
+  return ok({ items, nextCursor, total });
 });
 
 route('GET', '/api/story/:id', async (_, params) => {

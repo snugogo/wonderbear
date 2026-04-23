@@ -221,6 +221,47 @@ export interface StoryPage {
   durationMs?: number | null;
 }
 
+/**
+ * `GET /api/story/list` 可选 query(对齐 API_ACTUAL_FORMAT §批次 4 §7.7 + TV 0c7f8bc)
+ *
+ * 字段含义:
+ *   - `childId`:传则按特定孩子过滤(省略则返回所有孩子的故事)
+ *   - `cursor`:上一页返回的 `nextCursor`,首次不传
+ *   - `limit`:默认 20,最大 50
+ *   - `sort`:`newest` 默认 | `most_played` | `favorited`
+ *   - `onlyFavorited`:true 仅返回收藏过的
+ */
+export interface StoryListQuery {
+  childId?: string;
+  cursor?: string;
+  limit?: number;
+  sort?: 'newest' | 'most_played' | 'favorited';
+  onlyFavorited?: boolean;
+}
+
+/** `GET /api/story/list` 响应(§7.7) */
+export interface StoryListResp {
+  items: StorySummary[];
+  nextCursor: string | null;
+  total: number;
+}
+
+/** `GET /api/story/:id` 响应(§7.6) */
+export interface StoryDetailResp {
+  story: Story;
+}
+
+/** `POST /api/story/:id/favorite` 响应(§7.8) */
+export interface StoryFavoriteResp {
+  storyId: string;
+  favorited: boolean;
+}
+
+/** `DELETE /api/story/:id` 响应(§7.9) */
+export interface StoryDeleteResp {
+  deleted: true;
+}
+
 /** PDF 任务状态(§10.2) */
 export interface PdfTaskStatus {
   taskId: string;
