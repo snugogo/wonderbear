@@ -9,6 +9,39 @@
 
 import type { BridgeApi, DeviceInfo, BgmScene, VoiceMode } from './types';
 import { on, off, emit } from './pushBus';
+import { useChildStore } from '@/stores/child';
+
+/**
+ * Seed a demo child ("Luna", age 5, en/zh) into the child store so the
+ * HomeScreen greeting and avatar are non-empty even when the server call
+ * (/api/device/active-child) would 401 in browser dev mode.
+ * Only called when the URL has ?autobind=1 (browser demo mode).
+ */
+function applyDemoChildIfRequested(): void {
+  try {
+    const store = useChildStore();
+    const now = new Date().toISOString();
+    const luna = {
+      id: 'demo-luna',
+      parentId: 'demo-parent',
+      name: 'Luna',
+      age: 5,
+      gender: 'female' as const,
+      avatar: 'avatar_bear_classic',
+      primaryLang: 'en' as const,
+      secondLang: 'zh' as const,
+      birthday: null,
+      coins: 0,
+      voiceId: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    store.setActiveLocal(luna);
+    store.allChildren = [luna];
+  } catch (e) {
+    console.warn('[mock bridge] applyDemoChildIfRequested failed:', e);
+  }
+}
 
 export function createMockBridge(): BridgeApi {
   let mockTtsAudio: HTMLAudioElement | null = null;
@@ -16,14 +49,17 @@ export function createMockBridge(): BridgeApi {
   let mediaRecorder: MediaRecorder | null = null;
   let recordedChunks: Blob[] = [];
 
-  // Dev helper: let the URL override the mock activation code so a real
-  // server-issued code can be demo'd from the browser.
-  //   localhost:5173/?dev=1&code=CRRTXMGL  -> activationCode = CRRTXMGL
-  //   localhost:5173/?dev=1                -> activationCode = DEVTEST (fallback)
-  const urlCode =
+  // Dev helpers — all driven by URL flags, only active in the browser.
+  //   ?code=XXXX     -> override mock activationCode (otherwise DEVTEST)
+  //   ?autobind=1    -> skip ActivationScreen: fire 'activation-status-change'
+  //                     after boot so the app jumps straight to HomeScreen.
+  //                     Also seeds a demo child "Luna" into the child store.
+  const urlParams =
     typeof location !== 'undefined'
-      ? new URLSearchParams(location.search).get('code')
-      : null;
+      ? new URLSearchParams(location.search)
+      : new URLSearchParams();
+  const urlCode = urlParams.get('code');
+  const autobind = urlParams.get('autobind') === '1';
 
   const mockDeviceInfo: DeviceInfo = {
     deviceId: 'dev-browser-' + Math.random().toString(36).slice(2, 10),
@@ -38,6 +74,20 @@ export function createMockBridge(): BridgeApi {
 
   // Signal "ready" on next tick so app code can subscribe first
   setTimeout(() => emit('ready'), 0);
+
+  // Auto-bind: one-tap demo entry. Fires after the app has had time to mount
+  // and subscribe to 'activation-status-change'. Paired with a mock Luna that
+  // gets injected into the child store (see applyDemoChildIfRequested below).
+  if (autobind) {
+    // Wait long enough for main.ts to finish bootstrap + ActivationScreen
+    // onMounted to subscribe to 'activation-status-change'. Bootstrap has a
+    // 1500ms "native ready" timeout plus mount + vue reactive flush, so we
+    // give it a healthy margin.
+    setTimeout(() => {
+      applyDemoChildIfRequested();
+      emit('activation-status-change', 'bound');
+    }, 2500);
+  }
 
   return {
     isReal: false,

@@ -1,10 +1,12 @@
 /**
  * vue-i18n setup.
  *
- * Precedence of initial locale:
- *   1. ?locale=zh|en|pl|ro  in URL (explicit dev override)
- *   2. navigator.language prefix match (zh / en / pl / ro)
- *   3. 'en' fallback — demo phase targets overseas market default.
+ * Precedence of initial locale (demo phase, overseas-first):
+ *   1. ?locale=zh|en|pl|ro  in URL (explicit override)
+ *   2. 'en' — hard default. We intentionally do NOT read navigator.language
+ *      because overseas demo TVs running on a Chinese dev box would otherwise
+ *      boot into zh. Users select language from the in-app switcher, not
+ *      from browser locale.
  *
  * All 4 locale bundles remain fully loaded; setLocale(code) switches at runtime.
  */
@@ -21,21 +23,13 @@ const DEFAULT_LOCALE: Locale = 'en';
 function detectInitialLocale(): Locale {
   if (typeof window === 'undefined') return DEFAULT_LOCALE;
 
-  // 1. Explicit URL param takes highest precedence
   const params = new URLSearchParams(window.location.search);
   const fromUrl = params.get('locale');
   if (fromUrl === 'zh' || fromUrl === 'en' || fromUrl === 'pl' || fromUrl === 'ro') {
     return fromUrl;
   }
 
-  // 2. Browser language prefix
-  const lang = (navigator.language || '').toLowerCase();
-  if (lang.startsWith('zh')) return 'zh';
-  if (lang.startsWith('en')) return 'en';
-  if (lang.startsWith('pl')) return 'pl';
-  if (lang.startsWith('ro')) return 'ro';
-
-  // 3. Demo-phase default
+  // Intentional: do not sniff navigator.language (would flip dev boxes to zh).
   return DEFAULT_LOCALE;
 }
 
