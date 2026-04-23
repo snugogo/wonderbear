@@ -6,8 +6,16 @@ import type { Child, Device, DeviceStatus, DeviceSummary } from '@/types';
  * TV 端专属的 register/heartbeat/ack-command H5 用不到
  */
 export const deviceApi = {
-  /** 5.3 家长绑定设备 */
-  bind(params: { deviceId: string; activationCode: string; forceOverride?: boolean }) {
+  /**
+   * 5.3 家长绑定设备
+   *
+   * `deviceId` 设为可选:
+   *   - 扫码注册链路(RegisterView)扫到二维码里解出 deviceId,正常传
+   *   - 手输激活码链路(DevicesView 添加设备)TV 屏幕只显示激活码,不显示
+   *     deviceId,H5 此时无法构造 deviceId,只传 activationCode;
+   *     服务端会用 activationCode 唯一反查 Device 并完成绑定
+   */
+  bind(params: { deviceId?: string; activationCode: string; forceOverride?: boolean }) {
     return http.post<{ device: Device; activatedQuota: boolean }>('/api/device/bind', params);
   },
 

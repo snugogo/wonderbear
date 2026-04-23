@@ -100,21 +100,12 @@
       <p class="popup-desc">{{ t('devices.addDesc') }}</p>
 
       <div class="popup-field">
-        <label class="popup-label">{{ t('devices.deviceIdLabel') }}</label>
-        <van-field
-          v-model.trim="addForm.deviceId"
-          :placeholder="t('devices.deviceIdPlaceholder')"
-          :maxlength="32"
-          clearable
-        />
-      </div>
-
-      <div class="popup-field">
         <label class="popup-label">{{ t('devices.activationCodeLabel') }}</label>
         <CodeInput
           v-model="addForm.activationCode"
           mode="alphanumeric"
           :length="ACTIVATION_CODE_LENGTH"
+          :placeholder="t('devices.activationCodePlaceholder')"
         />
       </div>
 
@@ -174,7 +165,7 @@ const sendingCode = ref(false);
 // 绑定流程(手输激活码)
 const showAddPopup = ref(false);
 const bindLoading = ref(false);
-const addForm = reactive({ deviceId: '', activationCode: '' });
+const addForm = reactive({ activationCode: '' });
 
 async function load() {
   loading.value = true;
@@ -254,26 +245,29 @@ async function onUnbindConfirm() {
 
 // ---- 手输激活码绑定 ----
 function onAddStart() {
-  addForm.deviceId = '';
   addForm.activationCode = '';
   showAddPopup.value = true;
 }
 
 /**
- * 调用 /api/device/bind(服务端 §5.3)。
- * 服务端要求 deviceId + activationCode 一起传,不能只传 code。
+ * 调用 /api/device/bind(服务端 §5.3),**只传 activationCode**,
+ * 由服务端按 code 唯一反查设备完成绑定。
+ *
+ * 产品决策(2026-04-23):TV 屏幕不显示 deviceId,业内主流同类产品(小米/华为/极米)
+ * 也都是"一码一用",deviceId 让用户手输会徒增出错率。
+ *
  * 20003(已绑定到其他账户)允许 forceOverride:true 强制覆盖,但需二次确认。
  */
 async function onBindConfirm(force = false) {
-  const deviceId = addForm.deviceId.trim().toUpperCase();
   const code = addForm.activationCode.trim().toUpperCase();
-  if (!deviceId) return showToast(t('devices.deviceIdMissing'));
-  if (code.length !== ACTIVATION_CODE_LENGTH) return showToast(t('devices.activationCodeInvalid'));
+  if (code.length !== ACTIVATION_CODE_LENGTH) {
+    showToast(t('devices.activationCodeInvalid'));
+    return;
+  }
 
   bindLoading.value = true;
   try {
     await deviceApi.bind({
-      deviceId,
       activationCode: code,
       forceOverride: force || undefined,
     });
