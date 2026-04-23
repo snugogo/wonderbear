@@ -316,3 +316,123 @@ export function buildStorySystemPrompt({ age = 5, primaryLang = 'en', learningLa
     '9. Do NOT include style words — server appends them.',
   ].join('\n');
 }
+
+// ===========================================================================
+// sanitizePromptForPage1 — dedicated Page 1 sanitizer (OpenAI CSAM bypass)
+// Per FACTORY_WORKORDER_2026_04_24_IMAGE_PIPELINE.md §3.
+// ONLY call for Page 1. Pages 2-12 keep using sanitizeImagePrompt.
+// ===========================================================================
+
+export const PAGE1_SAFE_REPLACEMENTS = {
+  "child's bedroom": 'cozy small room',
+  "children's bedroom": 'cozy small room',
+  "kid's bedroom": 'cozy small room',
+  "boy's bedroom": 'cozy small room',
+  "girl's bedroom": 'cozy small room',
+  "children's room": 'small cozy room',
+  "kid's room": 'small cozy room',
+  "boy's room": "small adventurer's room",
+  "girl's room": "small dreamer's room",
+
+  'bedroom at night': 'small room with warm evening glow',
+  'at night': 'in the soft evening light',
+  nighttime: 'twilight hour',
+  'at midnight': 'late in the evening',
+
+  'from across the room': 'corner perspective view',
+  'watching from': 'viewing gently from',
+  'seen from across': 'viewed from a corner',
+
+  "Japanese children's picture book": 'Japanese picture book',
+  "children's picture book": 'picture book',
+  "children's illustration": 'storybook illustration',
+  'for children': '',
+
+  'paper texture visible': 'subtle paper grain',
+  'visible paper texture': 'subtle paper grain',
+};
+
+export const PAGE1_DANGEROUS_TRIPLES = [
+  ['child', 'bedroom', 'night'],
+  ['child', 'bed', 'alone'],
+  ['child', 'bed', 'bedroom'],
+  ['child', 'bedroom'],
+  ['children', 'bedroom'],
+  ['boy', 'bedroom'],
+  ['girl', 'bedroom'],
+  ['kid', 'bedroom'],
+  ['child', 'bathroom'],
+  ['child', 'undress'],
+  ['child', 'sleeping', 'alone'],
+];
+
+// Explicit replacement priority: child/boy/girl possessive phrases FIRST,
+// so they win over shorter generic phrases like "bedroom at night".
+const PAGE1_REPLACEMENT_ORDER = [
+  "child's bedroom",
+  "children's bedroom",
+  "kid's bedroom",
+  "boy's bedroom",
+  "girl's bedroom",
+  "children's room",
+  "kid's room",
+  "boy's room",
+  "girl's room",
+  "Japanese children's picture book",
+  "children's picture book",
+  "children's illustration",
+  'bedroom at night',
+  'paper texture visible',
+  'visible paper texture',
+  'from across the room',
+  'seen from across',
+  'watching from',
+  'at midnight',
+  'nighttime',
+  'at night',
+  'for children',
+];
+
+function escapeRegExpP1(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Clean an image prompt for OpenAI gpt-image-1 Page 1 calls.
+ * @param {string} prompt
+ * @returns {{sanitized: string, replacedTerms: string[]}}
+ */
+export function sanitizePromptForPage1(prompt) {
+  if (typeof prompt !== 'string' || !prompt) {
+    return { sanitized: '', replacedTerms: [] };
+  }
+  let out = prompt;
+  const replacedTerms = [];
+
+  // Check DANGEROUS_TRIPLES on ORIGINAL prompt (before replacements erase words)
+  const origLower = prompt.toLowerCase();
+  const tripleHit = PAGE1_DANGEROUS_TRIPLES.some((trip) =>
+    trip.every((w) => origLower.includes(w.toLowerCase())),
+  );
+
+  // Apply replacements in explicit priority order (possessive child-phrases first)
+  for (const from of PAGE1_REPLACEMENT_ORDER) {
+    const to = PAGE1_SAFE_REPLACEMENTS[from];
+    if (to === undefined) continue;
+    const re = new RegExp(escapeRegExpP1(from), 'gi');
+    if (re.test(out)) {
+      out = out.replace(re, to);
+      replacedTerms.push(from);
+    }
+  }
+  if (tripleHit) {
+    out = out
+      .replace(/bedroom/gi, 'cozy room')
+      .replace(/\bnight\b/gi, 'evening')
+      .replace(/\bbath(room)?\b/gi, 'garden fountain');
+    replacedTerms.push('__triple_rewrite__');
+  }
+
+  out = out.replace(/\s{2,}/g, ' ').replace(/\s+,/g, ',').trim();
+  return { sanitized: out, replacedTerms };
+}
