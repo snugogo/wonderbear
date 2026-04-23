@@ -287,7 +287,7 @@ async function callGeminiStory({ systemPrompt, dialogueSummary, childProfile }) 
     ],
     generationConfig: {
       temperature: 0.85,
-      maxOutputTokens: 4096,
+      maxOutputTokens: 16384,
       responseMimeType: 'application/json',
     },
   };
@@ -298,6 +298,12 @@ async function callGeminiStory({ systemPrompt, dialogueSummary, childProfile }) 
   });
   if (!resp.ok) throw new Error(`Gemini story HTTP ${resp.status}`);
   const data = await resp.json();
+  // Check for truncation or safety filter
+  const finishReason = data?.candidates?.[0]?.finishReason;
+  if (finishReason && finishReason !== 'STOP') {
+    console.error('[llm] Gemini finish reason:', finishReason);
+    throw new Error(`Gemini story truncated: finishReason=${finishReason}`);
+  }
   let raw = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';
   // Strip markdown code fences if present (Gemini 2.5 sometimes wraps JSON)
   raw = raw.trim();
