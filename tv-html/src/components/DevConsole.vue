@@ -67,8 +67,9 @@ function simActivated(): void { bridge._mock?.simulateActivationStatusChange('bo
 
 <template>
   <div class="dev-console" :class="{ collapsed }">
-    <button class="toggle" @click="collapsed = !collapsed">
-      {{ collapsed ? '🛠' : '×' }}
+    <button class="toggle" :class="{ 'is-collapsed': collapsed }" @click="collapsed = !collapsed">
+      <span v-if="collapsed" class="toggle-label">DEV</span>
+      <span v-else class="toggle-close">×</span>
     </button>
     <div v-if="!collapsed" class="panel">
       <div class="panel-section">
@@ -121,23 +122,64 @@ function simActivated(): void { bridge._mock?.simulateActivationStatusChange('bo
 <style scoped>
 .dev-console {
   position: fixed;
-  bottom: 8px;
-  right: 8px;
-  z-index: 9999;
+  bottom: 16px;
+  right: 16px;
+  /*
+   * z-index 99999: must float above bear_idle.webp deco (z:0), bg layer,
+   * and any screen overlays. Founder reported the old 36×36 amber button
+   * was visually lost against the bear deco in the bottom-right corner.
+   */
+  z-index: 99999;
   font-family: monospace;
   color: #fff;
   pointer-events: auto;
 }
 .toggle {
-  width: 36px;
-  height: 36px;
+  /* 60×60 per founder; 36×36 was too small to find. */
+  width: 60px;
+  height: 60px;
   border-radius: 50%;
-  border: none;
-  background: rgba(255, 200, 87, 0.85);
-  color: #000;
-  font-size: 18px;
+  border: 3px solid #ffffff;
+  /* Fluorescent red — highest perceptual contrast against the warm
+     watercolor palette; no other TV surface uses this hue so it reads
+     unambiguously as "dev tool", not a brand accent. */
+  background: #FF3B30;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Two-layer shadow: dark drop + soft glow to detach from any bg zone. */
+  box-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.55),
+    0 0 0 2px rgba(0, 0, 0, 0.35),
+    0 0 24px rgba(255, 59, 48, 0.45);
+  /* Subtle pulse so the eye finds it even during movement. */
+  animation: dev-toggle-pulse 2.4s ease-in-out infinite;
+}
+.toggle:hover { transform: scale(1.08); }
+.toggle.is-collapsed { animation: dev-toggle-pulse 2.4s ease-in-out infinite; }
+.toggle-label {
+  line-height: 1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+.toggle-close {
+  font-size: 32px;
+  line-height: 1;
+  font-weight: 400;
+}
+@keyframes dev-toggle-pulse {
+  0%, 100% { box-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.55),
+    0 0 0 2px rgba(0, 0, 0, 0.35),
+    0 0 24px rgba(255, 59, 48, 0.45); }
+  50%      { box-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.55),
+    0 0 0 2px rgba(0, 0, 0, 0.35),
+    0 0 36px rgba(255, 59, 48, 0.75); }
 }
 .panel {
   margin-top: 8px;
