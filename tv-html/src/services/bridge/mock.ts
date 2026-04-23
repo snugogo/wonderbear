@@ -16,10 +16,19 @@ export function createMockBridge(): BridgeApi {
   let mediaRecorder: MediaRecorder | null = null;
   let recordedChunks: Blob[] = [];
 
+  // Dev helper: let the URL override the mock activation code so a real
+  // server-issued code can be demo'd from the browser.
+  //   localhost:5173/?dev=1&code=CRRTXMGL  -> activationCode = CRRTXMGL
+  //   localhost:5173/?dev=1                -> activationCode = DEVTEST (fallback)
+  const urlCode =
+    typeof location !== 'undefined'
+      ? new URLSearchParams(location.search).get('code')
+      : null;
+
   const mockDeviceInfo: DeviceInfo = {
     deviceId: 'dev-browser-' + Math.random().toString(36).slice(2, 10),
     model: 'GP15-Browser',
-    activationCode: 'DEVTEST',
+    activationCode: (urlCode && urlCode.trim()) || 'DEVTEST',
     firmwareVer: '0.0.0-dev',
     osVersion: 'Browser-Mock',
     hwFingerprint: 'mock-fp',
