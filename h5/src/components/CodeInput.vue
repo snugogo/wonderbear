@@ -1,32 +1,27 @@
 <template>
   <div class="code-input">
-    <van-password-input
+    <input
+      ref="inputRef"
+      type="text"
       :value="modelValue"
-      :length="length"
-      :mask="false"
-      :gutter="8"
-      :focused="focused"
-      @focus="focused = true"
-    />
-    <van-number-keyboard
-      :show="focused"
       :maxlength="length"
-      :value="modelValue"
+      inputmode="numeric"
+      pattern="[0-9]*"
+      autocomplete="one-time-code"
+      class="code-native-input"
+      :placeholder="placeholder"
       @input="onInput"
-      @delete="onDelete"
-      @blur="focused = false"
-      safe-area-inset-bottom
     />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 
 interface Props {
   modelValue: string;
   length?: number;
-  /** 外部要求聚焦(比如进入页面后自动弹出键盘) */
+  /** 进入页面后自动聚焦(移动端会自动弹原生数字键盘) */
   autoFocus?: boolean;
 }
 
@@ -40,33 +35,63 @@ const emit = defineEmits<{
   (e: 'complete', val: string): void;
 }>();
 
-const focused = ref(props.autoFocus);
+const inputRef = ref<HTMLInputElement | null>(null);
+
+// N 位下划线占位(6 位 → "------"),letter-spacing 让它看起来像 6 个格子
+const placeholder = computed(() => '-'.repeat(props.length));
+
+function onInput(ev: Event) {
+  const el = ev.target as HTMLInputElement;
+  // 只保留数字并截长
+  const next = el.value.replace(/\D/g, '').slice(0, props.length);
+  // 若有非数字被剥掉,回写 DOM 避免 input 值与 modelValue 不同步
+  if (el.value !== next) el.value = next;
+  emit('update:modelValue', next);
+  if (next.length === props.length) emit('complete', next);
+}
 
 watch(
   () => props.autoFocus,
   (v) => {
-    focused.value = v;
+    if (v && inputRef.value) inputRef.value.focus();
   }
 );
 
-function onInput(key: string | number) {
-  const v = String(key);
-  const next = (props.modelValue + v).slice(0, props.length);
-  emit('update:modelValue', next);
-  if (next.length === props.length) {
-    emit('complete', next);
-    // 自动收起键盘
-    focused.value = false;
-  }
-}
-
-function onDelete() {
-  emit('update:modelValue', props.modelValue.slice(0, -1));
-}
+onMounted(() => {
+  if (props.autoFocus && inputRef.value) inputRef.value.focus();
+});
 </script>
 
 <style scoped>
-.code-input :deep(.van-password-input) {
-  margin: 0;
+.code-input {
+  width: 100%;
+}
+.code-native-input {
+  width: 100%;
+  height: 52px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: 10px;
+  text-align: center;
+  background: var(--wb-card);
+  border: 1px solid var(--wb-border);
+  border-radius: 12px;
+  color: var(--wb-text);
+  outline: none;
+  font-family: ui-monospace, 'SF Mono', Consolas, monospace;
+  caret-color: var(--wb-primary);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.code-native-input:focus {
+  border-color: var(--wb-primary);
+  box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.2);
+}
+.code-native-input::placeholder {
+  color: var(--wb-text-sub);
+  opacity: 0.4;
+  letter-spacing: 10px;
+  font-weight: 400;
 }
 </style>
