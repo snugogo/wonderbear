@@ -172,6 +172,20 @@ export function createStoryQueue(prisma, options = {}) {
         0,
       );
 
+      // Per API_ACTUAL_FORMAT §7.6 / TV+H5 shared Story type: Story.dialogue is
+      // { summary: { mainCharacter, scene, conflict }, rounds: [{ q, a }, ...] }.
+      // The session-side summary has the three fields at the same level as
+      // `rounds`; reshape to the contract before persisting.
+      const ds = job.dialogueSummary || {};
+      const dialogueField = {
+        summary: {
+          mainCharacter: ds.mainCharacter ?? '',
+          scene: ds.scene ?? '',
+          conflict: ds.conflict ?? '',
+        },
+        rounds: Array.isArray(ds.rounds) ? ds.rounds : [],
+      };
+
       await prisma.story.update({
         where: { id: storyId },
         data: {
@@ -181,7 +195,7 @@ export function createStoryQueue(prisma, options = {}) {
           coverUrl,
           coverUrlHd,
           pages: pagesWithImages,
-          dialogue: job.dialogueSummary,
+          dialogue: dialogueField,
           metadata: {
             primaryLang: job.childProfile.primaryLang,
             learningLang: job.childProfile.secondLang || 'none',
