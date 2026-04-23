@@ -118,10 +118,20 @@ async function load() {
     story.value = s;
   } catch (e) {
     showToast(fmtErr(e));
-    router.replace({ name: 'Stories' });
+    backToList();
   } finally {
     loading.value = false;
   }
+}
+
+/**
+ * 返回列表页(避免"/stories → /stories/:id → replace(/stories)"造成
+ * history 里连续两条 /stories,用户点返回像卡住的现象)。
+ */
+function backToList() {
+  const hasBack = !!(router.options.history.state as { back?: unknown } | null)?.back;
+  if (hasBack) router.back();
+  else router.replace({ name: 'Stories' });
 }
 
 async function onToggleFav() {
@@ -152,7 +162,7 @@ async function onDelete() {
   try {
     await storyApi.remove(story.value.id);
     showSuccessToast(t('stories.deleteSuccess'));
-    router.replace({ name: 'Stories' });
+    backToList();
   } catch (e) {
     showToast(fmtErr(e));
   }

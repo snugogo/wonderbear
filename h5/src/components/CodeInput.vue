@@ -5,8 +5,8 @@
       type="text"
       :value="modelValue"
       :maxlength="length"
-      inputmode="numeric"
-      pattern="[0-9]*"
+      :inputmode="isAlpha ? 'text' : 'numeric'"
+      :pattern="isAlpha ? '[A-Z0-9]*' : '[0-9]*'"
       autocomplete="one-time-code"
       class="code-native-input"
       :placeholder="placeholder"
@@ -21,12 +21,15 @@ import { computed, onMounted, ref, watch } from 'vue';
 interface Props {
   modelValue: string;
   length?: number;
+  /** 输入模式:numeric(纯数字)/ alphanumeric(字母+数字大写) */
+  mode?: 'numeric' | 'alphanumeric';
   /** 进入页面后自动聚焦(移动端会自动弹原生数字键盘) */
   autoFocus?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   length: 6,
+  mode: 'numeric',
   autoFocus: false,
 });
 
@@ -36,15 +39,18 @@ const emit = defineEmits<{
 }>();
 
 const inputRef = ref<HTMLInputElement | null>(null);
+const isAlpha = computed(() => props.mode === 'alphanumeric');
 
-// N 位下划线占位(6 位 → "------"),letter-spacing 让它看起来像 6 个格子
+// N 位下划线占位(letter-spacing 让它看起来像 N 个格子)
 const placeholder = computed(() => '-'.repeat(props.length));
 
 function onInput(ev: Event) {
   const el = ev.target as HTMLInputElement;
-  // 只保留数字并截长
-  const next = el.value.replace(/\D/g, '').slice(0, props.length);
-  // 若有非数字被剥掉,回写 DOM 避免 input 值与 modelValue 不同步
+  // alphanumeric: 保留 A-Z0-9,自动大写;numeric: 只保留 0-9
+  const raw = isAlpha.value ? el.value.toUpperCase() : el.value;
+  const filter = isAlpha.value ? /[^A-Z0-9]/g : /\D/g;
+  const next = raw.replace(filter, '').slice(0, props.length);
+  // 若有非法字符被剥掉 / 大写转换,回写 DOM 保持同步
   if (el.value !== next) el.value = next;
   emit('update:modelValue', next);
   if (next.length === props.length) emit('complete', next);

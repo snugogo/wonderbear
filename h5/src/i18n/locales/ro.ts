@@ -200,6 +200,19 @@ export default {
     unbindCodeSent: 'Cod trimis pe e-mail',
     unbindSuccess: 'Dispozitiv deconectat',
     confirmCodePlaceholder: 'Cod din 6 cifre',
+
+    // Asociere manuală cu cod de activare
+    add: 'Adaugă dispozitiv',
+    addTitle: 'Asociază un dispozitiv nou',
+    addDesc: 'Codul de activare și ID-ul dispozitivului apar pe ecranul proiectorului.',
+    deviceIdLabel: 'ID dispozitiv',
+    deviceIdPlaceholder: 'GP15-SN-XXXXXXXX',
+    activationCodeLabel: 'Cod de activare (8 caractere)',
+    deviceIdMissing: 'Introdu ID-ul dispozitivului',
+    activationCodeInvalid: 'Codul de activare trebuie să aibă 8 litere sau cifre',
+    bindBtn: 'Asociază',
+    bindSuccess: 'Dispozitiv asociat',
+    bindOverrideConfirm: 'Acest dispozitiv este asociat altui cont. Forțezi asocierea cu contul tău?',
   },
 
   stories: {

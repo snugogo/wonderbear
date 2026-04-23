@@ -200,6 +200,19 @@ export default {
     unbindCodeSent: '验证码已发送至邮箱',
     unbindSuccess: '已解绑',
     confirmCodePlaceholder: '6 位验证码',
+
+    // 手输激活码绑定
+    add: '添加设备',
+    addTitle: '绑定新设备',
+    addDesc: '激活码和设备 ID 显示在投影仪屏幕上。',
+    deviceIdLabel: '设备 ID',
+    deviceIdPlaceholder: 'GP15-SN-XXXXXXXX',
+    activationCodeLabel: '激活码(8 位)',
+    deviceIdMissing: '请输入设备 ID',
+    activationCodeInvalid: '激活码应为 8 位字母或数字',
+    bindBtn: '绑定',
+    bindSuccess: '绑定成功',
+    bindOverrideConfirm: '该设备已绑定到其他账户,是否强制绑定到当前账户?',
   },
 
   stories: {

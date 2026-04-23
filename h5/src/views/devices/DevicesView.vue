@@ -6,15 +6,30 @@
       <van-loading color="var(--wb-primary)" />
     </div>
 
-    <EmptyState
-      v-else-if="devices.length === 0"
-      asset="h5.scanQrGuide"
-      fallback-asset="bear.qrPeek"
-      :title="t('devices.empty')"
-      :desc="t('devices.emptyDesc')"
-    />
+    <template v-else>
+      <EmptyState
+        v-if="devices.length === 0"
+        asset="h5.scanQrGuide"
+        fallback-asset="bear.qrPeek"
+        :title="t('devices.empty')"
+        :desc="t('devices.emptyDesc')"
+      />
 
-    <div v-else class="list">
+      <!-- + 添加设备按钮(空状态 & 列表状态都展示) -->
+      <div class="add-btn-wrap">
+        <van-button
+          block
+          round
+          type="primary"
+          icon="plus"
+          @click="onAddStart"
+        >
+          {{ t('devices.add') }}
+        </van-button>
+      </div>
+    </template>
+
+    <div v-if="!loading && devices.length > 0" class="list">
       <div v-for="d in devices" :key="d.id" class="card">
         <div class="card-head">
           <div class="model">
@@ -78,16 +93,53 @@
         {{ t('devices.unbindBtn') }}
       </van-button>
     </van-popup>
+
+    <!-- 手输激活码绑定弹窗 -->
+    <van-popup v-model:show="showAddPopup" round position="bottom" :style="{ padding: '24px 16px 32px' }">
+      <h3 class="popup-title">{{ t('devices.addTitle') }}</h3>
+      <p class="popup-desc">{{ t('devices.addDesc') }}</p>
+
+      <div class="popup-field">
+        <label class="popup-label">{{ t('devices.deviceIdLabel') }}</label>
+        <van-field
+          v-model.trim="addForm.deviceId"
+          :placeholder="t('devices.deviceIdPlaceholder')"
+          :maxlength="32"
+          clearable
+        />
+      </div>
+
+      <div class="popup-field">
+        <label class="popup-label">{{ t('devices.activationCodeLabel') }}</label>
+        <CodeInput
+          v-model="addForm.activationCode"
+          mode="alphanumeric"
+          :length="ACTIVATION_CODE_LENGTH"
+        />
+      </div>
+
+      <van-button
+        type="primary"
+        block
+        round
+        :loading="bindLoading"
+        @click="onBindConfirm"
+        class="popup-confirm"
+      >
+        {{ t('devices.bindBtn') }}
+      </van-button>
+    </van-popup>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onMounted, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
-import { showSuccessToast, showToast } from 'vant';
+import { showDialog, showSuccessToast, showToast } from 'vant';
 import { deviceApi } from '@/api/device';
 import { authApi } from '@/api/auth';
+import { BusinessError } from '@/api/http';
 import { useAuthStore } from '@/stores/auth';
 import { useApiError } from '@/composables/useApiError';
 import { useCountdown } from '@/composables/useCountdown';
@@ -97,6 +149,9 @@ import { i18n } from '@/i18n';
 import type { DeviceSummary, Locale } from '@/types';
 import EmptyState from '@/components/EmptyState.vue';
 import CodeInput from '@/components/CodeInput.vue';
+
+/** TV 屏幕显示的激活码长度(字母+数字混合,如 CRRTXMGL) */
+const ACTIVATION_CODE_LENGTH = 8;
 
 const { t } = useI18n();
 const router = useRouter();
@@ -115,6 +170,11 @@ const unbindTarget = ref<DeviceSummary | null>(null);
 const unbindCode = ref('');
 const unbindLoading = ref(false);
 const sendingCode = ref(false);
+
+// 绑定流程(手输激活码)
+const showAddPopup = ref(false);
+const bindLoading = ref(false);
+const addForm = reactive({ deviceId: '', activationCode: '' });
 
 async function load() {
   loading.value = true;
@@ -189,6 +249,58 @@ async function onUnbindConfirm() {
     showToast(fmtErr(e));
   } finally {
     unbindLoading.value = false;
+  }
+}
+
+// ---- 手输激活码绑定 ----
+function onAddStart() {
+  addForm.deviceId = '';
+  addForm.activationCode = '';
+  showAddPopup.value = true;
+}
+
+/**
+ * 调用 /api/device/bind(服务端 §5.3)。
+ * 服务端要求 deviceId + activationCode 一起传,不能只传 code。
+ * 20003(已绑定到其他账户)允许 forceOverride:true 强制覆盖,但需二次确认。
+ */
+async function onBindConfirm(force = false) {
+  const deviceId = addForm.deviceId.trim().toUpperCase();
+  const code = addForm.activationCode.trim().toUpperCase();
+  if (!deviceId) return showToast(t('devices.deviceIdMissing'));
+  if (code.length !== ACTIVATION_CODE_LENGTH) return showToast(t('devices.activationCodeInvalid'));
+
+  bindLoading.value = true;
+  try {
+    await deviceApi.bind({
+      deviceId,
+      activationCode: code,
+      forceOverride: force || undefined,
+    });
+    showSuccessToast(t('devices.bindSuccess'));
+    showAddPopup.value = false;
+    await load();
+  } catch (e) {
+    if (e instanceof BusinessError && e.code === 20003 && !force) {
+      try {
+        await showDialog({
+          title: t('errors.20003'),
+          message: t('devices.bindOverrideConfirm'),
+          confirmButtonText: t('common.confirm'),
+          cancelButtonText: t('common.cancel'),
+          showCancelButton: true,
+          confirmButtonColor: 'var(--wb-danger)',
+        });
+        // 递归调用走 forceOverride=true 分支
+        bindLoading.value = false;
+        return onBindConfirm(true);
+      } catch {
+        // 用户拒绝覆盖
+      }
+    }
+    showToast(fmtErr(e));
+  } finally {
+    bindLoading.value = false;
   }
 }
 
@@ -278,5 +390,27 @@ onMounted(load);
 }
 .popup-confirm {
   height: 48px;
+}
+
+/* ---- 添加设备 ---- */
+.add-btn-wrap {
+  padding: 16px;
+}
+.popup-field {
+  margin-bottom: 16px;
+}
+.popup-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--wb-text);
+  margin-bottom: 8px;
+}
+.popup-field :deep(.van-cell) {
+  padding-left: 12px;
+  padding-right: 12px;
+  background: var(--wb-card);
+  border: 1px solid var(--wb-border);
+  border-radius: 12px;
 }
 </style>

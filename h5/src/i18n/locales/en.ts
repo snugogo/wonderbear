@@ -203,6 +203,19 @@ export default {
     unbindCodeSent: 'Code sent to your email',
     unbindSuccess: 'Device unlinked',
     confirmCodePlaceholder: '6-digit code',
+
+    // Manual activation code binding
+    add: 'Add device',
+    addTitle: 'Bind a new device',
+    addDesc: 'The activation code and device ID are shown on the projector screen.',
+    deviceIdLabel: 'Device ID',
+    deviceIdPlaceholder: 'GP15-SN-XXXXXXXX',
+    activationCodeLabel: 'Activation code (8 chars)',
+    deviceIdMissing: 'Please enter the device ID',
+    activationCodeInvalid: 'Activation code must be 8 letters or digits',
+    bindBtn: 'Bind',
+    bindSuccess: 'Device bound',
+    bindOverrideConfirm: 'This device is bound to another account. Force-bind it to your account?',
   },
 
   stories: {

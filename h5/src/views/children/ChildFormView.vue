@@ -229,12 +229,27 @@ async function onSubmit() {
       await childApi.create(payload);
       showSuccessToast(t('children.createSuccess'));
     }
-    router.replace({ name: 'Children' });
+    returnAfterSubmit();
   } catch (e) {
     showToast(fmtErr(e));
   } finally {
     submitting.value = false;
   }
+}
+
+/**
+ * 提交成功后的跳转:
+ * - 若从列表页 push 进来(history.state.back 存在)→ `router.back()` 干净地出栈当前 /new 或 /edit 条目
+ * - 若是深链直开(刷新 / 外链)→ `router.replace` 回到列表
+ *
+ * 之前统一用 `router.replace({name:'Children'})` 在"列表 → 新增 → 返回"场景会
+ * 产生 [..., /children, /children] 连续两条记录,用户点"返回"看起来毫无反应
+ * (浏览器确实回退了一格,但 URL 不变),俗称"第二个孩子建完就卡住了"。
+ */
+function returnAfterSubmit() {
+  const hasBack = !!(router.options.history.state as { back?: unknown } | null)?.back;
+  if (hasBack) router.back();
+  else router.replace({ name: 'Children' });
 }
 
 // 编辑模式:进入时拉一次数据

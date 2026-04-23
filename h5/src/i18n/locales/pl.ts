@@ -200,6 +200,19 @@ export default {
     unbindCodeSent: 'Kod wysłany na e-mail',
     unbindSuccess: 'Urządzenie odłączone',
     confirmCodePlaceholder: '6-cyfrowy kod',
+
+    // Ręczne wiązanie kodem aktywacyjnym
+    add: 'Dodaj urządzenie',
+    addTitle: 'Powiąż nowe urządzenie',
+    addDesc: 'Kod aktywacyjny i ID urządzenia są wyświetlane na ekranie projektora.',
+    deviceIdLabel: 'ID urządzenia',
+    deviceIdPlaceholder: 'GP15-SN-XXXXXXXX',
+    activationCodeLabel: 'Kod aktywacyjny (8 znaków)',
+    deviceIdMissing: 'Wprowadź ID urządzenia',
+    activationCodeInvalid: 'Kod aktywacyjny musi mieć 8 liter lub cyfr',
+    bindBtn: 'Powiąż',
+    bindSuccess: 'Urządzenie powiązane',
+    bindOverrideConfirm: 'To urządzenie jest powiązane z innym kontem. Wymusić powiązanie z Twoim kontem?',
   },
 
   stories: {
