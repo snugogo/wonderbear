@@ -10,6 +10,7 @@
 import type { BridgeApi, DeviceInfo, BgmScene, VoiceMode } from './types';
 import { on, off, emit } from './pushBus';
 import { useChildStore } from '@/stores/child';
+import { api } from '@/services/api';
 
 /**
  * Seed a demo child ("Luna", age 5, en/zh) into the child store so the
@@ -84,6 +85,12 @@ export function createMockBridge(): BridgeApi {
     // 1500ms "native ready" timeout plus mount + vue reactive flush, so we
     // give it a healthy margin.
     setTimeout(() => {
+      // Suppress the global auth-error handler that main.ts installs, which
+      // would otherwise kick us back to ActivationScreen the instant
+      // HomeScreen's child.refreshActive() hits 401 (no real device token in
+      // browser dev mode). We've seeded Luna locally, so auth errors are
+      // harmless in demo mode.
+      api.onAuthError(() => {});
       applyDemoChildIfRequested();
       emit('activation-status-change', 'bound');
     }, 2500);

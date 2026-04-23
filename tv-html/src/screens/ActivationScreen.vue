@@ -69,6 +69,15 @@ function onActivated(): void {
 }
 
 onMounted(async () => {
+  // Subscribe FIRST, before any await — the mock bridge's autobind flag
+  // (?autobind=1) fires 'activation-status-change' 2500ms after boot, and
+  // if OEM config / QR render takes longer than that, the event would be
+  // missed. In real-device land this also protects against native pushing
+  // the status before the QR finishes drawing.
+  unsubActivation.value = bridge.on('activation-status-change', (status) => {
+    if (status === 'bound') onActivated();
+  });
+
   device.loadDeviceInfo();
   if (!device.oem) await device.loadOemConfig();
   await renderQrCode();
@@ -77,11 +86,6 @@ onMounted(async () => {
   pollTimer.value = window.setInterval(pollStatus, 3000);
   // Initial check
   pollStatus();
-
-  // Subscribe to push event for instant activation feedback
-  unsubActivation.value = bridge.on('activation-status-change', (status) => {
-    if (status === 'bound') onActivated();
-  });
 });
 
 onBeforeUnmount(() => {
