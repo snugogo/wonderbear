@@ -1,336 +1,306 @@
-# WonderBear 视觉资产命名契约(NAMING_CONTRACT)
+# WonderBear 资产命名规范 · NAMING_CONTRACT v7.4
 
-> **这是"合约",不是"建议"**。设计师/开发者/创始人三方对齐的权威来源。
->
-> **状态图例**:⏳ 待画 | 🎨 画中 | 🟡 返工中 | ✅ 已交付并在 git | ⛔ 弃用
->
-> **改动规则**:
-> 1. 文件名一旦进入本文档,**不可擅自修改**
-> 2. 任何 rename / 新增 / 弃用 都需经创始人批准
-> 3. 所有改动在**文档底部 CHANGELOG** 里记一行,带日期和原因
-> 4. 状态变更(例如 ⏳ → ✅)设计师交付后即时更新
->
-> **仓库**:https://github.com/snugogo/wonderbear
-> **本文档路径**:`assets/NAMING_CONTRACT.md`
-> **最后更新**:2026-04-23
+> **更新日期**：2026-04-23
+> **总资产**：116 张 WebP + 7 个 SVG
+> **CDN**：`https://cdn.jsdelivr.net/gh/snugogo/wonderbear@main/assets/`
+> **仓库**：https://github.com/snugogo/wonderbear
 
 ---
 
-## 🎨 风格基调(必读,所有新图都要遵守)
+## 目录结构
 
-项目已有 **96 张插画 + 11 张 Logo**,风格必须跟现有素材保持一致:
+```
+assets/
+├── bear/        小熊角色（透明背景 WebP，1024×1024）
+├── bg/          页面背景（不透明 WebP，1536×1024）
+├── ui/          UI图标装饰（透明背景 WebP）
+├── svg/         线形功能图标（SVG，固定颜色）
+├── avatar/      头像（透明背景 WebP，1024×1024）
+├── deco/        装饰元素（透明背景 WebP，1024×1024）
+├── story/       故事通用背景（不透明 WebP，1536×1024）
+├── h5/          家长H5专用图（透明背景 WebP，1024×1024）
+├── marketing/   营销图（不透明 WebP，1536×1024）
+├── icon/        App图标套装（PNG + WebP）
+└── NAMING_CONTRACT.md   本文件
+```
 
-- **主色**:`#FF8A3D` 橙、`#4A90E2` 蓝、`#FFF8F0` 米白
-- **辅助色**:奶油 `#F5E6D3`、蜜桃 `#F5BFA3`、琥珀 `#E8A658`、软粉 `#F4B5C4`、天蓝 `#B8D8E8`、薄荷 `#B8E0D2`、金色 `#E8C878`
-- **插画风格**:水彩 / 毛绒绘本质感,圆润、柔和、饱和度适中
-- **主角**:一只奶白色毛绒小熊(参考 `assets/icon/app_icon_master.webp` 或 `assets/bear/bear_idle.webp`)
-- **忌**:
-  - ❌ 不要扁平 Material Design 风
-  - ❌ 不要迪士尼/卡通网大眼睛风
-  - ❌ 不要像素风或矢量硬边
-  - ❌ 不要过度装饰,孩子会分心
+**命名规则**：全小写 + 下划线 + 功能前缀。前缀即目录，`bear_` 在 `assets/bear/`，`bg_` 在 `assets/bg/`，以此类推。
 
 ---
 
-## 📋 交付格式规范
+## bear/ · 小熊角色（35张）
 
-| 用途 | 格式 | 说明 |
+透明背景，1024×1024 WebP。所有动作图以 `bear_idle` 为角色锚点。
+
+| 文件名 | 用途 | 质量 |
 |---|---|---|
-| UI 图标(扁平) | **SVG** | 可上色、任意缩放,首选 |
-| UI 图标(精细/带光影) | **WebP** | 提供 @1x + @2x 两份 |
-| 角色插画 | **WebP** | 提供 @2x 版本(TV 1080p 屏用) |
-| 系统级图标(Logo 等) | **PNG** + **WebP** | PNG 给 iOS/Android 系统用,WebP 给 Web UI 用 |
-| 所有图片 | **透明背景**(除非明确要背景) | |
-
-**命名规则**:全小写,下划线分隔,按功能分组:
-- `home-create.webp` → `assets/ui/home-create.webp` ❌
-- `ui_home_create.webp` → `assets/ui/ui_home_create.webp` ✅
+| `bear_idle.webp` | ⭐ 主角锚点，其他熊的参考图 | high |
+| `bear_talk.webp` | 说话/朗读中 | high |
+| `bear_welcome.webp` | 欢迎/打招呼 | high |
+| `bear_qr_peek.webp` | 从角落探头，配合二维码页 | high |
+| `bear_bow_curtain.webp` | 故事结尾谢幕鞠躬 | high |
+| `bear_wave.webp` | 挥手（ActivationScreen常驻，CSS挥手动画）| medium |
+| `bear_mouth_half.webp` | 嘴半开，说话中间帧 | medium |
+| `bear_listen_headphones.webp` | 戴耳机聆听（DialogueScreen孩子说话时）| medium |
+| `bear_think.webp` | 思考中（AI处理时）| medium |
+| `bear_react_1.webp` | 对话反应：惊喜表情 | medium |
+| `bear_react_2.webp` | 对话反应：开心大笑 | medium |
+| `bear_react_3.webp` | 对话反应：满意点头 | medium |
+| `bear_paint.webp` | 拿画笔创作（GeneratingScreen）| medium |
+| `bear_studio.webp` | 在录音室/创作中（GeneratingScreen）| medium |
+| `bear_read.webp` | 捧书阅读（LibraryScreen）| medium |
+| `bear_reading_hero.webp` | 英雄式阅读（H5 OnboardChild页）| medium |
+| `bear_sleep.webp` | 睡觉/结束 | medium |
+| `bear_happy.webp` | 鞠躬/开心（含bow动作）| medium |
+| `bear_sit.webp` | 端正坐着（HomeScreen装饰）| medium |
+| `bear_cheer.webp` | 欢呼庆祝（StoryEndScreen）| medium |
+| `bear_confused.webp` | 困惑/疑问（ErrorScreen）| medium |
+| `bear_pointing.webp` | 手指指向（LearningScreen识字）| medium |
+| `bear_error_oops.webp` | 出错/尴尬（ErrorScreen一般错误）| medium |
+| `bear_no_network.webp` | 无网络（ErrorScreen网络错误）| medium |
+| `bear_downloading.webp` | 下载/加载中（ErrorScreen下载状态）| medium |
+| `bear_empty_box.webp` | 空状态（LibraryScreen无故事时）| medium |
+| `bear_ranking_trophy.webp` | 拿奖杯（RankingScreen第1名）| medium |
+| `bear_ranking_medal.webp` | 拿奖牌（RankingScreen第2-3名）| medium |
+| `bear_world_map.webp` | 手持世界地图（LearningScreen）| medium |
+| `bear_explore_together.webp` | 探索/出发（LearningScreen）| medium |
+| `bear_my_home.webp` | 温馨居家（HomeScreen装饰）| medium |
+| `bear_poland.webp` | 波兰OEM版本 | medium |
+| `bear_romania.webp` | 罗马尼亚OEM版本 | medium |
+| `bear_coming_soon.webp` | 建设中/敬请期待（ComingSoonScreen）| medium |
 
 ---
 
-## ✅ 已有资产(不用重做)
+## bg/ · 背景图（12张）
 
-### WonderBear Logo(已齐全,11 张)
+不透明，1536×1024 WebP。所有TV页面必须使用背景图，禁止纯色CSS背景。
 
-路径:`assets/icon/`
-
-| 文件 | 尺寸 | 用途 |
+| 文件名 | 用途页面 | 质量 |
 |---|---|---|
-| `app_icon_master.webp` | 1024×1024 WebP | 主图源(毛绒质感) |
-| `app_icon_1024.png` | 1024×1024 | 高清主图(应用商店上架用) |
-| `app_icon_512.png` | 512×512 | Android Play Store |
-| `app_icon_192.png` | 192×192 | Android PWA 标准 |
+| `bg_activation.webp` | ⭐ 激活/扫码页（左侧白框=二维码叠加位置）| high |
+| `bg_home_cozy.webp` | ⭐ TV首页（HomeScreen）| high |
+| `bg_room.webp` | LibraryScreen / RankingScreen / ProfileScreen | medium |
+| `bg_chat.webp` | DialogueScreen（对话创作）| medium |
+| `bg_gen.webp` | GeneratingScreen（故事生成中）| medium |
+| `bg_bedtime.webp` | StoryEndScreen（故事结尾）| medium |
+| `bg_meadow.webp` | LearningScreen（语言探索）| medium |
+| `bg_welcome.webp` | ErrorScreen / ComingSoonScreen | medium |
+| `bg_welcome_fullscreen.webp` | 全屏欢迎，可叠加内容 | medium |
+| `bg_forest.webp` | 故事场景备用背景 | medium |
+| `bg_seaside.webp` | 故事场景备用背景 | medium |
+
+---
+
+## ui/ · UI图标装饰（23张）
+
+透明背景 WebP。
+
+| 文件名 | 用途 |
+|---|---|
+| `ui_home_create.webp` | TV首页功能卡：开始故事 |
+| `ui_home_stories_map.webp` | TV首页功能卡：故事地图 |
+| `ui_home_library.webp` | TV首页功能卡：我的书架 |
+| `ui_home_explore.webp` | TV首页功能卡：冒险探索 |
+| `ui_home_profile.webp` | TV首页功能卡：孩子档案 |
+| `ui_home_cast.webp` | TV首页功能卡：投屏分享 |
+| `ui_coin.webp` | 顶部栏金币图标（静态）|
+| `ui_coin_burst.webp` | 获得积分爆开动画 |
+| `ui_mic.webp` | 麦克风静默待机态 |
+| `ui_mic_active.webp` | 麦克风收音激活态（配呼吸动画）|
+| `ui_loading.webp` | 全局加载状态（替代原生spinner）|
+| `ui_remote.webp` | TV帮助页遥控器示意 |
+| `ui_char_bubble.webp` | 对话气泡 |
+| `ui_finger_point.webp` | 引导箭头 |
+| `ui_qr_frame.webp` | 二维码装饰边框（ActivationScreen）|
+| `ui_player_play.webp` | 播放按钮 |
+| `ui_player_pause.webp` | 暂停按钮 |
+| `ui_player_prev.webp` | 上一页 |
+| `ui_player_next.webp` | 下一页 |
+| `ui_progress_bar.webp` | 进度条装饰 |
+| `ui_heart_favorite.webp` | 收藏心形 |
+| `ui_download.webp` | 下载按钮 |
+| `ui_checkmark.webp` | 对勾确认（装饰版）|
+
+---
+
+## svg/ · 线形功能图标（7个）
+
+固定颜色SVG，不依赖currentColor。
+
+| 文件名 | 颜色 | 用途 |
+|---|---|---|
+| `ui_check.svg` | 绿 `#52C77A` | 表单确认、已完成 |
+| `ui_check_circle.svg` | 绿 `#52C77A` + 淡绿背景 | 成功状态徽章 |
+| `ui_arrow_back.svg` | 橙 `#FF8A3D` + 淡橙背景 | 导航返回按钮 |
+| `ui_settings.svg` | 蓝 `#4A90E2` + 淡蓝背景 | 设置入口 |
+| `ui_envelope.svg` | 橙 `#FF8A3D` | 支持邮箱 |
+| `ui_star_outline.svg` | 琥珀 `#E8A658` | 未收藏状态 |
+| `ui_star_filled.svg` | 金 `#E8C878` + 光晕 | 已收藏状态 |
+
+---
+
+## avatar/ · 头像（17张）
+
+透明背景，1024×1024 WebP。
+
+### 小熊变体（12张）
+`avatar_bear_classic` / `avatar_bear_pink` / `avatar_bear_blue` / `avatar_bear_mint` / `avatar_bear_crown` / `avatar_bear_star` / `avatar_bear_scarf` / `avatar_bear_glasses` / `avatar_bear_doctor` / `avatar_bear_chef` / `avatar_bear_pilot` / `avatar_bear_painter`
+
+### 动物朋友（5张）
+`avatar_cat` / `avatar_dog` / `avatar_rabbit` / `avatar_fox` / `avatar_owl`
+
+---
+
+## deco/ · 装饰元素（9张）
+
+透明背景，1024×1024 WebP。用作漂浮动画层。
+
+| 文件名 | 使用场景 |
+|---|---|
+| `deco_stars.webp` | StoryEndScreen、GeneratingScreen漂浮星星 |
+| `deco_confetti.webp` | StoryEndScreen撒花庆祝 |
+| `deco_sparkles.webp` | GeneratingScreen魔法粒子 |
+| `deco_coins.webp` | 获得积分金币飞出动画 |
+| `deco_hearts.webp` | 故事结尾爱心漂浮 |
+| `deco_cloud.webp` | 加载页、生成页云朵飘动 |
+| `deco_podium.webp` | RankingScreen颁奖台 |
+| `deco_ribbon.webp` | RankingScreen彩带装饰 |
+| `deco_dots.webp` | 通用页面点缀装饰 |
+
+---
+
+## story/ · 故事通用背景（3张）
+
+不透明，1536×1024 WebP。故事播放页按故事内容切换。
+
+`story_generic_forest` / `story_generic_sky` / `story_generic_ocean`
+
+---
+
+## h5/ · 家长H5专用图（10张）
+
+透明背景，1024×1024 WebP。
+
+| 文件名 | 用途页面 |
+|---|---|
+| `h5_onboard_welcome.webp` | H5引导页欢迎 |
+| `h5_empty_children.webp` | 空状态：未添加孩子 |
+| `h5_empty_stories.webp` | 空状态：暂无故事 |
+| `h5_scan_qr_guide.webp` | 扫码引导说明 |
+| `h5_success_subscribed.webp` | 订阅成功 |
+| `h5_payment_stripe.webp` | Stripe支付装饰 |
+| `h5_payment_paypal.webp` | PayPal支付装饰 |
+| `h5_pdf_ready.webp` | 绘本PDF已就绪 |
+| `h5_share_link.webp` | 分享链接 |
+| `h5_error_network.webp` | 网络错误 |
+
+---
+
+## marketing/ · 营销图（7张）
+
+不透明，1536×1024 WebP。经销商/官网用，不进APP。
+
+`marketing_hero_projector` / `marketing_bedroom_scene` / `marketing_family_time` / `marketing_creation_flow` / `marketing_bilingual_learning` / `marketing_vs_phone` / `marketing_gift_christmas`
+
+---
+
+## icon/ · App图标套装（11张）
+
+| 文件名 | 尺寸 | 用途 |
+|---|---|---|
+| `app_icon_master.webp` | 1024×1024 | 主图源 |
+| `app_icon_1024.png` | 1024×1024 | 应用商店上架 |
+| `app_icon_512.png` | 512×512 | Google Play |
+| `app_icon_192.png` | 192×192 | PWA标准 |
 | `app_icon_144.png` | 144×144 | Android xxhdpi |
 | `app_icon_96.png` | 96×96 | Android xhdpi |
 | `app_icon_72.png` | 72×72 | Android hdpi |
 | `app_icon_48.png` | 48×48 | Android mdpi |
-| `app_icon_adaptive_bg.png` | - | Android 8+ adaptive icon 背景层 |
-| `app_icon_adaptive_fg.png` | - | Android 8+ adaptive icon 前景层 |
-| `app_icon_notification.png` | - | 通知栏图标(单色) |
-
-**✅ 足够覆盖**:PWA、Android APK、iOS App 图标、通知图标、启动屏。**不用新做**。
+| `app_icon_adaptive_bg.png` | — | Android 8+自适应背景层 |
+| `app_icon_adaptive_fg.png` | — | Android 8+自适应前景层 |
+| `app_icon_notification.png` | — | 通知栏图标（单色）|
 
 ---
 
-## 🔴 P0 必做(本周完成,阻塞开发)
-
-### A. TV 首页功能卡片图标(6 张,一套系列)
-
-**项目**:TV 首页 `HomeScreen` 6 张功能入口卡。
-**现状**:代码里全用 emoji(🎨🗺📚🏆🏠📺)当图标,投影到电视上像素化严重。
-**要求**:**必须是同一视觉系列**,有整体感。
-
-| # | 卡片 | 用途 | 文件路径(@1x) | 文件路径(@2x) | 状态 |
-|---|---|---|---|---|---|
-| 1 | **开始故事** | 进入创作对话,孩子讲故事生成绘本 | `assets/ui/ui_home_create.webp` | `assets/ui/ui_home_create@2x.webp` | ⏳ |
-| 2 | **故事地图** | 进入已完成故事的地图视图 | `assets/ui/ui_home_stories_map.webp` | `assets/ui/ui_home_stories_map@2x.webp` | ⏳ |
-| 3 | **我的书架** | 进入故事库 LibraryScreen | `assets/ui/ui_home_library.webp` | `assets/ui/ui_home_library@2x.webp` | ⏳ |
-| 4 | **冒险探索** | 语言学习/探索模式 | `assets/ui/ui_home_explore.webp` | `assets/ui/ui_home_explore@2x.webp` | ⏳ |
-| 5 | **孩子档案** | 切换/管理孩子 | `assets/ui/ui_home_profile.webp` | `assets/ui/ui_home_profile@2x.webp` | ⏳ |
-| 6 | **投屏分享** | 投屏到其他设备 | `assets/ui/ui_home_cast.webp` | `assets/ui/ui_home_cast@2x.webp` | ⏳ |
-
-**尺寸**:
-- **@1x: 120×120px WebP**
-- **@2x: 240×240px WebP**(必须同时交付)
-- 透明背景
-
-**风格要求**:同一卡片装饰元素 + 项目色板配色 + 3-8 岁孩子易懂 + TV 远距离轮廓清晰
-
----
-
-### B. ~~TV 场景小熊 @2x 大图~~ ✅ 不需要做
-
-**更新(2026-04-22 复查)**:经过对 `assets/` 仓库实际图片像素的扫描,**所有熊图均为 1024×1024 WebP**,图源对 1080p TV 绰绰有余,**设计师不需要重做任何熊图**。
-
-~~原任务内容已删除~~
-
-真正的问题是 TV 代码里 CSS 容器尺寸定得太小(220-280px),这是 TV 开发窗口的 CSS 修改任务,跟设计师无关。
-
----
-
-### C. 基础 SVG 图标套组(7 个)
-
-**用途**:UI 里替换 emoji(✓、←、⚙、✉、★ 等符号字符)。
-
-**要求**:SVG 单色线形(`fill="currentColor"`),48×48 viewBox,线条粗细统一
-
-| # | 图标 | 文件路径 | 用途 | 状态 |
-|---|---|---|---|---|
-| 1 | 对勾 | `assets/ui/ui_check.svg` | 确认、已订阅、表单通过 | ⏳ |
-| 2 | 圆形对勾 | `assets/ui/ui_check_circle.svg` | 成功状态徽章 | ⏳ |
-| 3 | 左箭头/返回 | `assets/ui/ui_arrow_back.svg` | 导航栏返回按钮 | ⏳ |
-| 4 | 齿轮/设置 | `assets/ui/ui_settings.svg` | 设置入口 | ⏳ |
-| 5 | 信封/邮件 | `assets/ui/ui_envelope.svg` | 支持邮箱 | ⏳ |
-| 6 | 空心星 | `assets/ui/ui_star_outline.svg` | 未收藏 | ⏳ |
-| 7 | 实心星 | `assets/ui/ui_star_filled.svg` | 已收藏 | ⏳ |
-
----
-
-### D. 金币/积分图标(2 张)
-
-**用途**:TV 顶部栏显示孩子积分余额。
-
-| # | 图标 | 文件路径(@1x) | 文件路径(@2x) | 状态 |
-|---|---|---|---|---|
-| 1 | 静态金币 | `assets/ui/ui_coin.webp` | `assets/ui/ui_coin@2x.webp` | ⏳ |
-| 2 | 麦克风(收音中) | `assets/ui/ui_mic_active.webp` | - | ⏳ |
-
-**已有但确认复用**(✅ 已在 git):
-- `assets/ui/ui_coin_burst.webp`(获得积分动画)— 开发接上即可
-- `assets/ui/ui_mic.webp`(静默麦克风)— 开发接上即可
-
----
-
-## 🟡 P1 应做(下周完成,提升完成度)
-
-### E. TV 3 个未开发卡片的"敬请期待"插画
-
-**背景**:TV 首页 6 张卡里有 3 张 `enabled: false`(故事地图、冒险探索、投屏分享),点进去要显示"敬请期待"屏。
-
-| # | 文件路径 | 尺寸 | 状态 |
-|---|---|---|---|
-| 1(必做) | `assets/bear/bear_coming_soon.webp` | 600×600 | ⏳ |
-
-或者各做 1 张针对性插画(可选):
-
-| # | 文件路径 | 对应卡 | 状态 |
-|---|---|---|---|
-| 2(可选) | `assets/bear/bear_world_map_soon.webp` | 故事地图 | ⏳ |
-| 3(可选) | `assets/bear/bear_explorer_soon.webp` | 冒险 | ⏳ |
-| 4(可选) | `assets/bear/bear_cast_soon.webp` | 投屏 | ⏳ |
-
-### F. 小熊 Logo 单色版本(用于二维码中心)
-
-**用途**:TV ActivationScreen 二维码正中央嵌的品牌标识。
-
-| # | 文件路径 | 格式 | 状态 |
-|---|---|---|---|
-| 1 | `assets/icon/logo_mono.svg` | SVG 64×64,可染色 | ⏳ |
-
-基于已有 `app_icon_master.webp` 做单色简化版,保留耳朵+头形轮廓。
-
----
-
-## 🟢 P2 加分项(非紧急)
-
-### G. 已有 15 张 ui_*.webp 的 @2x 版本
-
-现有 `assets/ui/` 15 张图,UI 代码用到的 5 张,估计都是 @1x。如果是 96/128px,在 TV 上放大会糊。
-
-**清单**(只列代码真实用到的):
-- `ui_mic.webp` → 需要 @2x 192×192
-- `ui_char_bubble.webp` → 需要 @2x
-- `ui_finger_point.webp` → 需要 @2x
-- `ui_qr_frame.webp` → 需要 @2x
-- `ui_player_play.webp` → 需要 @2x(TV 播放器精细化时用)
-
-**建议**:一起导出 @2x,交付时覆盖同名文件。
-
----
-
-### H. 背景图系列(可选)
-
-代码里现有 `bg/bg_*.webp` 9 张,代码只用了 7 张,2 张冷门(bg_forest、bg_seaside)未分配场景。
-
-如果**设计师觉得有余力**,可以做:
-- **TV DialogueScreen 专用背景** `bg_dialogue_studio.webp`(温馨书房/魔法小屋氛围)
-- **TV HomeScreen 专用背景** `bg_home_cozy.webp`(主页背景,现在是纯色)
-
-尺寸:1920×1080 WebP。
-
----
-
-## 📂 Git 推送规范
-
-1. 所有新文件放 `assets/<子目录>/` 下
-2. 文件名全小写,下划线,按功能前缀分组
-3. push 后 5-10 分钟 CDN 自动生效(`https://cdn.jsdelivr.net/gh/snugogo/wonderbear@main/assets/...`)
-4. 如果**覆盖现有文件**(比如 @2x 重做),跟 PM 沟通后再推,避免开发方正在引用 @1x
-
----
-
-## ⏱ 预计工时
-
-| 任务 | 估时 |
-|---|---|
-| A. TV 首页 6 张卡片图标(@1x + @2x,12 文件) | 1.5-2 天 |
-| ~~B. 5 张熊图重做 @2x~~ | ~~已取消(图源已经是 1024×1024)~~ |
-| C. 7 个 SVG 图标 | 半天 |
-| D. 金币 + 麦克风激活态 | 半天 |
-| E. 敬请期待插画 1-4 张 | 半天-1 天 |
-| F. 单色 Logo SVG | 2 小时 |
-| G. UI @2x | 半天(如果有源文件) |
-| H. 背景图(可选) | 1 天 |
-
-**P0 全做完:约 2-3 个工作日**(少一项 B,省了 1 天)
-
----
-
-## ❓ 交付前确认清单(给设计师自查)
-
-- [ ] 文件格式符合规范(SVG/WebP/PNG)
-- [ ] 文件名符合命名规则(小写+下划线+功能前缀)
-- [ ] 透明背景(除非明确要求保留背景)
-- [ ] 风格跟现有 96 张素材一致(毛绒水彩,不是扁平矢量)
-- [ ] 配色在项目色板内
-- [ ] @2x 版本文件名带 `@2x` 后缀或同名存不同目录
-- [ ] 导出时做过压缩(WebP 质量 80-85,避免过大)
-- [ ] push 到 git 后用 CDN URL 实际打开确认能正常显示
-
----
-
-**结束**。有问题或素材不明确的,跟 PM(创始人)直接沟通,不要自己脑补需求。
-
----
-
-## 📊 快速索引:当前所有待办状态
-
-**P0 清单**(总计 22 个文件 / 7 个 SVG):
-
-| 批次 | 总数 | ⏳ 待画 | 🎨 画中 | ✅ 已交付 |
-|---|---|---|---|---|
-| A. TV 首页 6 卡(含 @2x) | 12 | 12 | 0 | 0 |
-| C. 基础 SVG 图标 | 7 | 7 | 0 | 0 |
-| D. 金币 + 麦克风 | 3 | 3 | 0 | 0 |
-| **P0 总计** | **22** | **22** | **0** | **0** |
-
-**P1 清单**:
-
-| 批次 | 总数 | ⏳ | 🎨 | ✅ |
-|---|---|---|---|---|
-| E. 敬请期待插画 | 1-4 | 1-4 | 0 | 0 |
-| F. 单色 Logo SVG | 1 | 1 | 0 | 0 |
-
----
-
-## 🔄 文档更新流程
-
-### 📌 什么时候更新这个文档?
-
-| 触发事件 | 谁来改 | 改什么 |
-|---|---|---|
-| 设计师开始画一批图 | 设计师 | ⏳ → 🎨 |
-| 设计师 push 图到 git | 设计师 | 🎨 → ✅ |
-| 创始人决定加新需求 | 创始人 | 追加新行,状态 ⏳ |
-| 某图被返工重画 | 任一方告知创始人 | ✅ → 🟡 |
-| 某图被弃用/替换 | 创始人 | 标记 ⛔,加 CHANGELOG |
-| 文件名变更 | **必须创始人批准** | rename + CHANGELOG |
-
-### 📌 修改规则(严格)
-
-1. **文件名不可擅自 rename** — 任何改动都会破坏代码和设计师的契约
-2. **所有状态变更必须 commit 本文档** — 否则其他人看不到
-3. **CHANGELOG 必须加一行** — 日期 + 动作 + 原因
-
-### 📌 修改示例
-
-```bash
-# 场景:设计师画完 ui_home_create 这一张,推图 + 改状态
-cd /e/AI/software/story/wonderbear
-# 1. 推图
-cp /path/to/new/ui_home_create.webp assets/ui/
-cp /path/to/new/ui_home_create@2x.webp assets/ui/
-# 2. 改 NAMING_CONTRACT.md 里对应行的状态 ⏳ → ✅
-# 3. 底部 CHANGELOG 加一行
-# 4. 统一 commit
-git add assets/ui/ui_home_create* assets/NAMING_CONTRACT.md
-git commit -m "feat(assets): deliver ui_home_create + @2x"
-git push
+## CDN访问规则
+
+```
+完整URL = https://cdn.jsdelivr.net/gh/snugogo/wonderbear@main/assets/{目录}/{文件名}
+
+示例：
+bear_idle    → .../assets/bear/bear_idle.webp
+bg_home_cozy → .../assets/bg/bg_home_cozy.webp
+ui_check     → .../assets/svg/ui_check.svg
 ```
 
----
-
-## 📜 CHANGELOG(按时间倒序,最新在上)
-
-### 2026-04-23
-- [+] 文档升级为正式 NAMING_CONTRACT(原 DESIGNER_ASSETS_TODO_v2)
-- [+] 所有资产加状态标记 ⏳/🎨/🟡/✅/⛔
-- [+] 文件路径统一为 `assets/<子目录>/<文件名>` 完整形式
-- [+] 新增 CHANGELOG 段
-
-### 2026-04-22
-- [+] 初版资产清单(DESIGNER_ASSETS_TODO_v2)
-- [+] 确认任务 B(熊图重做 @2x)不需要,已有 1024×1024 图源充足
-- [✅] app_icon 系列 11 张交付(`app_icon_48/72/96/144/192/512/1024.png` + `adaptive_bg/fg.png` + `notification.png` + `master.webp`)
+push到git后5-10分钟CDN自动生效。
 
 ---
 
-## 🎯 给三端的使用指引
+## 开发引用规范
+
+```js
+// TV端（jsDelivr CDN）
+const CDN = 'https://cdn.jsdelivr.net/gh/snugogo/wonderbear@main/assets'
+const bearIdle = `${CDN}/bear/bear_idle.webp`
+
+// H5端（本地public/assets/）
+import { asset } from '@/config/assets'
+<img :src="asset('bear.idle')" />
+```
+
+**绝对禁止**：
+- ❌ UI中出现任何emoji（🐻🧸🎉❤🎤★🪙等）
+- ❌ 页面用纯色CSS背景（有bg_图的页面必须用图）
+- ❌ 图片加载失败用emoji fallback（用纯色方块+字母代替）
+
+---
+
+---
+
+## 三端使用指引
 
 ### 设计师
+- 新图按本文件的命名规则和目录存放，push到git的`assets/`目录
+- 改名必须找创始人批准，不要自己改
+- push完在CHANGELOG加一行
 
-- **每次画新图前**:查这里的 ⏳ 清单,按优先级 A → C → D → E → F 挑
-- **每次 push 图后**:顺手 `⏳ → ✅` + 加 CHANGELOG
-- **需要改名**:**找创始人批准**,不要自己改
-
-### H5 / TV 开发者
-
-- **写代码引用图时**:文件名直接照这里抄,**即使状态是 ⏳ 也能用**(代码先写,图后到,CDN 10 分钟生效)
-- **发现需要新图**:**不要自己加文件名**,告诉创始人新增需求
-- **发现某图在 git 上没找到**:查这里的状态,如果 ⏳ → 等设计师;如果 ✅ → 报告创始人"图丢了"
+### TV / H5 开发者
+- 文件名直接照这里抄，CDN push后5-10分钟生效
+- 图还没到位时先用CSS占位（纯色方块+字母），**禁止用emoji**
+- 发现需要新图：告诉创始人，不要自己造SVG或改名
 
 ### 创始人
+- 任何改名/新增/弃用由你最终拍板
+- 每次有变更在CHANGELOG加一行，日期+内容
+- 发现谁擅自改文件名立即回退
 
-- **每周五看一眼这个文档**:统计 ⏳ 数量,跟进设计师进度
-- **决策仲裁**:任何改名/新增/弃用,由你最终拍板
-- **强制纪律**:看到谁擅自改文件名,立即回退
+---
+
+## 文档更新规则
+
+1. **文件名一旦确定不可擅自改** — 改名会破坏所有引用它的代码
+2. **新增图片** — 在对应目录章节追加一行，CHANGELOG记录
+3. **弃用图片** — 标注`（已弃用）`，不要删行，CHANGELOG记录
+4. **改名** — 必须创始人批准，同步更新所有引用代码，CHANGELOG记录
+
+---
+
+## CHANGELOG
+
+### 2026-04-23 · v7.4
+- 新增 `bear/bear_bow_curtain.webp`（故事谢幕鞠躬）
+- 新增 `bg/bg_home_cozy.webp`（TV首页专用背景）
+- 新增 `bg/bg_activation.webp`（激活/扫码页背景）
+- 新增 `svg/` 目录，7个线形SVG图标全部完成
+- 完善各页面图片使用规范和背景图分配
+
+### 2026-04-22 · v7.3
+- 新增 `ui/ui_home_create/stories_map/library/explore/profile/cast.webp`（TV首页6张功能卡）
+- 新增 `ui/ui_coin.webp`（静态金币）
+- 新增 `ui/ui_mic_active.webp`（麦克风激活态）
+- 新增 `bear/bear_coming_soon.webp`（敬请期待）
+
+### 2026-04-21 · v7.0
+- 初始版本，96张图完整生成并推git
+- 包含bear(32张)/bg(9张)/ui(15张)/deco(9张)/h5(10张)/avatar(17张)/story(3张)/icon(1张)/marketing(7张)
