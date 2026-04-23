@@ -268,11 +268,18 @@ async function liveStoryJson({ systemPrompt, dialogueSummary, childProfile }) {
   });
   if (!resp.ok) throw new Error(`Gemini story HTTP ${resp.status}`);
   const data = await resp.json();
-  const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';
+  let raw = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';
+  // Strip markdown code fences if present (Gemini 2.5 sometimes wraps JSON)
+  raw = raw.trim();
+  if (raw.startsWith('```json')) raw = raw.slice(7);
+  else if (raw.startsWith('```')) raw = raw.slice(3);
+  if (raw.endsWith('```')) raw = raw.slice(0, -3);
+  raw = raw.trim();
   let parsed;
   try {
     parsed = JSON.parse(raw);
-  } catch {
+  } catch (parseErr) {
+    console.error('[llm] Gemini parse error:', parseErr.message, 'raw length:', raw.length, 'first 300:', raw.slice(0, 300));
     throw new Error(`Gemini story returned non-JSON: ${raw.slice(0, 200)}`);
   }
   if (!Array.isArray(parsed.pages) || parsed.pages.length !== 12) {
