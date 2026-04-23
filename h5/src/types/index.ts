@@ -154,7 +154,23 @@ export interface StorySummary {
   downloaded?: boolean;
 }
 
-/** 故事完整对象 */
+/**
+ * 对话摘要(结构化 object)
+ *
+ * 对齐权威:
+ *   - TV tv-html/src/services/api.ts 的 `DialogueSummary`(0c7f8bc)
+ *   - server-v7/docs/spec/API_ACTUAL_FORMAT.md §批次 4 §7.6
+ *
+ * 字段含义:主角 / 场景 / 冲突(故事三要素)。
+ * UI 要展示"一句话摘要"时,由 view 层按需把三字段拼成字符串。
+ */
+export interface DialogueSummary {
+  mainCharacter: string;
+  scene: string;
+  conflict: string;
+}
+
+/** 故事完整对象(对齐 API_ACTUAL_FORMAT 批次 4 §7.6 + TV 0c7f8bc) */
 export interface Story {
   id: string;
   childId: string;
@@ -163,22 +179,35 @@ export interface Story {
   coverUrl: string;
   coverUrlHd?: string;
   pages: StoryPage[];
+  /**
+   * `summary` 是结构化的 DialogueSummary 对象,**不是**预拼好的字符串。
+   * 需要一句话展示的 view 要自己组装,参考 §7.6。
+   */
   dialogue: {
-    summary: string;
+    summary: DialogueSummary;
     rounds: Array<{ q: string; a: string }>;
   };
+  /**
+   * `metadata` 只有 `primaryLang / learningLang / provider` 稳定必填;
+   * `duration` / `createdAt` 在 mock 路径下不发,故为可选。
+   * `provider` 含 `'mock'`(dev 未配 LLM / 生图 / TTS key 时)。
+   */
   metadata: {
     primaryLang: Locale;
     learningLang: Locale | 'none';
-    duration: number;
-    provider: 'openai' | 'gemini' | 'fal' | 'mixed';
-    createdAt: string;
+    provider: 'openai' | 'gemini' | 'fal' | 'mixed' | 'mock';
+    duration?: number;
+    createdAt?: string;
   };
   status: 'completed';
   isPublic: boolean;
   favorited: boolean;
   playCount: number;
   downloaded?: boolean;
+  /** 顶层 `createdAt`(§7.6)。H5 所有时间展示以此为准,不读 metadata.createdAt。 */
+  createdAt: string;
+  /** 状态到 `completed` 时置时间戳,仍在生成则为 null。 */
+  completedAt?: string | null;
 }
 
 export interface StoryPage {

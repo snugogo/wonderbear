@@ -109,6 +109,7 @@ const STORY_TITLES = [
 function buildStory(idx: number): Story {
   const id = `cm_story_${idx + 1}`;
   const title = STORY_TITLES[idx];
+  const createdAt = new Date(Date.now() - idx * 86400_000).toISOString();
   return {
     id,
     childId: 'cm_child_demo',
@@ -126,21 +127,27 @@ function buildStory(idx: number): Story {
       ttsUrlLearning: null,
       durationMs: 8000,
     })),
+    // 对齐 API_ACTUAL_FORMAT §批次 4 §7.6:summary 是 DialogueSummary 对象
     dialogue: {
-      summary: 'A magical adventure with bears',
+      summary: {
+        mainCharacter: '小熊',
+        scene: '森林',
+        conflict: '找到失踪的蜂蜜罐',
+      },
       rounds: [{ q: '想听什么故事?', a: '想听小熊的故事' }],
     },
     metadata: {
       primaryLang: 'zh',
       learningLang: 'en',
+      provider: 'mock',
       duration: 96,
-      provider: 'mixed',
-      createdAt: new Date(Date.now() - idx * 86400_000).toISOString(),
     },
     status: 'completed',
     isPublic: false,
     favorited: idx === 0 || idx === 2,
     playCount: Math.floor(Math.random() * 8),
+    createdAt,
+    completedAt: createdAt,
   };
 }
 
@@ -684,7 +691,8 @@ route('GET', '/api/story/list', async (data) => {
     id: s.id,
     title: s.title,
     coverUrl: s.coverUrl,
-    createdAt: s.metadata.createdAt,
+    // 顶层 createdAt(对齐 API_ACTUAL_FORMAT §7.6),不再从 metadata 取
+    createdAt: s.createdAt,
     playCount: s.playCount,
     favorited: s.favorited,
     primaryLang: s.metadata.primaryLang,
