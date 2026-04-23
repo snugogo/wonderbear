@@ -235,6 +235,36 @@ function mockStoryJson({ dialogueSummary, childProfile }) {
 }
 
 async function liveStoryJson({ systemPrompt, dialogueSummary, childProfile }) {
+  // Try Gemini first, fallback to OpenAI on 429/5xx/timeout
+  let geminiError = null;
+  try {
+    return await callGeminiStory({ systemPrompt, dialogueSummary, childProfile });
+  } catch (err) {
+    geminiError = err;
+    const msg = String(err?.message || '');
+    const shouldFallback = msg.includes('429') || msg.includes('5') && /HTTP [5]\d\d/.test(msg) || msg.includes('timeout');
+    if (!shouldFallback) throw err;
+    console.log(`[llm] Gemini failed (${msg.slice(0, 100)}), falling back to OpenAI`);
+  }
+
+  // Fallback to OpenAI gpt-4o-mini
+  if (!env.OPENAI_API_KEY) {
+    throw geminiError; // No fallback available
+  }
+  try {
+    return await callOpenAIStory({ systemPrompt, dialogueSummary, childProfile });
+  } catch (openaiErr) {
+    // Both failed — throw original Gemini error with OpenAI context
+    const combined = new Error(
+      `Gemini: ${geminiError?.message}; OpenAI fallback: ${openaiErr?.message}`
+    );
+    combined.geminiError = geminiError;
+    combined.openaiError = openaiErr;
+    throw combined;
+  }
+}
+
+async function callGeminiStory({ systemPrompt, dialogueSummary, childProfile }) {
   const body = {
     contents: [
       { role: 'user', parts: [{ text: systemPrompt }] },
@@ -277,6 +307,52 @@ async function liveStoryJson({ systemPrompt, dialogueSummary, childProfile }) {
   }
   if (!Array.isArray(parsed.pages) || parsed.pages.length !== 12) {
     throw new Error(`Gemini story returned ${parsed?.pages?.length ?? 0} pages, expected 12`);
+  }
+  return parsed;
+}
+
+async function callOpenAIStory({ systemPrompt, dialogueSummary, childProfile }) {
+  const userPrompt = [
+    'Child profile:',
+    JSON.stringify(childProfile),
+    '',
+    'Dialogue summary:',
+    JSON.stringify(dialogueSummary),
+    '',
+    'Now produce the 12-page story JSON as specified.',
+  ].join('\n');
+
+  const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      temperature: 0.85,
+      max_tokens: 4096,
+      response_format: { type: 'json_object' },
+    }),
+  });
+  if (!resp.ok) {
+    const errBody = await resp.text().catch(() => '');
+    throw new Error(`OpenAI story HTTP ${resp.status}: ${errBody.slice(0, 200)}`);
+  }
+  const data = await resp.json();
+  const raw = data?.choices?.[0]?.message?.content ?? '{}';
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(`OpenAI story returned non-JSON: ${raw.slice(0, 200)}`);
+  }
+  if (!Array.isArray(parsed.pages) || parsed.pages.length !== 12) {
+    throw new Error(`OpenAI story returned ${parsed?.pages?.length ?? 0} pages, expected 12`);
   }
   return parsed;
 }
