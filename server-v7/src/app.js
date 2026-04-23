@@ -32,8 +32,6 @@ import childRoutes from './routes/child.js';
 import parentRoutes from './routes/parent.js';
 import storyRoutes from './routes/story.js';
 import ttsRoutes from './routes/tts.js';
-import storyLibraryRoutes from './routes/story-library.js';
-import storyRoutes from './routes/story.js';
 
 export async function buildApp() {
   const app = Fastify({
@@ -84,11 +82,6 @@ export async function buildApp() {
   await app.register(parentRoutes);
   await app.register(storyRoutes);
   await app.register(ttsRoutes);
-  // IMPORTANT: /api/story/list must register BEFORE /api/story/:id so the
-  // literal segment wins over the parametric one in Fastify's router.
-  await app.register(storyLibraryRoutes);
-  await app.register(storyRoutes);
-
   // 5. Friendly root landing
   app.get('/', async () => ({
     name: 'WonderBear API',
