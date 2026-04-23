@@ -94,12 +94,13 @@ const iconUrl = computed<string>(() => (props.icon ? asset(props.icon) : ''));
   background: rgba(255, 245, 230, 0.06);
   border: 1px solid rgba(255, 200, 87, 0.15);
   border-radius: var(--r-lg);
-  padding: var(--sp-4);
+  /* Compact padding so 2×3 grid fits in 1280×720 with topbar + hintbar. */
+  padding: var(--sp-3);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--sp-3);
+  gap: var(--sp-2);
   transition: background var(--t-fast) var(--ease-out),
               border-color var(--t-fast) var(--ease-out),
               transform var(--t-fast) var(--ease-out);
@@ -112,8 +113,9 @@ const iconUrl = computed<string>(() => (props.icon ? asset(props.icon) : ''));
 .menu-card.disabled { opacity: 0.45; }
 
 .card-art {
-  width: 200px;
-  height: 200px;
+  /* 140×140 fits comfortably in the 272px/row budget at 1280×720. */
+  width: 140px;
+  height: 140px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -135,12 +137,12 @@ const iconUrl = computed<string>(() => (props.icon ? asset(props.icon) : ''));
  * legible on TV at 2-3m distance without any emoji.
  */
 .card-icon-placeholder {
-  width: 160px;
-  height: 160px;
+  width: 110px;
+  height: 110px;
   border-radius: 50%;
   background: linear-gradient(135deg, #ffe4cc, #ffd9b8);
   color: #ff8a3d;
-  font-size: 80px;
+  font-size: 56px;
   font-weight: 700;
   display: flex;
   align-items: center;

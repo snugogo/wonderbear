@@ -132,15 +132,11 @@ onMounted(async () => {
     <img class="bg" :src="asset('bg/bg_home_cozy.webp')" alt="" aria-hidden="true" onerror="this.style.display='none'" />
 
     <!--
-      TV_TASKS v1.1 P0-3: bear_idle decoration bottom-right of home, 280×280.
-      Kept separate from the 6 menu cards so it reads as a passive companion.
+      bg_home_cozy already paints cozy bears / shelves / plants in the
+      background watercolor, so a foreground bear_idle deco adds visual
+      noise and competes with the 6 menu cards for attention. Removed
+      2026-04-23; re-add with a smaller deco if designer asks.
     -->
-    <img
-      class="home-bear-deco"
-      :src="asset('bear/bear_idle.webp')"
-      alt=""
-      aria-hidden="true"
-    />
 
     <!-- Top status bar -->
     <header class="topbar">
@@ -214,20 +210,6 @@ onMounted(async () => {
   pointer-events: none;
 }
 
-.home-bear-deco {
-  position: absolute;
-  bottom: -24px;
-  right: -24px;
-  width: 280px;
-  height: 280px;
-  object-fit: contain;
-  opacity: 0.9;
-  z-index: 0;
-  filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.35));
-  pointer-events: none;
-  user-select: none;
-}
-
 /* Keep topbar + grid above background layers. */
 .topbar, .menu-grid {
   position: relative;
@@ -236,7 +218,8 @@ onMounted(async () => {
 
 .topbar {
   flex: 0 0 auto;
-  height: 80px;
+  /* Compact 64px so menu-grid gets more vertical room. */
+  height: 64px;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
@@ -293,8 +276,10 @@ onMounted(async () => {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   grid-template-rows: 1fr 1fr;
-  gap: var(--sp-4);
-  /* Bottom padding leaves room for the 56px HintBar so cards don't sit under it. */
-  padding: var(--sp-4) var(--sp-6) 72px;
+  /* Tight gap + minimized padding ensures both rows fit in 1280×720. */
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-5) 72px;
+  /* Prevent any 1-row overflow collapsing on tight viewports. */
+  min-height: 0;
 }
 </style>

@@ -27,12 +27,16 @@ import './styles/global.css';
  * Gallery mode short-circuit. Activated by ?gallery=1 (dev only).
  * Mounts GalleryView instead of App and skips all activation/refresh logic.
  * Zero impact on normal bootstrap.
+ *
+ * 2026-04-23: startKeyRouter() must run here too, otherwise arrow/OK/Back
+ * keys are dead inside the previewed screen (normal bootstrap path is skipped).
  */
 async function bootstrapGallery(): Promise<void> {
   const { default: GalleryView } = await import('./dev/GalleryView.vue');
   const app = createApp(GalleryView);
   app.use(createPinia());
   app.use(i18n);
+  startKeyRouter();
   app.mount('#app');
 }
 
