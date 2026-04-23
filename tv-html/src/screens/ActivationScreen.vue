@@ -150,18 +150,26 @@ onBeforeUnmount(() => {
   gap: var(--sp-7);
 }
 
+.activation-screen {
+  background: var(--c-bg-canvas);
+}
 .bg {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  opacity: 0.9;
+  opacity: 1;
   z-index: 0;
   user-select: none;
   pointer-events: none;
 }
 
+/*
+ * .bg-warmth sits BEHIND .bg as the solid-color fallback that shows while
+ * the CDN watercolor is still loading (or if it 404s). Watercolor paints
+ * over it at opacity 1 once loaded.
+ */
 .bg-warmth {
   position: absolute;
   inset: 0;
@@ -169,7 +177,7 @@ onBeforeUnmount(() => {
     radial-gradient(ellipse at 30% 40%, rgba(255, 200, 87, 0.18), transparent 55%),
     radial-gradient(ellipse at 80% 70%, rgba(255, 126, 95, 0.15), transparent 50%),
     var(--c-bg-canvas);
-  z-index: 0;
+  z-index: -1;
 }
 
 .hero {

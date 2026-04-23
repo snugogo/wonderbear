@@ -182,15 +182,19 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  opacity: 0.45;
+  opacity: 1;
   user-select: none;
   pointer-events: none;
 }
 
+/*
+ * Learning flashcards need text legibility; keep a light darkening overlay
+ * (0.55 → 0.25) so the watercolor meadow reads as atmosphere not mud.
+ */
 .overlay {
   position: absolute;
   inset: 0;
-  background: rgba(26, 15, 10, 0.55);
+  background: rgba(26, 15, 10, 0.25);
   pointer-events: none;
 }
 

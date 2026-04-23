@@ -201,7 +201,7 @@ onMounted(async () => {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  opacity: 0.55;
+  opacity: 1;
   z-index: 0;
   user-select: none;
   pointer-events: none;
