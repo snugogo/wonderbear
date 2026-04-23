@@ -443,7 +443,7 @@ async function callOpenAI(prompt) {
 // Nano Banana (Gemini 2.5 Flash Image Preview) — implemented in Phase 3.
 async function callNanoBanana(prompt) {
   if (!env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY not configured');
-  const model = process.env.NANO_BANANA_MODEL || 'gemini-2.5-flash-image-preview';
+  const model = process.env.NANO_BANANA_MODEL || 'gemini-2.5-flash-image';
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`;
   const resp = await fetch(url, {
     method: 'POST',
