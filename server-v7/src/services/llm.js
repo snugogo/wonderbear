@@ -20,7 +20,7 @@
 import env from '../config/env.js';
 
 const GEMINI_URL =
-  'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+  'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
 export function isMockMode() {
   if (process.env.USE_MOCK_AI === 'true' || process.env.USE_MOCK_AI === '1') return true;
@@ -242,7 +242,7 @@ async function liveStoryJson({ systemPrompt, dialogueSummary, childProfile }) {
   } catch (err) {
     geminiError = err;
     const msg = String(err?.message || '');
-    const shouldFallback = msg.includes('429') || msg.includes('5') && /HTTP [5]\d\d/.test(msg) || msg.includes('timeout');
+    const shouldFallback = msg.includes('429') || msg.includes('404') || /HTTP [5]\d\d/.test(msg) || msg.includes('timeout');
     if (!shouldFallback) throw err;
     console.log(`[llm] Gemini failed (${msg.slice(0, 100)}), falling back to OpenAI`);
   }
