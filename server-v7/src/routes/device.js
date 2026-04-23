@@ -263,15 +263,22 @@ export default async function deviceRoutes(fastify) {
 
   // ------------------------------------------------------------------
   // 5.3 POST /api/device/bind
+  //
+  // deviceId is OPTIONAL (per H5 product decision 2026-04-23):
+  //   - If body has deviceId: classic lookup by (deviceId, activationCode) pair.
+  //     This keeps the QR-scan / RegisterView path working unchanged.
+  //   - If body has only activationCode: look up ActivationCode uniquely by
+  //     code, follow its `usedByDeviceId` back to the Device that consumed
+  //     it. This powers the manual-entry dialog in DevicesView where the TV
+  //     does not surface deviceId to the user.
   // ------------------------------------------------------------------
   fastify.post('/api/device/bind',
     { onRequest: [fastify.authenticateParent] },
     async (request) => {
       const { sub: parentId } = request.auth;
       const body = request.body ?? {};
-      const { deviceId, activationCode, forceOverride } = body;
+      const { deviceId: deviceIdFromBody, activationCode, forceOverride } = body;
 
-      validateDeviceId(deviceId);
       validateActivationCode(activationCode);
 
       // Check parent's device count
@@ -283,9 +290,27 @@ export default async function deviceRoutes(fastify) {
         throw new BizError(ErrorCodes.MAX_DEVICES_REACHED);
       }
 
+      // Resolve which device this activationCode corresponds to.
+      // Path A (deviceId provided): classic, validate id format first.
+      // Path B (deviceId omitted): reverse-lookup via ActivationCode.usedByDeviceId.
+      let resolvedDeviceId;
+      if (deviceIdFromBody) {
+        validateDeviceId(deviceIdFromBody);
+        resolvedDeviceId = deviceIdFromBody;
+      } else {
+        const codeRow = await prisma.activationCode.findUnique({
+          where: { code: activationCode },
+        });
+        if (!codeRow || codeRow.status === 'revoked' || !codeRow.usedByDeviceId) {
+          // Code never issued / revoked / TV hasn't registered yet
+          throw new BizError(ErrorCodes.ACTIVATION_CODE_INVALID);
+        }
+        resolvedDeviceId = codeRow.usedByDeviceId;
+      }
+
       // Find device
       const device = await prisma.device.findUnique({
-        where: { deviceId },
+        where: { deviceId: resolvedDeviceId },
         include: { oemConfig: true, activationCodeRef: true },
       });
 
