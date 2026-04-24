@@ -1,0 +1,89 @@
+{
+  "storyId": "cmocghr2z0001wevf27mdozx4",
+  "rows": [
+    {
+      "page": 1,
+      "provider": "nano_banana",
+      "bytes": 1901656,
+      "file": "page-01.png",
+      "mime": "image/png"
+    },
+    {
+      "page": 2,
+      "provider": "fal-kontext",
+      "bytes": 386965,
+      "file": "page-02.jpeg",
+      "mime": "image/jpeg"
+    },
+    {
+      "page": 3,
+      "provider": "fal-kontext",
+      "bytes": 412500,
+      "file": "page-03.jpeg",
+      "mime": "image/jpeg"
+    },
+    {
+      "page": 4,
+      "provider": "fal-kontext",
+      "bytes": 395462,
+      "file": "page-04.jpeg",
+      "mime": "image/jpeg"
+    },
+    {
+      "page": 5,
+      "provider": "fal-kontext",
+      "bytes": 389172,
+      "file": "page-05.jpeg",
+      "mime": "image/jpeg"
+    },
+    {
+      "page": 6,
+      "provider": "fal-kontext",
+      "bytes": 407623,
+      "file": "page-06.jpeg",
+      "mime": "image/jpeg"
+    },
+    {
+      "page": 7,
+      "provider": "fal-kontext",
+      "bytes": 421848,
+      "file": "page-07.jpeg",
+      "mime": "image/jpeg"
+    },
+    {
+      "page": 8,
+      "provider": "fal-kontext",
+      "bytes": 433220,
+      "file": "page-08.jpeg",
+      "mime": "image/jpeg"
+    },
+    {
+      "page": 9,
+      "provider": "fal-kontext",
+      "bytes": 379166,
+      "file": "page-09.jpeg",
+      "mime": "image/jpeg"
+    },
+    {
+      "page": 10,
+      "provider": "fal-kontext",
+      "bytes": 461648,
+      "file": "page-10.jpeg",
+      "mime": "image/jpeg"
+    },
+    {
+      "page": 11,
+      "provider": "fal-kontext",
+      "bytes": 398184,
+      "file": "page-11.jpeg",
+      "mime": "image/jpeg"
+    },
+    {
+      "page": 12,
+      "provider": "fal-kontext",
+      "bytes": 429734,
+      "file": "page-12.jpeg",
+      "mime": "image/jpeg"
+    }
+  ]
+}

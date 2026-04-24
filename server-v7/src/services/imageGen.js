@@ -410,6 +410,14 @@ async function mockProvider({ provider, pageNum, seed }) {
 
 async function callOpenAI(prompt) {
   if (!env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not configured');
+  // DEBUG: Phase-C fallback chain test harness. When DEBUG_FORCE_OPENAI_FAIL=1,
+  // simulate every OpenAI image call as a safety rejection so the pipeline
+  // flows through Gemini rewrite Try2/Try3 and falls through to Nano Banana.
+  if (process.env.DEBUG_FORCE_OPENAI_FAIL === '1' || process.env.DEBUG_FORCE_OPENAI_FAIL === 'true') {
+    const err = new Error('DEBUG_FORCE_OPENAI_FAIL: Your request was rejected as a result of our safety system');
+    err.status = 400;
+    throw err;
+  }
   const resp = await fetch('https://api.openai.com/v1/images/generations', {
     method: 'POST',
     headers: {

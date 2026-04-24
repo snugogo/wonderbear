@@ -1,0 +1,5 @@
+file	model	quality	http	bytes	duration_s	error_excerpt
+01-image2-high	gpt-image-2	high	403	0	1	{   "error": {     "message": "Your organization must be verified to use the model `gpt-image-2`. Please go to: https://platform.openai.com/settings/organization/general and click on Verify Organization. If you just verified, it can take up to 15 minutes for access to propagate.",     "type": "invalid_request_error",     "param": null,     "code": null   } }
+02-image2-medium	gpt-image-2	medium	403	0	1	{   "error": {     "message": "Your organization must be verified to use the model `gpt-image-2`. Please go to: https://platform.openai.com/settings/organization/general and click on Verify Organization. If you just verified, it can take up to 15 minutes for access to propagate.",     "type": "invalid_request_error",     "param": null,     "code": null   } }
+03-image1.5-high	gpt-image-1.5	high	200	3270588	50	
+04-image1-medium	gpt-image-1	medium	200	2321934	25	
