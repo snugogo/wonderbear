@@ -35,6 +35,7 @@ const COST = {
 };
 
 const OPENAI_MODEL = process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1';
+const OPENAI_QUALITY = process.env.OPENAI_IMAGE_QUALITY || 'medium';
 
 export function isMockMode() {
   if (process.env.USE_MOCK_AI === 'true' || process.env.USE_MOCK_AI === '1') return true;
@@ -419,7 +420,7 @@ async function callOpenAI(prompt) {
       model: OPENAI_MODEL,
       prompt,
       size: '1536x1024',
-      quality: 'medium',
+      quality: OPENAI_QUALITY,
       n: 1,
     }),
   });
