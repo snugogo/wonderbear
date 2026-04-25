@@ -11,6 +11,7 @@
 
 import { createHash } from 'node:crypto';
 import env from '../config/env.js';
+import { persistAudio } from './mediaStorage.js';
 
 export function isMockMode() {
   if (process.env.USE_MOCK_AI === 'true' || process.env.USE_MOCK_AI === '1') return true;
@@ -19,7 +20,7 @@ export function isMockMode() {
 }
 
 // Simple in-process cache — keyed by sha256(text|voice|lang|speed).
-// Real deployment will use R2 + signed URLs; Phase 1 is mock-only.
+// Cached value is the post-persistence shape (R2 URL or dataURL fallback).
 const cache = new Map();
 
 function defaultVoiceId(lang) {
@@ -45,9 +46,18 @@ function cacheKey({ text, voiceId, lang, speed }) {
  * @param {'zh'|'en'|'pl'|'ro'} args.lang
  * @param {string} [args.voiceId]
  * @param {number} [args.speed=1.0]
+ * @param {string} [args.storyId]          enables R2 persistence
+ * @param {number} [args.pageNum]          enables R2 persistence
  * @returns {Promise<{ audioUrl:string, durationMs:number, cached:boolean }>}
  */
-export async function synthesize({ text, lang = 'en', voiceId = null, speed = 1.0 }) {
+export async function synthesize({
+  text,
+  lang = 'en',
+  voiceId = null,
+  speed = 1.0,
+  storyId = null,
+  pageNum = null,
+}) {
   if (typeof text !== 'string' || text.length === 0) {
     throw new Error('tts.synthesize: text is empty');
   }
@@ -63,6 +73,33 @@ export async function synthesize({ text, lang = 'en', voiceId = null, speed = 1.
   const result = isMockMode()
     ? await mockSynthesize({ text, lang, voiceId: effVoice, speed, key })
     : await liveSynthesize({ text, lang, voiceId: effVoice, speed, key });
+
+  // Persist live-synthesized audio to R2 so the DB doesn't carry base64 blobs.
+  // Mock mode produces plain HTTPS stub URLs already, no need to upload.
+  // Failure here is tolerated: we keep the original dataURL so playback still
+  // works (just bloated DB rows).
+  if (!isMockMode() && storyId && pageNum != null) {
+    try {
+      const persisted = await persistAudio(result.audioUrl, {
+        storyId,
+        pageNum,
+        lang,
+        voiceId: effVoice,
+      });
+      result.audioUrl = persisted.persistedUrl;
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `[tts] persistAudio failed story=${storyId} p${pageNum} lang=${lang}:`,
+        err?.message || err,
+      );
+    }
+  } else if (!isMockMode() && (!storyId || pageNum == null)) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      '[tts] synthesize() called without storyId/pageNum — audio stays as base64 dataURL.',
+    );
+  }
 
   cache.set(key, result);
   return { ...result, cached: false };

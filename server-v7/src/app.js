@@ -32,6 +32,7 @@ import childRoutes from './routes/child.js';
 import parentRoutes from './routes/parent.js';
 import storyRoutes from './routes/story.js';
 import ttsRoutes from './routes/tts.js';
+import debugRoutes from './routes/debug.js';
 
 export async function buildApp() {
   const app = Fastify({
@@ -82,6 +83,8 @@ export async function buildApp() {
   await app.register(parentRoutes);
   await app.register(storyRoutes);
   await app.register(ttsRoutes);
+  // Debug gallery (no /api prefix; gated by DEBUG_GALLERY_PASSWORD)
+  await app.register(debugRoutes);
   // 5. Friendly root landing
   app.get('/', async () => ({
     name: 'WonderBear API',

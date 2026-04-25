@@ -56,14 +56,21 @@ const env = {
   PAYPAL_PLAN_ID_MONTHLY: process.env.PAYPAL_PLAN_ID_MONTHLY,
   PAYPAL_PLAN_ID_YEARLY: process.env.PAYPAL_PLAN_ID_YEARLY,
 
-  // storage
+  // storage — Cloudflare R2 (S3-compat). New names from work-order; old
+  // R2_ACCESS_KEY / R2_SECRET_KEY / R2_BUCKET kept as fallback so existing
+  // .env files don't break.
   R2_ACCOUNT_ID: process.env.R2_ACCOUNT_ID,
-  R2_ACCESS_KEY: process.env.R2_ACCESS_KEY,
-  R2_SECRET_KEY: process.env.R2_SECRET_KEY,
-  R2_BUCKET: process.env.R2_BUCKET || 'wonderbear-assets',
+  R2_ACCESS_KEY_ID: process.env.R2_ACCESS_KEY_ID || process.env.R2_ACCESS_KEY,
+  R2_SECRET_ACCESS_KEY: process.env.R2_SECRET_ACCESS_KEY || process.env.R2_SECRET_KEY,
+  R2_BUCKET_NAME:
+    process.env.R2_BUCKET_NAME || process.env.R2_BUCKET || 'wonderbear-assets',
+  R2_ENDPOINT: process.env.R2_ENDPOINT,
   R2_PUBLIC_URL: process.env.R2_PUBLIC_URL,
   STORAGE_TYPE: process.env.STORAGE_TYPE || 'local',
   LOCAL_STORAGE_PATH: process.env.LOCAL_STORAGE_PATH || './storage',
+
+  // debug
+  DEBUG_GALLERY_PASSWORD: process.env.DEBUG_GALLERY_PASSWORD,
 
   // misc
   IMAGE_STYLE_SUFFIX: process.env.IMAGE_STYLE_SUFFIX || '',
@@ -111,7 +118,14 @@ export const ENV_GROUPS = {
   speech: ['GOOGLE_SPEECH_KEY'],
   stripe: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_PRICE_ID_MONTHLY', 'STRIPE_PRICE_ID_YEARLY'],
   paypal: ['PAYPAL_CLIENT_ID', 'PAYPAL_CLIENT_SECRET', 'PAYPAL_WEBHOOK_ID'],
-  storage: ['R2_ACCOUNT_ID', 'R2_ACCESS_KEY', 'R2_SECRET_KEY', 'R2_PUBLIC_URL'],
+  storage: [
+    'R2_ACCOUNT_ID',
+    'R2_ACCESS_KEY_ID',
+    'R2_SECRET_ACCESS_KEY',
+    'R2_BUCKET_NAME',
+    'R2_ENDPOINT',
+    'R2_PUBLIC_URL',
+  ],
 };
 
 /**
