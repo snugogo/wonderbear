@@ -368,6 +368,12 @@ model ImageGenLog {
   errorCode    Int?
   errorMessage String?
 
+  // R2 persistence (set by storyJob after the upstream image is generated).
+  // Null when persistence wasn't attempted (mock mode, placeholder fallback,
+  // historical rows pre-migration).
+  persistError String?
+  r2Key        String?
+
   createdAt    DateTime @default(now())
 
   @@index([storyId])

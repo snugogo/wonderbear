@@ -22,6 +22,7 @@
 import { generateStoryJson } from '../services/llm.js';
 import { generatePageImage } from '../services/imageGen.js';
 import { synthesize as ttsSynthesize } from '../services/tts.js';
+import { persistImage, persistImageHd } from '../services/mediaStorage.js';
 import { buildStorySystemPrompt } from '../utils/storyPrompt.js';
 
 export function createStoryQueue(prisma, options = {}) {
@@ -105,6 +106,45 @@ export function createStoryQueue(prisma, options = {}) {
         }
       };
 
+      // -- helper: persist a freshly-generated image to R2 (webp + png HD) ---
+      // Mutates imgResult.imageUrl / imageUrlHd in place. Failure of either
+      // upload is logged + tolerated (we keep the original upstream URL so
+      // the story can still complete).
+      const persistImageOutputs = async (imgResult, pageNum) => {
+        if (!imgResult?.imageUrl) return imgResult;
+        if (imgResult.provider === 'placeholder') return imgResult;
+        const persistMeta = { storyId, pageNum, provider: imgResult.provider };
+        const [webp, png] = await Promise.allSettled([
+          persistImage(imgResult.imageUrl, persistMeta),
+          persistImageHd(imgResult.imageUrl, persistMeta),
+        ]);
+        if (webp.status === 'fulfilled') {
+          imgResult.imageUrl = webp.value.persistedUrl;
+          imgResult.r2KeyWebp = webp.value.r2Key || null;
+        } else {
+          // eslint-disable-next-line no-console
+          console.error(
+            `[storyJob ${storyId}] persistImage(webp) p${pageNum}:`,
+            webp.reason?.message || webp.reason,
+          );
+          imgResult.persistError = String(webp.reason?.message || webp.reason).slice(0, 500);
+        }
+        if (png.status === 'fulfilled') {
+          imgResult.imageUrlHd = png.value.persistedUrl;
+          imgResult.r2KeyPng = png.value.r2Key || null;
+        } else {
+          // eslint-disable-next-line no-console
+          console.error(
+            `[storyJob ${storyId}] persistImage(png) p${pageNum}:`,
+            png.reason?.message || png.reason,
+          );
+          imgResult.persistError =
+            (imgResult.persistError ? imgResult.persistError + ' | ' : '') +
+            String(png.reason?.message || png.reason).slice(0, 500);
+        }
+        return imgResult;
+      };
+
       const materializePage = (page, imgResult) => ({
         pageNum: page.pageNum,
         imageUrl: imgResult.imageUrl,
@@ -128,6 +168,10 @@ export function createStoryQueue(prisma, options = {}) {
         onAttempt: logAttempt(coverSrc.pageNum),
         childAge: job.childProfile?.age ?? null,
       });
+      // Push cover to R2 BEFORE pages 2-12 — they'll use the R2 URL as the
+      // FAL kontext reference image, so we need a stable URL that won't 404
+      // 24 hours later.
+      await persistImageOutputs(coverResult, coverSrc.pageNum);
       pagesWithImages[coverIdx] = materializePage(coverSrc, coverResult);
       totalCostCents += coverResult.costCents;
       await prisma.story.update({
@@ -164,6 +208,7 @@ export function createStoryQueue(prisma, options = {}) {
             seed: `${storyId}:${page.pageNum}`,
             onAttempt: logAttempt(page.pageNum),
           });
+          await persistImageOutputs(imgResult, page.pageNum);
           pagesWithImages[i] = materializePage(page, imgResult);
           totalCostCents += imgResult.costCents;
         }));
@@ -185,6 +230,8 @@ export function createStoryQueue(prisma, options = {}) {
           const tts = await ttsSynthesize({
             text: p.text,
             lang: job.childProfile.primaryLang,
+            storyId,
+            pageNum: p.pageNum,
           });
           p.ttsUrl = tts.audioUrl;
           p.durationMs = tts.durationMs;
@@ -197,6 +244,8 @@ export function createStoryQueue(prisma, options = {}) {
             const tts2 = await ttsSynthesize({
               text: p.textLearning,
               lang: job.childProfile.secondLang,
+              storyId,
+              pageNum: p.pageNum,
             });
             p.ttsUrlLearning = tts2.audioUrl;
           } catch {
