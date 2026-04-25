@@ -13,16 +13,18 @@ html, body, #app {
   /*
    * 2026-04-25 iter: Fredoka is now the global default.
    * Stack:
-   *   1. Fredoka          → Latin glyphs (rendered from local woff2)
-   *   2. HanziPen SC      → Chinese (Apple system rounded handwriting)
-   *   3. STHupo / PingFang → Chinese fallbacks
-   *   4. system stack     → ultimate fallback
+   *   1. Fredoka          → Latin glyphs (local woff2, ~34 KB)
+   *   2. LXGW WenKai      → CJK glyphs (chinese-fonts-cdn dynamic chunks)
+   *   3. HanziPen SC      → Apple-only handwriting fallback (if CDN fails)
+   *   4. STHupo / PingFang → Chinese fallbacks
+   *   5. system stack     → ultimate fallback
    * Browser uses each font only for the glyphs it covers, so a Chinese
-   * sentence with English words will get Fredoka for EN + HanziPen for
-   * the CJK characters automatically.
+   * sentence with English words will get Fredoka for EN + LXGW WenKai
+   * for the CJK characters automatically.
    */
   font-family:
     'Fredoka',
+    'LXGW WenKai',
     'HanziPen SC',
     'STHupo', 'ST Hupo',
     'PingFang SC',

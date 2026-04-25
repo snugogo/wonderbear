@@ -37,6 +37,13 @@ const overrides = {
     title: 'Witaj w WonderBear',
     subtitle: 'Odkryj nowe książeczki\nz WonderBear',
   },
+  create: {
+    title: 'Twórz historie',
+    subtitle: 'Naciśnij +, by zacząć magię, lub wybierz historię',
+    newStory: 'Zacznij magię',
+    playFull: 'Odtwórz całość',
+    sequel: 'Stwórz kontynuację',
+  },
   common: { loading: 'Ładowanie…' },
 };
 

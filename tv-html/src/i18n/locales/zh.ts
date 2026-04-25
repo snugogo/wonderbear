@@ -118,9 +118,9 @@ export default {
   create: {
     title: '来讲故事',
     subtitle: '按 + 启动魔法,或选一本故事播放',
-    newStory: 'Start Magic',
-    playFull: 'Play Full',
-    sequel: 'Create Sequel',
+    newStory: '来讲一本',
+    playFull: '看全集',
+    sequel: '编续集',
   },
   story: {
     pageOf: '第 {current} 页 / 共 {total} 页',

@@ -107,7 +107,7 @@ useFocusable(downloadRef, {
         @click="emit('play')"
       >
         <span class="icon-play wb-text-shadow-sm">&#9654;</span>
-        <span class="btn-label wb-text-shadow-sm">Play Full</span>
+        <span class="btn-label wb-text-shadow-sm">{{ t('create.playFull') }}</span>
       </button>
       <button
         ref="sequelRef"
@@ -118,7 +118,7 @@ useFocusable(downloadRef, {
         @click="emit('sequel')"
       >
         <span class="icon-sparkle wb-text-shadow-sm">+</span>
-        <span class="btn-label wb-text-shadow-sm">Create Sequel</span>
+        <span class="btn-label wb-text-shadow-sm">{{ t('create.sequel') }}</span>
       </button>
       <!--
         iter13k-4 secondary action chips: Favorite + Download. Icon-only

@@ -36,6 +36,13 @@ const overrides = {
     title: 'WonderBear へようこそ',
     subtitle: '新しい絵本を\nWonderBear で',
   },
+  create: {
+    title: 'おはなし作り',
+    subtitle: '+ を押して魔法を始めるか、作品を選んでね',
+    newStory: '魔法を始める',
+    playFull: '全話を見る',
+    sequel: '続編を作る',
+  },
   common: { loading: '読み込み中…' },
 };
 

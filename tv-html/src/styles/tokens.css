@@ -2,6 +2,30 @@
    if real device proves CSS variables work, keep this. Otherwise refactor to compile-time. */
 
 /*
+ * 2026-04-25 iter: Chinese display font — LXGW 霞鹜文楷 (LXGW WenKai).
+ *   Why this font:
+ *     - Free / OFL license (open source by user lxgw)
+ *     - Handwritten kai-style: warm + child-friendly (matches Fredoka tone)
+ *     - Balanced stroke width — readable for complex hanzi at TV viewing distance
+ *       (avoids the "ink-blob" effect of overly thick rounded fonts)
+ *     - Covers SC + TC + JP kana, so JP locale also benefits
+ *   Loader: 中文网字计划 (chinese-fonts-cdn.deno.dev) — dynamically slices the
+ *   font into per-page chunks so the browser only downloads chars that are
+ *   actually rendered (~50 KB / page in practice).
+ *
+ *   PRODUCTION PATH (TODO before ship):
+ *     - Replace this @import with locally subsetted woff2 in public/fonts/
+ *       (target ~500 KB-1 MB covering ~3000 most common chars)
+ *     - The CDN above is fine for dev preview but is a third-party service
+ *       and will not work for offline-first / GFW-restricted devices
+ *
+ *   Order matters: this @import comes BEFORE Fredoka @font-face so the CJK
+ *   font registers first, but Fredoka takes precedence in --ff-display
+ *   (Latin chars hit Fredoka, CJK chars fall through to LXGW WenKai).
+ */
+@import url('https://chinese-fonts-cdn.deno.dev/packages/lxgwwenkai/dist/LXGWWenKai-Regular/result.css');
+
+/*
  * 2026-04-25 iter: SELF-HOSTED Fredoka (variable font, v17).
  *   - Was @import from Google Fonts → fails on:
  *       · TV in mainland China (GFW blocks fonts.gstatic.com)
@@ -38,9 +62,12 @@
 
 :root {
   /* Label / headline font — warm rounded playful, used for menu cards,
-     hero titles, gamified chips. Body text keeps the system font stack. */
+     hero titles, gamified chips. Body text keeps the system font stack.
+     Latin chars → Fredoka; CJK chars → LXGW WenKai (handwritten kai);
+     anything else → system stack as last-ditch fallback. */
   --ff-display:
     'Fredoka',
+    'LXGW WenKai',
     'HanziPen SC',
     'STHupo', 'ST Hupo',
     'PingFang SC',

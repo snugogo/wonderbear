@@ -35,6 +35,13 @@ const overrides = {
     title: 'Bienvenido a WonderBear',
     subtitle: 'Descubre nuevos cuentos\ncon WonderBear',
   },
+  create: {
+    title: 'Crear cuentos',
+    subtitle: 'Pulsa + para empezar la magia o elige un cuento',
+    newStory: 'Empezar magia',
+    playFull: 'Ver completo',
+    sequel: 'Crear secuela',
+  },
   common: { loading: 'Cargando…' },
 };
 
