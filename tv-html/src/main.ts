@@ -41,6 +41,14 @@ async function bootstrapGallery(): Promise<void> {
 }
 
 async function bootstrap(): Promise<void> {
+  // Dev-only: show the real OS cursor so mouse input works for testing.
+  // (global.css defaults `cursor: none !important` for TV kiosk mode; this
+  // lifts that for any session with ?dev=1, independent of DevConsole mount.)
+  if (typeof window !== 'undefined'
+      && new URLSearchParams(window.location.search).has('dev')) {
+    document.body.setAttribute('data-dev', '1');
+  }
+
   if (typeof window !== 'undefined'
       && new URLSearchParams(window.location.search).get('gallery') === '1') {
     return bootstrapGallery();
@@ -106,19 +114,41 @@ async function bootstrap(): Promise<void> {
     screen.go('activation');
   }
 
-  app.mount('#app');
-
-  // Dev-only: ?screen=<name> overrides the initial screen after mount.
-  // Used by GalleryView "独立全屏" button to deep-link into any screen.
+  /*
+   * Dev-only: ?screen=<name> deep-link into any screen.
+   * iter7 hardening — apply the override BEFORE app.mount so the target
+   * screen boots directly (no activation → flash → screen). Also seed
+   * minimal store data for screens that would otherwise goError without
+   * a real server session (generating / story-*).
+   *
+   * Suppress the auth-error handler globally — in dev browser mode every
+   * OEM / status API call 401s (no real server) and would otherwise
+   * punt the user back to ActivationScreen moments after our override.
+   */
   if (typeof window !== 'undefined') {
     const p = new URLSearchParams(window.location.search);
     const want = p.get('screen');
-    const VALID: ScreenName[] = ['activation','home','dialogue','generating',
-      'story-cover','story-body','story-end','library','learning','profile','offline','error'];
+    const VALID: ScreenName[] = ['activation','home','create','dialogue','generating',
+      'story-cover','story-body','story-end','library','learning','profile',
+      'leaderboard','create-invite','offline','error'];
     if (want && (VALID as string[]).includes(want)) {
-      setTimeout(() => screen.go(want as ScreenName), 0);
+      api.onAuthError(() => { /* deep-link mode — stay on the chosen screen */ });
+      if (want === 'generating') {
+        const { useStoryStore } = await import('./stores/story');
+        const s = useStoryStore();
+        s.generatingStoryId = 'demo-gen';
+        s.genStatus = 'generating';
+        s.genStage = 'image';
+        s.pagesGenerated = 5;
+        s.totalPages = 12;
+        s.percent = 42;
+        s.genStartedAt = Date.now() - 18_000;
+      }
+      screen.go(want as ScreenName);
     }
   }
+
+  app.mount('#app');
 
   // Expose for dev console / debugging
   if (typeof window !== 'undefined') {

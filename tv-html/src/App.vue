@@ -13,6 +13,7 @@ import { bridge } from '@/services/bridge';
 
 import ActivationScreen from '@/screens/ActivationScreen.vue';
 import HomeScreen from '@/screens/HomeScreen.vue';
+import CreateScreen from '@/screens/CreateScreen.vue';
 import DialogueScreen from '@/screens/DialogueScreen.vue';
 import GeneratingScreen from '@/screens/GeneratingScreen.vue';
 import StoryCoverScreen from '@/screens/StoryCoverScreen.vue';
@@ -21,6 +22,8 @@ import StoryEndScreen from '@/screens/StoryEndScreen.vue';
 import LibraryScreen from '@/screens/LibraryScreen.vue';
 import LearningScreen from '@/screens/LearningScreen.vue';
 import ProfileScreen from '@/screens/ProfileScreen.vue';
+import LeaderboardScreen from '@/screens/LeaderboardScreen.vue';
+import CreateInviteScreen from '@/screens/CreateInviteScreen.vue';
 import OfflineScreen from '@/screens/OfflineScreen.vue';
 import ErrorScreen from '@/screens/ErrorScreen.vue';
 
@@ -36,6 +39,7 @@ const screenMap: Record<ScreenName, unknown> = {
   boot: null, // shows nothing — index.html boot loader covers this gap
   activation: ActivationScreen,
   home: HomeScreen,
+  create: CreateScreen,
   dialogue: DialogueScreen,
   generating: GeneratingScreen,
   'story-cover': StoryCoverScreen,
@@ -44,6 +48,8 @@ const screenMap: Record<ScreenName, unknown> = {
   library: LibraryScreen,
   learning: LearningScreen,
   profile: ProfileScreen,
+  leaderboard: LeaderboardScreen,
+  'create-invite': CreateInviteScreen,
   offline: OfflineScreen,
   error: ErrorScreen,
 };

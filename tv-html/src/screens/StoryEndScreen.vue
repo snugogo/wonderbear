@@ -15,6 +15,24 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue';
+
+/**
+ * iter10 — real bow animation: we have TWO frames (standing `bear_idle` and
+ * `bear_bow_curtain` deep-bow). Alternating them every ~900ms gives a proper
+ * repeating stage bow without relying on CSS transforms to pseudo-bow a
+ * static image.
+ */
+const bowing = ref(false);
+let bowTimer: number | null = null;
+function startBowLoop(): void {
+  if (bowTimer != null) return;
+  bowTimer = window.setInterval(() => {
+    bowing.value = !bowing.value;
+  }, 900);
+}
+function stopBowLoop(): void {
+  if (bowTimer != null) { window.clearInterval(bowTimer); bowTimer = null; }
+}
 import { useStoryStore } from '@/stores/story';
 import { useScreenStore } from '@/stores/screen';
 import { useBgmStore } from '@/stores/bgm';
@@ -70,11 +88,14 @@ onMounted(() => {
   unsubFocus = onFocusChange((id) => {
     if (mounted) focusedId.value = id ?? '';
   });
+
+  startBowLoop();
 });
 
 onBeforeUnmount(() => {
   mounted = false;
   unsubFocus?.();
+  stopBowLoop();
 });
 </script>
 
@@ -84,16 +105,15 @@ onBeforeUnmount(() => {
 
     <div class="content">
       <div class="bear-wrap">
-        <img class="bear bear-bow" :src="asset('bear/bear_happy.webp')" alt="">
+        <!-- iter11: the bowing bear is the whole show — no decor overlays. -->
         <img
-          class="confetti"
-          :src="asset('deco/deco_confetti.webp')"
+          class="bear bear-bow"
+          :src="asset(bowing ? 'bear/bear_bow_curtain.webp' : 'bear/bear_idle.webp')"
           alt=""
-          aria-hidden="true"
         >
       </div>
 
-      <h1 class="finished t-2xl">{{ t('story.finished') }}</h1>
+      <h1 class="finished t-2xl wb-text-shadow">{{ t('story.finished') }}</h1>
 
       <div class="actions">
         <button
@@ -170,14 +190,23 @@ onBeforeUnmount(() => {
   transform-origin: bottom center;
 }
 .bear-bow {
-  animation: bear-bow 2.4s var(--ease-out) infinite;
+  /* Frame-swap animation driven by JS (bowing ref); CSS only softens the
+   * transition between standing and bowing poses. */
+  transition: transform 250ms ease-out;
 }
-@keyframes bear-bow {
-  0%, 100% { transform: rotate(0deg) translateY(0); }
-  35%      { transform: rotate(-8deg) translateY(-4px); }
-  55%      { transform: rotate(0deg) translateY(0); }
-  70%      { transform: rotate(-5deg) translateY(-2px); }
-  85%      { transform: rotate(0deg) translateY(0); }
+.hearts {
+  position: absolute;
+  inset: -40px;
+  width: calc(100% + 80px);
+  height: calc(100% + 80px);
+  object-fit: contain;
+  opacity: 0.6;
+  pointer-events: none;
+  animation: hearts-rise 5s ease-in-out infinite alternate;
+}
+@keyframes hearts-rise {
+  0%   { transform: translateY(0) scale(1); opacity: 0.45; }
+  100% { transform: translateY(-24px) scale(1.05); opacity: 0.75; }
 }
 .confetti {
   position: absolute;

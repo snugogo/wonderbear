@@ -1,7 +1,28 @@
 /* WonderBear design tokens. Avoid CSS custom properties — Sass-like define via :root for now;
    if real device proves CSS variables work, keep this. Otherwise refactor to compile-time. */
 
+/*
+ * 2026-04-24 Phase B iter3: playful rounded label font.
+ * Fredoka (Latin) pairs with HanziPen SC (Apple) / STHupo (Mac) /
+ * PingFang SC (fallback) on the Chinese side. On Android WebView
+ * without internet, falls back to system rounded typefaces so the
+ * UI doesn't break.
+ */
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap');
+
 :root {
+  /* Label / headline font — warm rounded playful, used for menu cards,
+     hero titles, gamified chips. Body text keeps the system font stack. */
+  --ff-display:
+    'Fredoka',
+    'HanziPen SC',
+    'STHupo', 'ST Hupo',
+    'PingFang SC',
+    'Hiragino Sans GB',
+    'Microsoft YaHei',
+    'Helvetica Neue',
+    sans-serif;
+
   /* Resolution (1280×720 native) */
   --vp-w: 1280px;
   --vp-h: 720px;
@@ -13,11 +34,22 @@
   --c-cream:          #fff5e6;     /* primary text */
   --c-cream-soft:     rgba(255, 245, 230, 0.7);
   --c-cream-faint:    rgba(255, 245, 230, 0.4);
-  --c-amber:          #ffc857;     /* focus outline + accents */
+  --c-amber:          #ffc857;     /* non-focus accents (titles, coin counts) */
   --c-amber-soft:     rgba(255, 200, 87, 0.4);
   --c-coral:          #ff7e5f;     /* primary CTA */
+  /*
+   * 2026-04-24 Phase B iter2: product owner settled on warm amber #f59e0b
+   * (between legacy --c-amber #ffc857 and prior coral #ff5e3a). Reads on
+   * cream / yellow / brown zones via the multi-layer ring in --shadow-focus.
+   * Also drives the circular bear-art ring on HomeScreen MenuCard.
+   */
+  --c-focus:          #f59e0b;     /* focus outline + glow ring + bear halo */
+  --c-focus-soft:     rgba(245, 158, 11, 0.55);
+  --c-focus-glow:     rgba(245, 158, 11, 0.9);
   --c-mint:           #7ed6a5;     /* success */
   --c-rose:           #ff9aa2;     /* hearts/favorite */
+  /* Chip background used under cream text when it overlays warm watercolors. */
+  --c-chip-dark:      rgba(26, 15, 10, 0.55);
 
   /* Typography — TV_TASKS_v6 task 4 + v1.1 P1-3: body text MUST be >= 32px so
      it is readable at 2-3m viewing distance. */
@@ -46,7 +78,17 @@
 
   /* Shadow */
   --shadow-card: 0 8px 24px rgba(0, 0, 0, 0.35);
-  --shadow-focus: 0 0 0 4px var(--c-amber), 0 0 24px var(--c-amber-soft);
+  /*
+   * 2026-04-23: focus ring rebuilt around --c-focus (deep coral).
+   * Inner dark halo gives separation against bright watercolor zones;
+   * outer coral ring + soft glow reads unambiguously on cream, yellow,
+   * and brown zones alike. Tested against bg_home_cozy / bg_welcome /
+   * bg_room — no zone where the ring disappears.
+   */
+  --shadow-focus:
+    0 0 0 2px rgba(26, 15, 10, 0.85),
+    0 0 0 6px var(--c-focus),
+    0 0 32px 4px var(--c-focus-soft);
 
   /* Motion */
   --t-fast: 120ms;

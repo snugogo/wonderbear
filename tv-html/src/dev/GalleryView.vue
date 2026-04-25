@@ -24,9 +24,12 @@ import { useDeviceStore } from '@/stores/device';
 import { useStoryStore } from '@/stores/story';
 import { useDialogueStore } from '@/stores/dialogue';
 import { useScreenStore, type ScreenName } from '@/stores/screen';
+import { resetForScreenChange as resetFocusForScreenChange } from '@/services/focus';
+import { asset } from '@/utils/assets';
 
 import ActivationScreen from '@/screens/ActivationScreen.vue';
 import HomeScreen from '@/screens/HomeScreen.vue';
+import CreateScreen from '@/screens/CreateScreen.vue';
 import DialogueScreen from '@/screens/DialogueScreen.vue';
 import GeneratingScreen from '@/screens/GeneratingScreen.vue';
 import StoryCoverScreen from '@/screens/StoryCoverScreen.vue';
@@ -35,6 +38,8 @@ import StoryEndScreen from '@/screens/StoryEndScreen.vue';
 import LibraryScreen from '@/screens/LibraryScreen.vue';
 import LearningScreen from '@/screens/LearningScreen.vue';
 import ProfileScreen from '@/screens/ProfileScreen.vue';
+import LeaderboardScreen from '@/screens/LeaderboardScreen.vue';
+import CreateInviteScreen from '@/screens/CreateInviteScreen.vue';
 import OfflineScreen from '@/screens/OfflineScreen.vue';
 import ErrorScreen from '@/screens/ErrorScreen.vue';
 
@@ -45,12 +50,23 @@ interface ScreenEntry {
   name: GalleryScreen;
   label: string;
   comp: unknown;
+  /**
+   * Dialogue has three visually distinct states (3A/3B/3C). Gallery exposes
+   * each via its own sidebar button; when clicked, we write this phase to a
+   * module-level window flag that DialogueScreen's `readDemoPhase()` picks up
+   * at mount time, letting one component back 3 sidebar items without a URL
+   * reload or prop plumbing.
+   */
+  demoPhase?: '3A' | '3B' | '3C';
 }
 
 const SCREENS: ScreenEntry[] = [
   { name: 'activation',  label: '1. Activation',  comp: markRaw(ActivationScreen) },
   { name: 'home',        label: '2. Home',        comp: markRaw(HomeScreen) },
-  { name: 'dialogue',    label: '3. Dialogue',    comp: markRaw(DialogueScreen) },
+  { name: 'create',      label: '2b. Dream Factory', comp: markRaw(CreateScreen) },
+  { name: 'dialogue',    label: '3A. Dialogue · Waiting',    comp: markRaw(DialogueScreen), demoPhase: '3A' },
+  { name: 'dialogue',    label: '3B. Dialogue · Kid talks',  comp: markRaw(DialogueScreen), demoPhase: '3B' },
+  { name: 'dialogue',    label: '3C. Dialogue · Bear talks', comp: markRaw(DialogueScreen), demoPhase: '3C' },
   { name: 'generating',  label: '4. Generating',  comp: markRaw(GeneratingScreen) },
   { name: 'story-cover', label: '5. Story Cover', comp: markRaw(StoryCoverScreen) },
   { name: 'story-body',  label: '6. Story Body',  comp: markRaw(StoryBodyScreen) },
@@ -58,10 +74,15 @@ const SCREENS: ScreenEntry[] = [
   { name: 'library',     label: '8. Library',     comp: markRaw(LibraryScreen) },
   { name: 'learning',    label: '9. Learning',    comp: markRaw(LearningScreen) },
   { name: 'profile',     label: '10. Profile',    comp: markRaw(ProfileScreen) },
+  // TV v1.0 §3.1 / §3.2 — new screens.
+  { name: 'leaderboard',    label: '13. Bear Stars',     comp: markRaw(LeaderboardScreen) },
+  { name: 'create-invite',  label: '14. Create Invite',  comp: markRaw(CreateInviteScreen) },
   { name: 'offline',     label: '11. Offline',    comp: markRaw(OfflineScreen) },
   { name: 'error',       label: '12. Error',      comp: markRaw(ErrorScreen) },
 ];
 
+// Sidebar key (matches the label-uniqueness since several rows share `name`).
+const currentLabel = ref<string>('2. Home');
 const currentScreen = ref<GalleryScreen>('home');
 const currentTier = ref<DataTier>('normal');
 const currentLocale = ref<'zh' | 'en'>('en');
@@ -124,12 +145,41 @@ function seedTier(tier: DataTier): void {
   const libraryCount = tier === 'heavy' ? 12 : 3;
   // Expose as story-list fallback — screens fetch via api, but if a screen
   // reads storyStore directly for previews we still have a sample loaded.
+  /*
+   * iter13l-3: gallery seed now uses real-feeling story prose (no more
+   * "Page N:" UI prefix) so the Learning screen's character cursor
+   * starts on actual narrative letters/CJK from the first walkable
+   * unit. Mix of watercolor backdrops keeps each page visually distinct.
+   */
+  const pageBgs = [
+    asset('story/story_generic_forest.webp'),
+    asset('bg/bg_meadow.webp'),
+    asset('story/story_generic_ocean.webp'),
+    asset('bg/bg_seaside.webp'),
+    asset('story/story_generic_sky.webp'),
+  ];
+  const samplePages = [
+    'Luna tiptoed deeper into the glowing forest, where every leaf whispered a secret.',
+    'A small bear cub hummed a tune as fireflies danced around his ears.',
+    'Beyond the river of stars, an ancient turtle waited with a folded map.',
+    'The moonbridge creaked once, then opened a path made of soft, silver light.',
+    'Brave little Mia tucked her acorn into her pocket and waved goodbye.',
+    'Three tiny mice rolled a giant strawberry across the marble courtyard.',
+  ];
+  const sampleZh = [
+    '露娜蹑手蹑脚走进发光的森林,每片叶子都在低语秘密。',
+    '小熊一边哼着歌,一边看萤火虫绕着耳朵飞舞。',
+    '在群星之河的尽头,一只古老的乌龟拿着折叠的地图等待着。',
+    '月亮桥吱呀一声,亮起一条由柔软银光铺成的路。',
+    '勇敢的米娅把橡果放进口袋,挥手道别。',
+    '三只小老鼠推着一颗巨大的草莓,穿过大理石庭院。',
+  ];
   const pages = Array.from({ length: 12 }, (_, i) => ({
     pageNum: i + 1,
-    imageUrl: '',
-    imageUrlHd: '',
-    text: `Page ${i + 1}: Luna tiptoed deeper into the glowing forest, where every leaf whispered a secret.`,
-    textLearning: null,
+    imageUrl: pageBgs[i % pageBgs.length],
+    imageUrlHd: pageBgs[i % pageBgs.length],
+    text: samplePages[i % samplePages.length] ?? samplePages[0]!,
+    textLearning: i % 2 === 0 ? (sampleZh[i % sampleZh.length] ?? null) : null,
     ttsUrl: null,
     ttsUrlLearning: null,
     durationMs: 4000,
@@ -179,18 +229,44 @@ function seedTier(tier: DataTier): void {
   void [timmy, mia, makeSummary, libraryCount];
 }
 
-function applyScreen(name: GalleryScreen): void {
+function applyScreen(entry: ScreenEntry): void {
   lastError.value = null;
   seedTier(currentTier.value);
-  currentScreen.value = name;
+  currentScreen.value = entry.name;
+  currentLabel.value = entry.label;
+  // Hand the dialogue phase override to DialogueScreen via a window flag.
+  // (Cleared on every switch so other screens never see stale state.)
+  const w = window as unknown as { __WB_DEMO_PHASE?: string | undefined };
+  w.__WB_DEMO_PHASE = entry.demoPhase;
   // Keep screenStore.current in sync so any screen that reads it works.
-  screen.current = name;
+  screen.current = entry.name;
+  /*
+   * iter13i-3: direct assignment above bypasses screen.go()'s
+   * resetForScreenChange(), leaving the previous screen's focus id
+   * alive in the registry → the newly-mounted screen's autoFocus gets
+   * skipped (autoFocus only fires when currentFocusId is null). Call
+   * the reset explicitly so the next screen starts from a clean slate
+   * and its first focusable with autoFocus=true claims focus.
+   */
+  resetFocusForScreenChange();
   remountKey.value += 1;
+  /*
+   * iter8: sidebar buttons are real HTMLButtonElements — after a click the
+   * browser leaves them with :focus, which swallows arrow keys before our
+   * global keyRouter (window keydown) sees them. Blur the active element so
+   * arrow / OK go straight to the previewed screen's focus store.
+   */
+  setTimeout(() => {
+    const el = document.activeElement as HTMLElement | null;
+    if (el && typeof el.blur === 'function') el.blur();
+  }, 0);
 }
 
 function applyTier(tier: DataTier): void {
   currentTier.value = tier;
-  applyScreen(currentScreen.value);
+  const entry = SCREENS.find((s) => s.label === currentLabel.value)
+    ?? SCREENS[0];
+  applyScreen(entry);
 }
 
 function applyLocale(loc: 'zh' | 'en'): void {
@@ -199,17 +275,20 @@ function applyLocale(loc: 'zh' | 'en'): void {
 }
 
 function openStandalone(): void {
+  const entry = SCREENS.find((s) => s.label === currentLabel.value);
   const p = new URLSearchParams(window.location.search);
   p.delete('gallery');
   p.set('dev', '1');
   p.set('autobind', '1');
   p.set('screen', currentScreen.value);
+  if (entry?.demoPhase) p.set('demoPhase', entry.demoPhase);
+  else p.delete('demoPhase');
   const url = `${window.location.origin}${window.location.pathname}?${p.toString()}`;
   window.open(url, '_blank');
 }
 
 const currentComp = computed(() => {
-  const e = SCREENS.find((s) => s.name === currentScreen.value);
+  const e = SCREENS.find((s) => s.label === currentLabel.value);
   return e ? e.comp : null;
 });
 
@@ -256,9 +335,9 @@ screen.current = currentScreen.value;
 
     <aside class="sidebar">
       <button
-        v-for="s in SCREENS" :key="s.name"
-        :class="['side-btn', { active: currentScreen === s.name }]"
-        @click="applyScreen(s.name)"
+        v-for="s in SCREENS" :key="s.label"
+        :class="['side-btn', { active: currentLabel === s.label }]"
+        @click="applyScreen(s)"
       >{{ s.label }}</button>
     </aside>
 

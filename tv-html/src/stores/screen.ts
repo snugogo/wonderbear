@@ -14,6 +14,7 @@ export type ScreenName =
   | 'boot'
   | 'activation'
   | 'home'
+  | 'create'          // iter12: "来讲故事" — creation hub (story grid + "+" tile)
   | 'dialogue'
   | 'generating'
   | 'story-cover'
@@ -22,6 +23,8 @@ export type ScreenName =
   | 'library'
   | 'learning'
   | 'profile'
+  | 'leaderboard'     // TV v1.0: 小熊星光 / Bear Stars — 3-tab ranking board
+  | 'create-invite'   // TV v1.0: 激励创作引导页 (entered from leaderboard)
   | 'offline'
   | 'error';
 
