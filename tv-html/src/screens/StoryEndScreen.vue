@@ -4,9 +4,16 @@
   Behavior:
     - bgm.play('story_ending') → bgm store sees volume 0 and stops BGM (closure feel)
     - bear_happy bow animation
-    - Two focusable buttons: [Play again] / [Back to library]
+    - 2026-04-25 iter: trio of cartoon-style action buttons matching the
+      Story Library cell vocabulary:
+        [Play Again] (green primary) · [Favorite] (icon+label, amber when on)
+        · [Create Sequel] (amber, jumps into dialogue flow)
+      "Back to library" was retired — Back hardware key already returns
+      from this terminal screen.
     - "Play again" = reset story playback to page 0 → screen.go('story-body')
-    - "Back to library" = clear playback + screen.go('library')
+    - "Create sequel" = screen.go('dialogue') seeded with current story
+    - "Favorite" = local toggle (will persist via favorites store once
+      the API/store is wired)
 
   Hard rules respected:
     - All focusables registered with explicit neighbors (no geometric drift)
@@ -46,8 +53,10 @@ const bgm = useBgmStore();
 const { t } = useI18n();
 
 const playAgainEl = ref<HTMLElement | null>(null);
-const libraryEl = ref<HTMLElement | null>(null);
+const favoriteEl = ref<HTMLElement | null>(null);
+const sequelEl = ref<HTMLElement | null>(null);
 const focusedId = ref<string>('');
+const isFavorited = ref<boolean>(false);
 let unsubFocus: (() => void) | null = null;
 let mounted = true;
 
@@ -61,22 +70,38 @@ function playAgain(): void {
   screen.go('story-body');
 }
 
-function backToLibrary(): void {
+function toggleFavorite(): void {
+  // Local toggle only for now — favorites store / API wiring lands in a
+  // follow-up. The amber heart state still gives the kid the "yes I
+  // liked it" feedback they expect.
+  isFavorited.value = !isFavorited.value;
+}
+
+function createSequel(): void {
+  // Sequel = re-enter the 7-round dialogue flow seeded with this story.
+  // The seeding payload (parent storyId) will be picked up by the
+  // dialogue store on mount when that wiring lands.
   storyStore.clearPlayback();
-  screen.go('library');
+  screen.go('dialogue', { sequelOfStoryId: storyStore.active?.id ?? null });
 }
 
 useFocusable(playAgainEl, {
   id: 'end-play-again',
   autoFocus: true,
-  neighbors: { right: 'end-library' },
+  neighbors: { right: 'end-favorite' },
   onEnter: playAgain,
 });
 
-useFocusable(libraryEl, {
-  id: 'end-library',
-  neighbors: { left: 'end-play-again' },
-  onEnter: backToLibrary,
+useFocusable(favoriteEl, {
+  id: 'end-favorite',
+  neighbors: { left: 'end-play-again', right: 'end-sequel' },
+  onEnter: toggleFavorite,
+});
+
+useFocusable(sequelEl, {
+  id: 'end-sequel',
+  neighbors: { left: 'end-favorite' },
+  onEnter: createSequel,
 });
 
 onMounted(() => {
@@ -118,21 +143,42 @@ onBeforeUnmount(() => {
       <div class="actions">
         <button
           ref="playAgainEl"
-          class="action-btn primary wb-focus-feedback"
+          class="action-btn play-btn wb-focus-feedback"
           :class="{ 'is-focused': focusedId === 'end-play-again' }"
           type="button"
           @click="playAgain"
         >
-          <span class="t-lg">{{ t('story.playAgain') }}</span>
+          <span class="icon-play wb-text-shadow-sm">&#9654;</span>
+          <span class="btn-label">{{ t('story.playAgain') }}</span>
         </button>
         <button
-          ref="libraryEl"
-          class="action-btn wb-focus-feedback"
-          :class="{ 'is-focused': focusedId === 'end-library' }"
+          ref="favoriteEl"
+          class="action-btn favorite-btn wb-focus-feedback"
+          :class="{
+            'is-focused': focusedId === 'end-favorite',
+            'is-active': isFavorited,
+          }"
           type="button"
-          @click="backToLibrary"
+          @click="toggleFavorite"
         >
-          <span class="t-lg">{{ t('story.backToLibrary') }}</span>
+          <img
+            class="favorite-icon"
+            :src="asset('ui/ui_heart_favorite.webp')"
+            alt=""
+          />
+          <span class="btn-label">
+            {{ isFavorited ? t('library.favorited') : t('story.favorite') }}
+          </span>
+        </button>
+        <button
+          ref="sequelEl"
+          class="action-btn sequel-btn wb-focus-feedback"
+          :class="{ 'is-focused': focusedId === 'end-sequel' }"
+          type="button"
+          @click="createSequel"
+        >
+          <span class="icon-sparkle wb-text-shadow-sm">+</span>
+          <span class="btn-label">{{ t('story.endSequel') }}</span>
         </button>
       </div>
     </div>
@@ -234,31 +280,84 @@ onBeforeUnmount(() => {
 
 .actions {
   display: flex;
-  gap: var(--sp-4);
+  gap: var(--sp-3);
   margin-top: var(--sp-3);
+  align-items: stretch;
 }
 
+/*
+ * 2026-04-25 iter — cartoon-style action buttons matching
+ * CreateScreen.StoryCell vocabulary so Story End reads as part of the
+ * same gesture family as the Story Library cells.
+ *   - .play-btn     : green tint, primary action
+ *   - .favorite-btn : amber-tinted with heart icon, lights up when active
+ *   - .sequel-btn   : amber tint with sparkle "+" icon
+ * All three share the same base shape (rounded slab, drop shadow, focus
+ * ring) so they line up neatly in a row.
+ */
 .action-btn {
   appearance: none;
-  background: rgba(255, 245, 230, 0.08);
-  border: 2px solid rgba(255, 200, 87, 0.25);
-  color: var(--c-cream);
-  padding: var(--sp-3) var(--sp-6);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 14px 28px;
   border-radius: var(--r-lg);
+  background: rgba(255, 245, 230, 0.12);
+  border: 2px solid rgba(255, 200, 87, 0.35);
+  color: var(--c-cream);
+  font-family: var(--ff-display);
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
   cursor: pointer;
-  transition: all var(--t-fast) var(--ease-out);
   min-width: 220px;
-  font-family: inherit;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+  transition: transform var(--t-fast) var(--ease-out),
+              border-color var(--t-fast) var(--ease-out),
+              box-shadow var(--t-fast) var(--ease-out),
+              background var(--t-fast) var(--ease-out);
 }
-.action-btn.primary {
-  background: rgba(255, 200, 87, 0.18);
-  border-color: var(--c-amber-soft);
+.action-btn .btn-label {
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.55);
 }
-/* Spring transform lives on .wb-focus-feedback.is-focused (global). */
-.action-btn.is-focused {
-  background: var(--c-amber);
+.play-btn {
+  background: rgba(82, 199, 122, 0.22);
+  border-color: rgba(82, 199, 122, 0.6);
+}
+.favorite-btn {
+  background: rgba(255, 200, 87, 0.14);
+  border-color: rgba(255, 200, 87, 0.45);
+}
+.favorite-btn.is-active {
+  background: rgba(245, 158, 11, 0.32);
   border-color: var(--c-amber);
-  color: #1a0f0a;
-  box-shadow: var(--shadow-focus);
+}
+.favorite-btn .favorite-icon {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+  opacity: 0.85;
+  transition: opacity var(--t-fast) var(--ease-out),
+              filter var(--t-fast) var(--ease-out);
+}
+.favorite-btn.is-active .favorite-icon {
+  opacity: 1;
+  filter: drop-shadow(0 2px 8px rgba(245, 158, 11, 0.85));
+}
+.sequel-btn {
+  background: rgba(255, 200, 87, 0.16);
+  border-color: rgba(255, 200, 87, 0.55);
+}
+.icon-play    { display: inline-block; transform: translateY(1px); font-size: 20px; }
+.icon-sparkle { display: inline-block; font-weight: 900; font-size: 26px; line-height: 1; }
+
+.action-btn.is-focused {
+  transform: scale(1.08);
+  border-color: var(--c-amber);
+  box-shadow:
+    0 0 0 3px rgba(245, 158, 11, 0.55),
+    0 0 22px 6px var(--c-focus-soft);
 }
 </style>

@@ -1,20 +1,58 @@
-// Polish locale — placeholder. All entries fall back to zh until translator delivers.
-// Mark every key with [TODO_pl] so it's visible at runtime which strings still need translation.
-import zh from './zh';
+/*
+ * Polish locale.
+ * 2026-04-25: upgraded from prefix-stub to real preview translation
+ * for the FavoritesScreen + a few key navigation strings. Other keys
+ * fall back to English via vue-i18n fallbackLocale.
+ */
+import en from './en';
 
-function markAll(obj: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const k of Object.keys(obj)) {
-    const v = obj[k];
-    if (typeof v === 'string') {
-      out[k] = '[TODO_pl] ' + v;
-    } else if (v && typeof v === 'object') {
-      out[k] = markAll(v as Record<string, unknown>);
+const overrides = {
+  favorites: {
+    title: 'Moje ulubione',
+    count: '{used} ulubionych',
+    empty: 'Brak ulubionych — kliknij serce na historii, którą kochasz',
+    actions: {
+      playFull: 'Odtwórz całość',
+      sequel: 'Stwórz kontynuację',
+      download: 'Pobierz',
+      downloaded: 'Zapisane',
+      delete: 'Usuń',
+      removed: 'Usunięto z ulubionych',
+      downloading: 'Pobieranie…',
+      alreadyDownloaded: 'Już na tym urządzeniu',
+      playHint: 'Tylko demo — historia nie wczytana',
+    },
+  },
+  library: {
+    title: 'Historie',
+    empty: 'Brak historii — wróć wkrótce!',
+    capacity: '{used} historii',
+  },
+  profile: { title: 'Moja chatka' },
+  home: {
+    title: 'Witaj',
+    subtitle: 'Odkrywaj nowe historie z misiem',
+  },
+  activation: {
+    title: 'Witaj w WonderBear',
+    subtitle: 'Odkryj nowe książeczki\nz WonderBear',
+  },
+  common: { loading: 'Ładowanie…' },
+};
+
+function merge<T extends Record<string, unknown>>(base: T, over: Record<string, unknown>): T {
+  const out: Record<string, unknown> = { ...base };
+  for (const k of Object.keys(over)) {
+    const ov = over[k];
+    const bv = (base as Record<string, unknown>)[k];
+    if (ov && typeof ov === 'object' && !Array.isArray(ov)
+        && bv && typeof bv === 'object' && !Array.isArray(bv)) {
+      out[k] = merge(bv as Record<string, unknown>, ov as Record<string, unknown>);
     } else {
-      out[k] = v;
+      out[k] = ov;
     }
   }
-  return out;
+  return out as T;
 }
 
-export default markAll(zh as unknown as Record<string, unknown>);
+export default merge(en as unknown as Record<string, unknown>, overrides);

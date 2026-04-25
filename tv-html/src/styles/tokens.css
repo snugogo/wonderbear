@@ -2,13 +2,39 @@
    if real device proves CSS variables work, keep this. Otherwise refactor to compile-time. */
 
 /*
- * 2026-04-24 Phase B iter3: playful rounded label font.
- * Fredoka (Latin) pairs with HanziPen SC (Apple) / STHupo (Mac) /
- * PingFang SC (fallback) on the Chinese side. On Android WebView
- * without internet, falls back to system rounded typefaces so the
- * UI doesn't break.
+ * 2026-04-25 iter: SELF-HOSTED Fredoka (variable font, v17).
+ *   - Was @import from Google Fonts → fails on:
+ *       · TV in mainland China (GFW blocks fonts.gstatic.com)
+ *       · First-boot before activation (no internet)
+ *       · Offline mode
+ *   - Now ships in `public/fonts/`, served same-origin, 0 network deps.
+ *   - Variable font: ONE woff2 carries all weights 300-700.
+ *       latin     subset → ~30 KB (covers EN + standard ASCII)
+ *       latin-ext subset → ~5 KB  (covers PL ą ć ę ł ń ó ś ź ż / RO ă â î ș ț,
+ *                                  loaded only if a glyph from that range is rendered)
+ *   - Total weight: ~35 KB for all 5 weights × 2 subsets.
+ *   - Chinese still falls back to HanziPen SC / PingFang SC / Microsoft
+ *     YaHei (Fredoka is Latin-only). When AlibabaPuHuiTi lands as a
+ *     subsetted CJK display font, it'll be added to this stack.
  */
-@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap');
+@font-face {
+  font-family: 'Fredoka';
+  font-style: normal;
+  font-weight: 300 700;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url('/fonts/fredoka-v17-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Fredoka';
+  font-style: normal;
+  font-weight: 300 700;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url('/fonts/fredoka-v17-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
 
 :root {
   /* Label / headline font — warm rounded playful, used for menu cards,

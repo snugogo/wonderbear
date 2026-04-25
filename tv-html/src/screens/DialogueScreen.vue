@@ -1032,6 +1032,17 @@ onBeforeUnmount(() => {
   max-height: 702px;
   object-fit: contain;
   filter: drop-shadow(0 18px 32px rgba(0, 0, 0, 0.45));
+  /*
+   * 2026-04-25 iter: gentle hover-float so the magic-wand bear feels
+   * alive while waiting for the kid to speak. 3.2s cycle (slow, calm)
+   * with ease-in-out keeps it from feeling jittery.
+   */
+  animation: bear-3a-float 3.2s ease-in-out infinite;
+  will-change: transform;
+}
+@keyframes bear-3a-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-18px); }
 }
 .col-scenes-3a {
   flex: 1 1 auto;

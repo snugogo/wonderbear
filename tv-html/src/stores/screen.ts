@@ -21,6 +21,7 @@ export type ScreenName =
   | 'story-body'
   | 'story-end'
   | 'library'
+  | 'favorites'       // 2026-04-25: 我的收藏管理 (entered from library favorites entry)
   | 'learning'
   | 'profile'
   | 'leaderboard'     // TV v1.0: 小熊星光 / Bear Stars — 3-tab ranking board

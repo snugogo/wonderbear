@@ -10,8 +10,26 @@ html, body, #app {
   overflow: hidden;
   background: var(--c-bg-deep);
   color: var(--c-cream);
-  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB',
-    'Microsoft YaHei', 'Helvetica Neue', sans-serif;
+  /*
+   * 2026-04-25 iter: Fredoka is now the global default.
+   * Stack:
+   *   1. Fredoka          → Latin glyphs (rendered from local woff2)
+   *   2. HanziPen SC      → Chinese (Apple system rounded handwriting)
+   *   3. STHupo / PingFang → Chinese fallbacks
+   *   4. system stack     → ultimate fallback
+   * Browser uses each font only for the glyphs it covers, so a Chinese
+   * sentence with English words will get Fredoka for EN + HanziPen for
+   * the CJK characters automatically.
+   */
+  font-family:
+    'Fredoka',
+    'HanziPen SC',
+    'STHupo', 'ST Hupo',
+    'PingFang SC',
+    'Hiragino Sans GB',
+    'Microsoft YaHei',
+    -apple-system, BlinkMacSystemFont,
+    'Helvetica Neue', sans-serif;
   font-size: var(--fs-md);
   -webkit-font-smoothing: antialiased;
   user-select: none;

@@ -18,7 +18,7 @@ export default {
 
   activation: {
     title: '欢迎来到 WonderBear',
-    subtitle: '和小熊一起,探索新故事',
+    subtitle: '和小熊一起\nDiscover Story Book',
     scanHint: '家长扫码,让小熊认识你',
     waitingHint: '等爸爸妈妈扫码完成,熊熊就来啦',
     fallbackUrl: '扫不到?在浏览器打开',
@@ -142,6 +142,23 @@ export default {
     downloaded: '已下载',
   },
 
+  favorites: {
+    title: '我的收藏',
+    count: '已收藏 {used} 本',
+    empty: '还没有收藏哦,在喜欢的故事上点一下小红心吧',
+    actions: {
+      playFull: '看全集',
+      sequel: '编续集',
+      download: '下载',
+      downloaded: '已下载',
+      delete: '删除',
+      removed: '已取消收藏',
+      downloading: '下载中…',
+      alreadyDownloaded: '本机已存',
+      playHint: '演示模式 · 暂无内容',
+    },
+  },
+
   learning: {
     backToStory: '回故事',
     replay: '再听一次',
@@ -178,11 +195,43 @@ export default {
     storiesRemaining: '剩余 {count} 本',
     starsLabel: '我的星光',
     starsValue: '⭐ {count}',
+    metricLine: '⭐ {stars} 星光  ·  📖 {stories} 个故事',
+    backToHome: '回到首页',
+    /* TV v1.0 Profile redesign (2026-04-25): rich kids panel + family
+       subscription badge + per-child stats + global bilingual settings. */
+    subBadgeFree: '免费 · 剩 {count} 本',
+    subBadgeMonthly: '⭐ 月度 · {days} 天后续费',
+    subBadgeYearly: '👑 年度 · 剩 {days} 天',
+    kidsTitle: '我的小孩',
+    kidsAddSlot: '+ 家长 App 添加',
+    kidsAddHint: '请在家长手机端添加小朋友',
+    statStars: '⭐ {n}',
+    statStoriesCreated: '📖 {n}',
+    statLearnTime: '⏱  {time}',
+    statWatchTime: '👁  {time}',
+    statStoriesLabel: '故事',
+    statLearnLabel: '学习',
+    statWatchLabel: '观看',
+    sectionGeneral: '通用设置',
+    sectionAccount: '账户',
+    sectionFamily: '家庭',
+    familyIdLabel: '家庭编号',
+    familyParentLabel: '家长',
+    qrCaption: '扫码管理 / 充值',
     settings: {
       bgm: '背景音乐',
       learning: '识字模式',
       autoPlay: '自动翻页',
       language: '语言',
+      displayLang: '界面语言',
+      bilingual: '双语阅读',
+    },
+    bilingual: {
+      off: '关闭',
+      zhEn: '中 + EN',
+      enZh: 'EN + 中',
+      zhOnly: '只 中文',
+      enOnly: '只 EN',
     },
   },
 

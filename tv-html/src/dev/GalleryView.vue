@@ -36,6 +36,7 @@ import StoryCoverScreen from '@/screens/StoryCoverScreen.vue';
 import StoryBodyScreen from '@/screens/StoryBodyScreen.vue';
 import StoryEndScreen from '@/screens/StoryEndScreen.vue';
 import LibraryScreen from '@/screens/LibraryScreen.vue';
+import FavoritesScreen from '@/screens/FavoritesScreen.vue';
 import LearningScreen from '@/screens/LearningScreen.vue';
 import ProfileScreen from '@/screens/ProfileScreen.vue';
 import LeaderboardScreen from '@/screens/LeaderboardScreen.vue';
@@ -72,6 +73,7 @@ const SCREENS: ScreenEntry[] = [
   { name: 'story-body',  label: '6. Story Body',  comp: markRaw(StoryBodyScreen) },
   { name: 'story-end',   label: '7. Story End',   comp: markRaw(StoryEndScreen) },
   { name: 'library',     label: '8. Library',     comp: markRaw(LibraryScreen) },
+  { name: 'favorites',   label: '8b. Favorites',  comp: markRaw(FavoritesScreen) },
   { name: 'learning',    label: '9. Learning',    comp: markRaw(LearningScreen) },
   { name: 'profile',     label: '10. Profile',    comp: markRaw(ProfileScreen) },
   // TV v1.0 §3.1 / §3.2 — new screens.
@@ -85,7 +87,9 @@ const SCREENS: ScreenEntry[] = [
 const currentLabel = ref<string>('2. Home');
 const currentScreen = ref<GalleryScreen>('home');
 const currentTier = ref<DataTier>('normal');
-const currentLocale = ref<'zh' | 'en'>('en');
+type GalleryLocale = 'zh' | 'en' | 'pl' | 'de' | 'es' | 'ja';
+const GALLERY_LOCALES: readonly GalleryLocale[] = ['en', 'zh', 'ja', 'de', 'es', 'pl'];
+const currentLocale = ref<GalleryLocale>('en');
 const { t: _t } = useI18n();
 void _t; // ensure i18n is wired before child screens mount
 
@@ -269,7 +273,7 @@ function applyTier(tier: DataTier): void {
   applyScreen(entry);
 }
 
-function applyLocale(loc: 'zh' | 'en'): void {
+function applyLocale(loc: GalleryLocale): void {
   currentLocale.value = loc;
   setLocale(loc);
 }
@@ -313,7 +317,7 @@ screen.current = currentScreen.value;
       <div class="tb-group">
         <span class="tb-label">Locale:</span>
         <button
-          v-for="loc in (['zh','en'] as const)" :key="loc"
+          v-for="loc in GALLERY_LOCALES" :key="loc"
           :class="['tb-btn', { active: currentLocale === loc }]"
           @click="applyLocale(loc)"
         >{{ loc.toUpperCase() }}</button>
@@ -374,7 +378,7 @@ screen.current = currentScreen.value;
     "sb pv";
   background: #0f0a08;
   color: #fff5e6;
-  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-family: 'Fredoka', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
 }
 
 .toolbar {

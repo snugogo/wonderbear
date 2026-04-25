@@ -20,6 +20,7 @@ import StoryCoverScreen from '@/screens/StoryCoverScreen.vue';
 import StoryBodyScreen from '@/screens/StoryBodyScreen.vue';
 import StoryEndScreen from '@/screens/StoryEndScreen.vue';
 import LibraryScreen from '@/screens/LibraryScreen.vue';
+import FavoritesScreen from '@/screens/FavoritesScreen.vue';
 import LearningScreen from '@/screens/LearningScreen.vue';
 import ProfileScreen from '@/screens/ProfileScreen.vue';
 import LeaderboardScreen from '@/screens/LeaderboardScreen.vue';
@@ -46,6 +47,7 @@ const screenMap: Record<ScreenName, unknown> = {
   'story-body': StoryBodyScreen,
   'story-end': StoryEndScreen,
   library: LibraryScreen,
+  favorites: FavoritesScreen,
   learning: LearningScreen,
   profile: ProfileScreen,
   leaderboard: LeaderboardScreen,

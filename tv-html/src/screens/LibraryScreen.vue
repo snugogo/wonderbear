@@ -171,6 +171,13 @@ categories.forEach((cat, idx) => {
     neighbors: catNeighbors(idx),
     onFocus: () => { activeCat.value = cat.id; },
     onEnter: () => {
+      // 2026-04-25: tapping the bottom Favorites entry now jumps into
+      // the dedicated FavoritesScreen (management surface) instead of
+      // just filtering the grid client-side.
+      if (cat.isFavorites) {
+        screen.go('favorites');
+        return;
+      }
       activeCat.value = cat.id;
       if (filtered.value.length > 0) setFocus('library-story-0-thumb');
     },

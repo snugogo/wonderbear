@@ -518,6 +518,7 @@ function setCharRef(el: Element | null, index: number): void {
  */
 .focus-char {
   font-family:
+    'Fredoka',
     'PingFang SC', 'Microsoft YaHei UI', 'Microsoft YaHei',
     'Source Han Sans CN', 'Noto Sans SC',
     -apple-system, 'Segoe UI', sans-serif;
@@ -591,6 +592,7 @@ function setCharRef(el: Element | null, index: number): void {
 .reader-primary {
   color: var(--c-cream);
   font-family:
+    'Fredoka',
     'PingFang SC', 'Microsoft YaHei UI', 'Microsoft YaHei',
     'Source Han Sans CN', 'Noto Sans SC',
     -apple-system, 'Segoe UI', sans-serif;

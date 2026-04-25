@@ -77,7 +77,7 @@ defineProps<{ hints: Hint[] }>();
   border: 1px solid rgba(245, 158, 11, 0.45);
   color: var(--c-cream);
   border-radius: 5px;
-  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-family: 'Fredoka', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
   font-size: 18px;
   line-height: 1;
   font-weight: 700;

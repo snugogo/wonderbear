@@ -129,7 +129,7 @@ async function bootstrap(): Promise<void> {
     const p = new URLSearchParams(window.location.search);
     const want = p.get('screen');
     const VALID: ScreenName[] = ['activation','home','create','dialogue','generating',
-      'story-cover','story-body','story-end','library','learning','profile',
+      'story-cover','story-body','story-end','library','favorites','learning','profile',
       'leaderboard','create-invite','offline','error'];
     if (want && (VALID as string[]).includes(want)) {
       api.onAuthError(() => { /* deep-link mode — stay on the chosen screen */ });

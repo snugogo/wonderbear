@@ -19,7 +19,7 @@ export default {
 
   activation: {
     title: 'Welcome to WonderBear',
-    subtitle: 'Discover new stories with the bear',
+    subtitle: 'Discover Story Book\nWith WonderBear',
     scanHint: 'Scan to let the bear meet you',
     waitingHint: 'Once your grown-up scans, the bear will know you',
     fallbackUrl: "Can't scan? Open in browser",
@@ -127,6 +127,23 @@ export default {
     downloaded: 'Downloaded',
   },
 
+  favorites: {
+    title: 'My Favorites',
+    count: '{used} favorited',
+    empty: 'No favorites yet — tap the heart on a story you love',
+    actions: {
+      playFull: 'Play Full',
+      sequel: 'Create Sequel',
+      download: 'Download',
+      downloaded: 'Saved',
+      delete: 'Delete',
+      removed: 'Removed from favorites',
+      downloading: 'Downloading…',
+      alreadyDownloaded: 'Already on this device',
+      playHint: 'Demo only — story not loaded',
+    },
+  },
+
   learning: {
     backToStory: 'Back to story',
     replay: 'Play again',
@@ -158,11 +175,43 @@ export default {
     storiesRemaining: '{count} stories left',
     starsLabel: 'My Stars',
     starsValue: '⭐ {count}',
+    metricLine: '⭐ {stars} stars  ·  📖 {stories} stories',
+    backToHome: 'Back to Home',
+    /* TV v1.0 Profile redesign (2026-04-25): rich kids panel + family
+       subscription badge + per-child stats + global bilingual settings. */
+    subBadgeFree: 'Free  ·  {count} stories left',
+    subBadgeMonthly: '⭐ Monthly  ·  renews in {days}d',
+    subBadgeYearly: '👑 Yearly  ·  {days} days left',
+    kidsTitle: 'Kids',
+    kidsAddSlot: '+ Add via parent app',
+    kidsAddHint: 'Open parent app to add a child',
+    statStars: '⭐ {n}',
+    statStoriesCreated: '📖 {n}',
+    statLearnTime: '⏱  {time}',
+    statWatchTime: '👁  {time}',
+    statStoriesLabel: 'stories',
+    statLearnLabel: 'learning',
+    statWatchLabel: 'watching',
+    sectionGeneral: 'General settings',
+    sectionAccount: 'Account',
+    sectionFamily: 'Family',
+    familyIdLabel: 'Family ID',
+    familyParentLabel: 'Parent',
+    qrCaption: 'Scan to manage / upgrade',
     settings: {
       bgm: 'Background music',
       learning: 'Reading mode',
       autoPlay: 'Auto-advance',
       language: 'Language',
+      displayLang: 'Display language',
+      bilingual: 'Bilingual reading',
+    },
+    bilingual: {
+      off: 'Off',
+      zhEn: '中 + EN',
+      enZh: 'EN + 中',
+      zhOnly: '中 only',
+      enOnly: 'EN only',
     },
   },
 

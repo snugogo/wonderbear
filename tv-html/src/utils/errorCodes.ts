@@ -8,7 +8,7 @@
  *   // → { code, name, message, bear, tvAction }
  */
 
-export type Locale = 'zh' | 'en' | 'pl' | 'ro';
+export type Locale = 'zh' | 'en' | 'pl' | 'ro' | 'ja' | 'de' | 'es';
 
 export type TvAction =
   | 'silent_reactivate'
@@ -48,6 +48,10 @@ interface ErrorEntry {
   en: string;
   pl: string;
   ro: string;
+  // Optional preview-grade locales (fall back to en at runtime).
+  ja?: string;
+  de?: string;
+  es?: string;
   bear: BearAsset;
   tvAction: TvAction;
 }

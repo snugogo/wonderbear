@@ -244,6 +244,7 @@ watch(idx, () => {
 
 .primary {
   font-family:
+    'Fredoka',
     'PingFang SC', 'Microsoft YaHei UI', 'Microsoft YaHei',
     'Source Han Sans CN', 'Noto Sans SC',
     -apple-system, 'Segoe UI', sans-serif;
