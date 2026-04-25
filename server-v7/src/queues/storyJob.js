@@ -126,6 +126,7 @@ export function createStoryQueue(prisma, options = {}) {
         pageNum: coverSrc.pageNum,
         seed: `${storyId}:${coverSrc.pageNum}`,
         onAttempt: logAttempt(coverSrc.pageNum),
+        childAge: job.childProfile?.age ?? null,
       });
       pagesWithImages[coverIdx] = materializePage(coverSrc, coverResult);
       totalCostCents += coverResult.costCents;

@@ -1,29 +1,89 @@
 // ============================================================================
-// services/imageGen.js — cover-first + image-to-image fallback chain (v2)
+// services/imageGen.js — cover-first + image-to-image fallback chain (v3)
 //
-// 2026-04-24 refactor per FACTORY_WORKORDER_2026_04_24_IMAGE_PIPELINE.md:
-//   PAGE 1 (cover):
-//     Try 1:  sanitizePromptForPage1 → OpenAI gpt-image-1
-//     Try 2:  Gemini-2.5-flash rewrite (round 1) → OpenAI
-//     Try 3:  Gemini rewrite (round 2, ultra-conservative) → OpenAI
-//     Fallback A: Nano Banana (gemini-2.5-flash-image-preview)
-//     Fallback B: FAL flux/dev text2image
-//     Final:  placeholder
+// 2026-04-25 refactor per FACTORY_WORKORDER_2026_04_25_AGE_LAYERED.md:
+//   PAGE 1 (cover) — age-based routing on childAge:
+//
+//   Young branch (childAge ≤ 5, or null/undefined/NaN — most conservative):
+//     T1: sanitizePromptForPage1 → OpenAI gpt-image-1 (medium)
+//     T2: Gemini-2.5-flash rewrite (round 1) → OpenAI
+//     T3: Nano Banana (gemini-2.5-flash-image) — landscape crop applied in Phase B
+//     T4: FAL flux/dev text2image
+//     Final: placeholder
+//
+//   Old branch (childAge > 5):
+//     T1: Nano Banana (gemini-2.5-flash-image) — landscape crop applied in Phase B
+//     T2: sanitizePromptForPage1 → OpenAI gpt-image-1 (medium, single round, no rewrite)
+//     T3: FAL flux/dev text2image
+//     Final: placeholder
 //
 //   PAGE 2-12 (unchanged):
 //     Tier 1: FAL flux-pro/kontext (img2img using page1 url as reference)
 //     Tier 2: FAL flux/dev text2image
 //     Final:  placeholder
 //
-// Imagen 3.0 is removed (Google shuts Imagen 3/4 down 2026-06-24).
+// Notes:
+//   - Imagen 3.0 removed (Google shuts Imagen 3/4 down 2026-06-24).
+//   - Round-2 Gemini rewrite removed from active path per workorder §2.3
+//     (REWRITE_PROMPT_ROUND2 + geminiRewritePrompt(round=2) kept as dead code
+//     for fast re-enablement if a future workorder needs it).
+//   - DEBUG_FORCE_OPENAI_FAIL kept (env-guarded, default off) for regression
+//     testing of the fallback chain.
 // ============================================================================
 
 import env from '../config/env.js';
+import sharp from 'sharp';
 import {
   sanitizeImagePrompt,
   sanitizePromptForPage1,
   getStyleSuffix,
 } from '../utils/storyPrompt.js';
+
+// Target aspect for the TV cover (16:9 landscape).
+const NB_TARGET_W = 1536;
+const NB_TARGET_H = 1024;
+const NB_TARGET_RATIO = NB_TARGET_W / NB_TARGET_H; // 1.5
+
+// Composition guidance appended to every Nano Banana prompt to bias the model
+// toward subject-centered framing so a center crop preserves the focal area.
+const NB_COMPOSITION_SUFFIX = (
+  ' Composition guidance: main subject centered, important elements positioned'
+  + ' in the middle 60% vertical area, top and bottom 20% should be safe to crop'
+  + ' (background, sky, or ground only, no critical content).'
+);
+
+// Crop + resize a Gemini Nano Banana image (typically 1024x1024) into the TV
+// cover landscape format (1536x1024 PNG). Center-crops the largest 16:9 region
+// then resizes. Robust to any input aspect: if input is already 16:9 or wider,
+// we still center-crop the matching region; if it's a square or taller, we
+// crop top+bottom evenly.
+//
+// @param {Buffer} input  raw image bytes (PNG/JPEG/etc as returned by Gemini)
+// @returns {Promise<Buffer>}  PNG bytes at exactly 1536x1024
+export async function cropAndResizeGeminiImage(input) {
+  if (!input || !Buffer.isBuffer(input)) {
+    throw new Error('cropAndResizeGeminiImage: input must be a Buffer');
+  }
+  const meta = await sharp(input).metadata();
+  const w = meta.width;
+  const h = meta.height;
+  if (!w || !h) throw new Error('cropAndResizeGeminiImage: invalid metadata');
+
+  let pipeline = sharp(input);
+  const aspect = w / h;
+  if (aspect > NB_TARGET_RATIO) {
+    // Wider than 16:9 — crop left/right.
+    const cropW = Math.round(h * NB_TARGET_RATIO);
+    const left = Math.max(0, Math.round((w - cropW) / 2));
+    pipeline = pipeline.extract({ left, top: 0, width: cropW, height: h });
+  } else if (aspect < NB_TARGET_RATIO) {
+    // Taller than 16:9 (square is the common case) — crop top/bottom.
+    const cropH = Math.round(w / NB_TARGET_RATIO);
+    const top = Math.max(0, Math.round((h - cropH) / 2));
+    pipeline = pipeline.extract({ left: 0, top, width: w, height: cropH });
+  }
+  return pipeline.resize(NB_TARGET_W, NB_TARGET_H).png().toBuffer();
+}
 
 const COST = {
   openai: 4,
@@ -41,6 +101,12 @@ export function isMockMode() {
   if (process.env.USE_MOCK_AI === 'true' || process.env.USE_MOCK_AI === '1') return true;
   if (!env.FAL_KEY && !env.GEMINI_API_KEY && !env.OPENAI_API_KEY) return true;
   return false;
+}
+
+// True when the cover should bias toward simpler/safer art for younger kids.
+// Defaults to `true` when age is missing — most conservative for the widest user base.
+export function isYoungAge(childAge) {
+  return !(typeof childAge === 'number' && Number.isFinite(childAge) && childAge > 5);
 }
 
 // --- Error classification -------------------------------------------------
@@ -66,7 +132,7 @@ export function isSafetyRejection(err) {
   return markers.some((m) => msg.includes(m));
 }
 
-// --- Gemini rewrite helpers -----------------------------------------------
+// --- Gemini rewrite helpers (R1 active; R2 retained as dead code) ---------
 
 const REWRITE_PROMPT_ROUND1 = [
   'You are an expert at rewriting image generation prompts to pass OpenAI\'s image safety filters, especially the CSAM classifier which is hypersensitive to word combinations.',
@@ -85,6 +151,7 @@ const REWRITE_PROMPT_ROUND1 = [
   'Output ONLY the rewritten prompt. No preamble, no quotes, no markdown.',
 ].join('\n');
 
+// Retained for future workorders; not called in v3 production path.
 const REWRITE_PROMPT_ROUND2 = [
   'You are rewriting an image generation prompt that was ALREADY REJECTED TWICE by OpenAI\'s safety system. This is the last attempt before falling back to another model.',
   '',
@@ -128,11 +195,17 @@ async function geminiRewritePrompt(originalPrompt, round = 1) {
 }
 
 // ---------------------------------------------------------------------------
-// Cover — Page 1
+// Cover — Page 1 (age-routed)
 // ---------------------------------------------------------------------------
 
 export async function generateCoverImage(args) {
-  const { imagePrompt, characterDesc = '', seed = '', onAttempt = null } = args;
+  const {
+    imagePrompt,
+    characterDesc = '',
+    seed = '',
+    onAttempt = null,
+    childAge = null,
+  } = args;
   const attempts = [];
 
   if (isMockMode()) {
@@ -153,130 +226,115 @@ export async function generateCoverImage(args) {
   const page1Res = sanitizePromptForPage1(imagePrompt);
   const sanitizedCore = page1Res.sanitized;
   const assemble = (core) => [characterDesc, core, style].filter(Boolean).join(', ');
+  const ctx = { sanitizedCore, characterDesc, assemble, attempts, onAttempt, page1Res };
 
-  // --- Try 1: static dictionary → OpenAI ----------------------------------
+  return isYoungAge(childAge) ? coverYoungBranch(ctx) : coverOldBranch(ctx);
+}
+
+// Young branch: OpenAI → rewrite r1+OpenAI → Nano Banana → FAL text
+async function coverYoungBranch(ctx) {
+  const { sanitizedCore, assemble, attempts, onAttempt, page1Res } = ctx;
+
+  // T1: sanitizer → OpenAI
   {
     const finalPrompt = assemble(sanitizedCore);
     const r = await runExec('openai', 1, () => callOpenAI(finalPrompt));
     if (onAttempt) await onAttempt(r.attempt);
     attempts.push(r.attempt);
-    if (r.success) {
-      return finalizeRaw({
-        ...r.result,
-        provider: 'openai',
-        tier: 1,
-        durationMs: r.attempt.durationMs,
-        costCents: r.attempt.costCents,
-        attempts,
-        counters: { replacementHits: page1Res.replacedTerms.length, comboDetected: page1Res.replacedTerms.includes('__triple_rewrite__'), aggressiveRewrite: false },
-      });
-    }
-    if (!isSafetyRejection(r.error)) {
-      // Non-safety error (network/5xx). Skip to Nano Banana / FAL directly —
-      // retrying the same prompt through Gemini rewrite won't help.
-      return coverFallbacks({ sanitizedCore, characterDesc, style, attempts, onAttempt, page1Res });
-    }
+    if (r.success) return finalizeFromExec(r, 'openai', 1, attempts, page1Res, false);
+    // Non-safety failure (5xx/network) — Gemini rewrite cannot help, skip to FAL fallback chain.
+    if (!isSafetyRejection(r.error)) return coverFalFallback(ctx, 4);
   }
 
-  // --- Try 2: Gemini rewrite round 1 → OpenAI -----------------------------
+  // T2: Gemini rewrite round 1 → OpenAI
   let rewritten1 = null;
   try {
     rewritten1 = await geminiRewritePrompt(sanitizedCore, 1);
   } catch (err) {
-    attempts.push({ provider: 'gemini_rewrite_r1', tier: 2, success: false, durationMs: 0, costCents: 0, errorCode: 30004, errorMessage: String(err?.message || err).slice(0, 500) });
-    if (onAttempt) await onAttempt(attempts[attempts.length - 1]);
+    const att = {
+      provider: 'gemini_rewrite_r1',
+      tier: 2,
+      success: false,
+      durationMs: 0,
+      costCents: 0,
+      errorCode: 30004,
+      errorMessage: String(err?.message || err).slice(0, 500),
+    };
+    attempts.push(att);
+    if (onAttempt) await onAttempt(att);
   }
   if (rewritten1) {
     const finalPrompt = assemble(rewritten1);
     const r = await runExec('openai_rewrite1', 2, () => callOpenAI(finalPrompt));
     if (onAttempt) await onAttempt(r.attempt);
     attempts.push(r.attempt);
-    if (r.success) {
-      return finalizeRaw({
-        ...r.result,
-        provider: 'openai',
-        tier: 2,
-        durationMs: r.attempt.durationMs,
-        costCents: r.attempt.costCents,
-        attempts,
-        counters: { replacementHits: page1Res.replacedTerms.length, comboDetected: page1Res.replacedTerms.includes('__triple_rewrite__'), aggressiveRewrite: true },
-      });
-    }
-    if (!isSafetyRejection(r.error)) {
-      return coverFallbacks({ sanitizedCore, characterDesc, style, attempts, onAttempt, page1Res });
-    }
+    if (r.success) return finalizeFromExec(r, 'openai', 2, attempts, page1Res, true);
+    // Round-2 rewrite removed per workorder §2.3 — proceed directly to Nano Banana.
   }
 
-  // --- Try 3: Gemini rewrite round 2 (conservative) → OpenAI --------------
-  let rewritten2 = null;
-  try {
-    rewritten2 = await geminiRewritePrompt(sanitizedCore, 2);
-  } catch (err) {
-    attempts.push({ provider: 'gemini_rewrite_r2', tier: 3, success: false, durationMs: 0, costCents: 0, errorCode: 30004, errorMessage: String(err?.message || err).slice(0, 500) });
-    if (onAttempt) await onAttempt(attempts[attempts.length - 1]);
-  }
-  if (rewritten2) {
-    const finalPrompt = assemble(rewritten2);
-    const r = await runExec('openai_rewrite2', 3, () => callOpenAI(finalPrompt));
+  // T3: Nano Banana
+  {
+    const finalPrompt = assemble(sanitizedCore);
+    const r = await runExec('nano_banana', 3, () => callNanoBanana(finalPrompt));
     if (onAttempt) await onAttempt(r.attempt);
     attempts.push(r.attempt);
-    if (r.success) {
-      return finalizeRaw({
-        ...r.result,
-        provider: 'openai',
-        tier: 3,
-        durationMs: r.attempt.durationMs,
-        costCents: r.attempt.costCents,
-        attempts,
-        counters: { replacementHits: page1Res.replacedTerms.length, comboDetected: page1Res.replacedTerms.includes('__triple_rewrite__'), aggressiveRewrite: true },
-      });
-    }
+    if (r.success) return finalizeFromExec(r, 'nano_banana', 3, attempts, page1Res, false);
   }
 
-  return coverFallbacks({ sanitizedCore, characterDesc, style, attempts, onAttempt, page1Res });
+  // T4: FAL flux/dev text2image
+  return coverFalFallback(ctx, 4);
 }
 
-async function coverFallbacks({ sanitizedCore, characterDesc, style, attempts, onAttempt, page1Res }) {
-  const assemble = (core) => [characterDesc, core, style].filter(Boolean).join(', ');
+// Old branch: Nano Banana → OpenAI (single round) → FAL text
+async function coverOldBranch(ctx) {
+  const { sanitizedCore, assemble, attempts, onAttempt, page1Res } = ctx;
 
-  // Fallback A: Nano Banana
+  // T1: Nano Banana
   {
-    const r = await runExec('nano_banana', 4, () => callNanoBanana(assemble(sanitizedCore)));
+    const finalPrompt = assemble(sanitizedCore);
+    const r = await runExec('nano_banana', 1, () => callNanoBanana(finalPrompt));
     if (onAttempt) await onAttempt(r.attempt);
     attempts.push(r.attempt);
-    if (r.success) {
-      return finalizeRaw({
-        ...r.result,
-        provider: 'nano_banana',
-        tier: 4,
-        durationMs: r.attempt.durationMs,
-        costCents: r.attempt.costCents,
-        attempts,
-        counters: { replacementHits: page1Res.replacedTerms.length, comboDetected: false, aggressiveRewrite: false },
-      });
-    }
+    if (r.success) return finalizeFromExec(r, 'nano_banana', 1, attempts, page1Res, false);
   }
 
-  // Fallback B: FAL flux/dev text2image
+  // T2: sanitizer → OpenAI (single round, no Gemini rewrite)
   {
-    const { finalPrompt } = sanitizeImagePrompt(sanitizedCore, { channel: 'fal', characterDesc });
-    const r = await runExec('fal', 5, () => callFalText(finalPrompt));
+    const finalPrompt = assemble(sanitizedCore);
+    const r = await runExec('openai', 2, () => callOpenAI(finalPrompt));
     if (onAttempt) await onAttempt(r.attempt);
     attempts.push(r.attempt);
-    if (r.success) {
-      return finalizeRaw({
-        ...r.result,
-        provider: 'fal',
-        tier: 5,
-        durationMs: r.attempt.durationMs,
-        costCents: r.attempt.costCents,
-        attempts,
-        counters: { replacementHits: page1Res.replacedTerms.length, comboDetected: false, aggressiveRewrite: false },
-      });
-    }
+    if (r.success) return finalizeFromExec(r, 'openai', 2, attempts, page1Res, false);
   }
 
+  // T3: FAL flux/dev text2image
+  return coverFalFallback(ctx, 3);
+}
+
+async function coverFalFallback(ctx, tier) {
+  const { sanitizedCore, characterDesc, attempts, onAttempt, page1Res } = ctx;
+  const { finalPrompt } = sanitizeImagePrompt(sanitizedCore, { channel: 'fal', characterDesc });
+  const r = await runExec('fal', tier, () => callFalText(finalPrompt));
+  if (onAttempt) await onAttempt(r.attempt);
+  attempts.push(r.attempt);
+  if (r.success) return finalizeFromExec(r, 'fal', tier, attempts, page1Res, false);
   return placeholderResult(1, attempts);
+}
+
+function finalizeFromExec(r, providerOut, tierOut, attempts, page1Res, aggressive) {
+  return finalizeRaw({
+    ...r.result,
+    provider: providerOut,
+    tier: tierOut,
+    durationMs: r.attempt.durationMs,
+    costCents: r.attempt.costCents,
+    attempts,
+    counters: {
+      replacementHits: page1Res.replacedTerms?.length || 0,
+      comboDetected: page1Res.replacedTerms?.includes('__triple_rewrite__') || false,
+      aggressiveRewrite: aggressive,
+    },
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -410,9 +468,9 @@ async function mockProvider({ provider, pageNum, seed }) {
 
 async function callOpenAI(prompt) {
   if (!env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not configured');
-  // DEBUG: Phase-C fallback chain test harness. When DEBUG_FORCE_OPENAI_FAIL=1,
-  // simulate every OpenAI image call as a safety rejection so the pipeline
-  // flows through Gemini rewrite Try2/Try3 and falls through to Nano Banana.
+  // DEBUG: when DEBUG_FORCE_OPENAI_FAIL=1, simulate every OpenAI image call as a
+  // safety rejection so the pipeline flows through the rewrite/Nano Banana
+  // fallback chain. Used by tools/probe_*.js regression scripts.
   if (process.env.DEBUG_FORCE_OPENAI_FAIL === '1' || process.env.DEBUG_FORCE_OPENAI_FAIL === 'true') {
     const err = new Error('DEBUG_FORCE_OPENAI_FAIL: Your request was rejected as a result of our safety system');
     err.status = 400;
@@ -449,16 +507,20 @@ async function callOpenAI(prompt) {
   throw new Error('OpenAI response missing url and b64_json');
 }
 
-// Nano Banana (Gemini 2.5 Flash Image Preview) — implemented in Phase 3.
+// Nano Banana (Gemini 2.5 Flash Image).
+// Returns a 1536x1024 PNG dataURI: Gemini outputs ~1024x1024, we center-crop
+// to 16:9 + resize via sharp. Prompt is augmented with NB_COMPOSITION_SUFFIX
+// to bias the model toward subject-centered framing so the crop is safe.
 async function callNanoBanana(prompt) {
   if (!env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY not configured');
   const model = process.env.NANO_BANANA_MODEL || 'gemini-2.5-flash-image';
+  const fullPrompt = prompt + NB_COMPOSITION_SUFFIX;
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`;
   const resp = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      contents: [{ role: 'user', parts: [{ text: fullPrompt }] }],
       generationConfig: { responseModalities: ['Image'] },
     }),
   });
@@ -473,8 +535,10 @@ async function callNanoBanana(prompt) {
   const imagePart = parts.find((p) => p.inline_data || p.inlineData);
   if (!imagePart) throw new Error('nano_banana_no_image_in_response');
   const b64 = imagePart.inline_data?.data || imagePart.inlineData?.data;
-  const mime = imagePart.inline_data?.mime_type || imagePart.inlineData?.mimeType || 'image/png';
-  const dataUrl = `data:${mime};base64,${b64}`;
+  if (!b64) throw new Error('nano_banana_empty_image_data');
+  const rawBuf = Buffer.from(b64, 'base64');
+  const croppedBuf = await cropAndResizeGeminiImage(rawBuf);
+  const dataUrl = `data:image/png;base64,${croppedBuf.toString('base64')}`;
   return { imageUrl: dataUrl, imageUrlHd: dataUrl };
 }
 
@@ -535,7 +599,7 @@ async function callFalText(prompt) {
 }
 
 // Public alias — Page 1 fallback B (text2image, no reference image needed).
-// Wrapper around the existing FAL flux/dev call; per workorder §6.
+// Wrapper around the existing FAL flux/dev call; kept for backward compat.
 export async function callFalFluxT2I(prompt) {
   return callFalText(prompt);
 }
