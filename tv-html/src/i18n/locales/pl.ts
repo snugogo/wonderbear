@@ -1,7 +1,7 @@
 /*
  * Polish locale.
  * 2026-04-25: upgraded from prefix-stub to real preview translation
- * for the FavoritesScreen + a few key navigation strings. Other keys
+ * for the FavoritesScreen + key navigation strings. Untranslated keys
  * fall back to English via vue-i18n fallbackLocale.
  */
 import en from './en';

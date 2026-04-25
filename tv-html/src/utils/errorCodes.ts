@@ -48,7 +48,7 @@ interface ErrorEntry {
   en: string;
   pl: string;
   ro: string;
-  // Optional preview-grade locales (fall back to en at runtime).
+  // Optional preview-grade locales — fall back to en at runtime.
   ja?: string;
   de?: string;
   es?: string;

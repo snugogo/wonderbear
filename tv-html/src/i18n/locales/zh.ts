@@ -187,6 +187,7 @@ export default {
    *   - 「我的脚印 🐾」全部替换为「我的星光 ⭐」
    *   - 「脚印」单位禁用,统一「星光」(stars)
    */
+
   profile: {
     title: '小熊小屋',
     subscriptionFree: '免费用户',
