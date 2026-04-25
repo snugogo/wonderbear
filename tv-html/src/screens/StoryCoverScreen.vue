@@ -21,13 +21,19 @@ import { useI18n } from 'vue-i18n';
 import { bridge } from '@/services/bridge';
 import { useFocusable } from '@/services/focus';
 import { ERR } from '@/utils/errorCodes';
+import { asset } from '@/utils/assets';
 
-const AUTO_ADVANCE_MS = 3000;
+const AUTO_ADVANCE_MS = 5000;
 
 const storyStore = useStoryStore();
 const screen = useScreenStore();
 const bgm = useBgmStore();
 const { t } = useI18n();
+
+// iter8 gallery-safe: when loaded via ?dev=1 deep-link without a real story,
+// don't bail — show the "ready" ceremony with a placeholder title.
+const isDevBrowser = typeof window !== 'undefined'
+  && new URLSearchParams(window.location.search).has('dev');
 
 const okCaptureEl = ref<HTMLElement | null>(null);
 let advanceTimer: number | null = null;
@@ -35,7 +41,9 @@ let mounted = true;
 const visible = ref<boolean>(false);
 
 const coverUrl = computed<string>(() => storyStore.active?.coverUrl ?? '');
-const title = computed<string>(() => storyStore.active?.title ?? '');
+const title = computed<string>(() =>
+  storyStore.active?.title ?? 'The Brave Little Bear',
+);
 
 function clearTimers(): void {
   if (advanceTimer != null) {
@@ -59,9 +67,13 @@ useFocusable(okCaptureEl, {
 
 onMounted(() => {
   if (!storyStore.active) {
-    bridge.log('story-cover', { event: 'mounted_without_active_story' });
-    screen.goError(ERR.STORY_NOT_FOUND);
-    return;
+    if (isDevBrowser) {
+      // Gallery/demo mode: skip the strict check, show the ceremony layout.
+    } else {
+      bridge.log('story-cover', { event: 'mounted_without_active_story' });
+      screen.goError(ERR.STORY_NOT_FOUND);
+      return;
+    }
   }
 
   bgm.play('story_cover');
@@ -82,18 +94,28 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="cover-screen" :class="{ visible }">
+    <!-- Layer 1: painted BG. Prefer real cover image, fall back to bg_forest
+         watercolor so the ceremony still reads even in gallery/demo mode. -->
     <img
-      v-if="coverUrl"
-      class="cover"
-      :src="coverUrl"
+      class="bg"
+      :src="coverUrl || asset('bg/bg_forest.webp')"
       :alt="title"
     >
 
-    <div class="overlay" />
+    <!-- Layer 2: decorative confetti drifting up — celebratory cue that
+         the story just finished generating. Uses deco_confetti (transparent). -->
+    <img class="deco-confetti left" :src="asset('deco/deco_confetti.webp')" alt="" />
+    <img class="deco-confetti right" :src="asset('deco/deco_confetti.webp')" alt="" />
+    <img class="deco-stars" :src="asset('deco/deco_stars.webp')" alt="" />
 
-    <div class="title-block">
-      <h1 class="title t-display">{{ title }}</h1>
-      <div class="hint t-md">{{ t('common.ok') }}</div>
+    <!-- Layer 3: cheering bear — center-ish, bobs gently. -->
+    <img class="bear" :src="asset('bear/bear_cheer.webp')" alt="" />
+
+    <!-- Layer 4: "ready" ceremony text block. -->
+    <div class="ceremony">
+      <div class="ready-line wb-text-shadow">{{ t('story.ready') }}</div>
+      <h1 class="title wb-text-shadow">{{ title }}</h1>
+      <div class="start-hint wb-text-shadow-sm">{{ t('story.startWatching') }}</div>
     </div>
 
     <div ref="okCaptureEl" class="ok-capture" tabindex="-1" aria-hidden="true" />
@@ -110,32 +132,72 @@ onBeforeUnmount(() => {
   opacity: 0;
   transition: opacity 1200ms var(--ease-out);
 }
-.cover-screen.visible {
-  opacity: 1;
-}
+.cover-screen.visible { opacity: 1; }
 
-.cover {
+/* Layer 1 */
+.bg {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
   user-select: none;
+  filter: brightness(0.85);
 }
 
-.overlay {
+/* Layer 2 — confetti drift from bottom corners. */
+.deco-confetti {
+  position: absolute;
+  width: 320px;
+  height: 320px;
+  object-fit: contain;
+  opacity: 0.9;
+  pointer-events: none;
+  z-index: 2;
+  animation: confetti-rise 3.5s ease-in-out infinite;
+}
+.deco-confetti.left  { left: 4%;   bottom: 6%; animation-delay: 0s; }
+.deco-confetti.right { right: 4%;  bottom: 6%; animation-delay: 1.2s; transform: scaleX(-1); }
+@keyframes confetti-rise {
+  0%, 100% { transform: translateY(0) rotate(0); opacity: 0.85; }
+  50%      { transform: translateY(-40px) rotate(6deg); opacity: 1; }
+}
+.deco-stars {
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    180deg,
-    rgba(0, 0, 0, 0) 40%,
-    rgba(0, 0, 0, 0.55) 80%,
-    rgba(0, 0, 0, 0.78) 100%
-  );
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0.45;
   pointer-events: none;
+  z-index: 1;
+  animation: stars-twinkle 4s ease-in-out infinite;
+}
+@keyframes stars-twinkle {
+  0%, 100% { opacity: 0.35; transform: scale(1); }
+  50%      { opacity: 0.65; transform: scale(1.03); }
 }
 
-.title-block {
+/* Layer 3 — cheering bear bobs gently. */
+.bear {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  transform: translate(-50%, -50%);
+  width: 380px;
+  height: 380px;
+  object-fit: contain;
+  z-index: 3;
+  filter: drop-shadow(0 20px 40px rgba(0, 0, 0, 0.45));
+  animation: bear-bob 2.2s ease-in-out infinite alternate;
+}
+@keyframes bear-bob {
+  0%   { transform: translate(-50%, -50%) scale(1); }
+  100% { transform: translate(-50%, -52%) scale(1.02); }
+}
+
+/* Layer 4 — ceremony text block. */
+.ceremony {
   position: absolute;
   left: 0;
   right: 0;
@@ -143,25 +205,33 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--sp-3);
+  gap: 12px;
   padding: 0 var(--sp-7);
   text-align: center;
+  z-index: 4;
 }
-
-.title {
-  color: var(--c-cream);
-  font-weight: 800;
+.ready-line {
+  font-family: var(--ff-display);
+  color: var(--c-amber);
+  font-size: 36px;
+  font-weight: 700;
   letter-spacing: 0.04em;
   margin: 0;
-  text-shadow: 0 4px 24px rgba(0, 0, 0, 0.7);
-  line-height: 1.2;
 }
-
-.hint {
-  color: var(--c-amber);
+.title {
+  font-family: var(--ff-display);
+  color: var(--c-cream);
+  font-size: 64px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  line-height: 1.2;
+  margin: 0;
+}
+.start-hint {
+  font-family: var(--ff-display);
+  color: var(--c-cream-soft);
+  font-size: 22px;
   letter-spacing: 0.12em;
-  opacity: 0.85;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
 }
 
 .ok-capture {

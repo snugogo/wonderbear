@@ -1,0 +1,213 @@
+{
+  "writers_board": [
+    { "rank": 1,  "family_id": "f001", "display_nickname": "Moon Family",   "stars": 247 },
+    { "rank": 2,  "family_id": "f002", "display_nickname": "Star Family",   "stars": 198 },
+    { "rank": 3,  "family_id": "f003", "display_nickname": "Forest Family", "stars": 156 },
+    { "rank": 4,  "family_id": "f004", "display_nickname": "Ocean Family",  "stars": 142 },
+    { "rank": 5,  "family_id": "f005", "display_nickname": "Cloud Family",  "stars": 134 },
+    { "rank": 6,  "family_id": "f006", "display_nickname": "River Family",  "stars": 121 },
+    { "rank": 7,  "family_id": "f007", "display_nickname": "Bloom Family",  "stars": 109 },
+    { "rank": 8,  "family_id": "f008", "display_nickname": "Snow Family",   "stars": 102 },
+    { "rank": 9,  "family_id": "f009", "display_nickname": "Stone Family",  "stars": 96  },
+    { "rank": 10, "family_id": "f010", "display_nickname": "Rain Family",   "stars": 88  },
+    { "rank": 11, "family_id": "f011", "display_nickname": "Wind Family",   "stars": 78  },
+    { "rank": 12, "family_id": "self", "display_nickname": "Your Family",   "stars": 64, "is_self": true },
+    { "rank": 13, "family_id": "f013", "display_nickname": "Light Family",  "stars": 58  },
+    { "rank": 14, "family_id": "f014", "display_nickname": "Berry Family",  "stars": 51  },
+    { "rank": 15, "family_id": "f015", "display_nickname": "Sprout Family", "stars": 47  },
+    { "rank": 16, "family_id": "f016", "display_nickname": "Island Family", "stars": 41  },
+    { "rank": 17, "family_id": "f017", "display_nickname": "Sand Family",   "stars": 38  },
+    { "rank": 18, "family_id": "f018", "display_nickname": "Robin Family",  "stars": 33  },
+    { "rank": 19, "family_id": "f019", "display_nickname": "Trout Family",  "stars": 29  },
+    { "rank": 20, "family_id": "f020", "display_nickname": "Bean Family",   "stars": 24  }
+  ],
+
+  "weekly_plays": [
+    {
+      "rank": 1,
+      "story_id": "s001",
+      "title": "Whispers of the Moon",
+      "cover_url": "https://cdn.jsdelivr.net/gh/snugogo/wonderbear@main/assets/story/story_generic_forest.webp",
+      "creator_nickname": "Moon Family",
+      "weekly_plays_count": 1247
+    },
+    {
+      "rank": 2,
+      "story_id": "s002",
+      "title": "Stars Beneath the Sea",
+      "cover_url": "https://cdn.jsdelivr.net/gh/snugogo/wonderbear@main/assets/story/story_generic_ocean.webp",
+      "creator_nickname": "Star Family",
+      "weekly_plays_count": 1108
+    },
+    {
+      "rank": 3,
+      "story_id": "s003",
+      "title": "A Home Up on the Clouds",
+      "cover_url": "https://cdn.jsdelivr.net/gh/snugogo/wonderbear@main/assets/story/story_generic_sky.webp",
+      "creator_nickname": "Forest Family",
+      "weekly_plays_count": 967
+    },
+    {
+      "rank": 4,
+      "story_id": "s004",
+      "title": "The Forest Post Office",
+      "cover_url": "https://cdn.jsdelivr.net/gh/snugogo/wonderbear@main/assets/story/story_generic_forest.webp",
+      "creator_nickname": "Ocean Family",
+      "weekly_plays_count": 854
+    },
+    {
+      "rank": 5,
+      "story_id": "s005",
+      "title": "Lantern in the Rainy Night",
+      "cover_url": "https://cdn.jsdelivr.net/gh/snugogo/wonderbear@main/assets/story/story_generic_sky.webp",
+      "creator_nickname": "Cloud Family",
+      "weekly_plays_count": 741
+    },
+    {
+      "rank": 6,
+      "story_id": "s006",
+      "title": "Candy Hidden in the Snow",
+      "cover_url": "https://cdn.jsdelivr.net/gh/snugogo/wonderbear@main/assets/story/story_generic_sky.webp",
+      "creator_nickname": "River Family",
+      "weekly_plays_count": 612
+    },
+    {
+      "rank": 7,
+      "story_id": "s007",
+      "title": "The Dolphin's Birthday Party",
+      "cover_url": "https://cdn.jsdelivr.net/gh/snugogo/wonderbear@main/assets/story/story_generic_ocean.webp",
+      "creator_nickname": "Bloom Family",
+      "weekly_plays_count": 543
+    },
+    {
+      "rank": 8,
+      "story_id": "s008",
+      "title": "A Castle in the Mushroom",
+      "cover_url": "https://cdn.jsdelivr.net/gh/snugogo/wonderbear@main/assets/story/story_generic_forest.webp",
+      "creator_nickname": "Snow Family",
+      "weekly_plays_count": 478
+    },
+    {
+      "rank": 9,
+      "story_id": "s009",
+      "title": "The Singing Stars",
+      "cover_url": "https://cdn.jsdelivr.net/gh/snugogo/wonderbear@main/assets/story/story_generic_sky.webp",
+      "creator_nickname": "Stone Family",
+      "weekly_plays_count": 412
+    },
+    {
+      "rank": 10,
+      "story_id": "s010",
+      "title": "Lunch on the Reef",
+      "cover_url": "https://cdn.jsdelivr.net/gh/snugogo/wonderbear@main/assets/story/story_generic_ocean.webp",
+      "creator_nickname": "Rain Family",
+      "weekly_plays_count": 358
+    }
+  ],
+
+  "editor_picks": [
+    {
+      "rank": 1,
+      "story_id": "e001",
+      "title": "Little Bear and the Cloud",
+      "cover_url": "https://cdn.jsdelivr.net/gh/snugogo/wonderbear@main/assets/story/story_generic_sky.webp",
+      "creator_nickname": "WonderBear Studio",
+      "is_editor_pick": true
+    },
+    {
+      "rank": 2,
+      "story_id": "e002",
+      "title": "The Brave Little Sailor",
+      "cover_url": "https://cdn.jsdelivr.net/gh/snugogo/wonderbear@main/assets/story/story_generic_ocean.webp",
+      "creator_nickname": "WonderBear Studio",
+      "is_editor_pick": true
+    },
+    {
+      "rank": 3,
+      "story_id": "e003",
+      "title": "The Forest Concert",
+      "cover_url": "https://cdn.jsdelivr.net/gh/snugogo/wonderbear@main/assets/story/story_generic_forest.webp",
+      "creator_nickname": "WonderBear Studio",
+      "is_editor_pick": true
+    },
+    {
+      "rank": 4,
+      "story_id": "e004",
+      "title": "Goodnight, Little Bear",
+      "cover_url": "https://cdn.jsdelivr.net/gh/snugogo/wonderbear@main/assets/story/story_generic_sky.webp",
+      "creator_nickname": "WonderBear Studio",
+      "is_editor_pick": true
+    },
+    {
+      "rank": 5,
+      "story_id": "e005",
+      "title": "End of the Rainbow",
+      "cover_url": "https://cdn.jsdelivr.net/gh/snugogo/wonderbear@main/assets/story/story_generic_forest.webp",
+      "creator_nickname": "WonderBear Studio",
+      "is_editor_pick": true
+    },
+    {
+      "rank": 6,
+      "story_id": "e006",
+      "title": "The Starfish's Travel",
+      "cover_url": "https://cdn.jsdelivr.net/gh/snugogo/wonderbear@main/assets/story/story_generic_ocean.webp",
+      "creator_nickname": "WonderBear Studio",
+      "is_editor_pick": true
+    },
+    {
+      "rank": 7,
+      "story_id": "e007",
+      "title": "A Gift from the Stars",
+      "cover_url": "https://cdn.jsdelivr.net/gh/snugogo/wonderbear@main/assets/story/story_generic_sky.webp",
+      "creator_nickname": "WonderBear Studio",
+      "is_editor_pick": true
+    },
+    {
+      "rank": 8,
+      "story_id": "e008",
+      "title": "Lights of the Little Town",
+      "cover_url": "https://cdn.jsdelivr.net/gh/snugogo/wonderbear@main/assets/story/story_generic_forest.webp",
+      "creator_nickname": "WonderBear Studio",
+      "is_editor_pick": true
+    },
+    {
+      "rank": 9,
+      "story_id": "e009",
+      "title": "Secret of the Snowy Mountain",
+      "cover_url": "https://cdn.jsdelivr.net/gh/snugogo/wonderbear@main/assets/story/story_generic_sky.webp",
+      "creator_nickname": "WonderBear Studio",
+      "is_editor_pick": true
+    },
+    {
+      "rank": 10,
+      "story_id": "e010",
+      "title": "Echoes from the Lake",
+      "cover_url": "https://cdn.jsdelivr.net/gh/snugogo/wonderbear@main/assets/story/story_generic_ocean.webp",
+      "creator_nickname": "WonderBear Studio",
+      "is_editor_pick": true
+    },
+    {
+      "rank": 11,
+      "story_id": "e011",
+      "title": "Dance Under the Moon",
+      "cover_url": "https://cdn.jsdelivr.net/gh/snugogo/wonderbear@main/assets/story/story_generic_sky.webp",
+      "creator_nickname": "WonderBear Studio",
+      "is_editor_pick": true
+    },
+    {
+      "rank": 12,
+      "story_id": "e012",
+      "title": "A Pony on the Meadow",
+      "cover_url": "https://cdn.jsdelivr.net/gh/snugogo/wonderbear@main/assets/story/story_generic_forest.webp",
+      "creator_nickname": "WonderBear Studio",
+      "is_editor_pick": true
+    }
+  ],
+
+  "self_summary": {
+    "rank": 12,
+    "stars": 64,
+    "stars_to_top10": 36,
+    "in_top10": false
+  }
+}

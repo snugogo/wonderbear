@@ -25,6 +25,8 @@ import { useFocusable, getCurrentFocusId, onFocusChange } from '@/services/focus
 import { setLocale } from '@/i18n';
 import type { Locale } from '@/utils/errorCodes';
 import { asset } from '@/utils/assets';
+import HintBar from '@/components/HintBar.vue';
+import leaderboardMock from '@/mock/leaderboard.json';
 
 const child = useChildStore();
 const device = useDeviceStore();
@@ -55,6 +57,16 @@ const childName = computed<string>(() => child.active?.name ?? t('home.greetingD
 const childAge = computed<string>(() => {
   if (!child.active) return '';
   return `${child.active.age} · ${ageToBucket(child.active.age)}`;
+});
+
+/*
+ * TV v1.0 §4.2: 「我的脚印 🐾」全产品改名「我的星光 ⭐」.
+ * Stars come from server's family leaderboard summary; until that
+ * endpoint lands we read the mock JSON's self_summary block.
+ */
+const familyStars = computed<number>(() => {
+  const m = leaderboardMock as { self_summary?: { stars?: number } };
+  return m.self_summary?.stars ?? 0;
 });
 
 function toggleBgm(): void {
@@ -138,6 +150,11 @@ onBeforeUnmount(() => {
             <img class="coin" :src="asset('deco/deco_coins.webp')" alt="">
             <span>{{ t('profile.storiesRemaining', { count: device.storiesLeft }) }}</span>
           </div>
+          <!-- TV v1.0 §4.2: 我的星光 (replaces 我的脚印 🐾). -->
+          <div class="t-md stars-row">
+            <span class="stars-label">{{ t('profile.starsLabel') }}</span>
+            <span class="stars-value">{{ t('profile.starsValue', { count: familyStars }) }}</span>
+          </div>
         </div>
       </section>
 
@@ -201,6 +218,12 @@ onBeforeUnmount(() => {
         <span class="t-lg">{{ t('error.backHome') }}</span>
       </button>
     </main>
+
+    <HintBar :hints="[
+      { keys: ['↑','↓'], label: t('hint.crossRow') },
+      { keys: ['OK'], label: t('hint.confirm') },
+      { keys: ['Back'], label: t('hint.back') },
+    ]" />
   </div>
 </template>
 
@@ -253,7 +276,8 @@ onBeforeUnmount(() => {
   flex-direction: column;
   align-items: center;
   gap: var(--sp-4);
-  padding: 0 var(--sp-6) var(--sp-5);
+  /* Bottom pad reserves 56px for HintBar strip. */
+  padding: 0 var(--sp-6) 72px;
   overflow-y: auto;
 }
 
@@ -290,6 +314,15 @@ onBeforeUnmount(() => {
   margin-top: var(--sp-1);
 }
 .coin { width: 28px; height: 28px; object-fit: contain; }
+.stars-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--c-amber);
+  margin-top: var(--sp-1);
+}
+.stars-label { color: var(--c-cream); font-weight: 600; }
+.stars-value { color: var(--c-amber); font-weight: 800; }
 
 .settings {
   width: 100%;

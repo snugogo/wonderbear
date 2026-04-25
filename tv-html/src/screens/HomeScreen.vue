@@ -11,28 +11,26 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue';
 import { useChildStore } from '@/stores/child';
-import { useDeviceStore } from '@/stores/device';
 import { useScreenStore } from '@/stores/screen';
 import { useBgmStore } from '@/stores/bgm';
 import { useI18n } from 'vue-i18n';
 import MenuCard from '@/components/MenuCard.vue';
+// HintBar removed from Home 2026-04-24 iter6; kept import-free.
 import type { FocusableNeighbors } from '@/services/focus';
 import { asset } from '@/utils/assets';
 
 const child = useChildStore();
-const device = useDeviceStore();
 const screen = useScreenStore();
 const bgm = useBgmStore();
 const { t } = useI18n();
 
 /*
- * TV_TASKS_v6 task 1 + v1.1 P0-2:
- * The six home-card icons (ui/ui_home_*.webp) are still in "P0 A / 状态 ⏳"
- * per NAMING_CONTRACT.md. We ship a letter placeholder and the final asset
- * path is already wired. When USE_ICON_ASSETS flips to true, MenuCard
- * auto-renders <img> without any other code change.
+ * 2026-04-23: flipped to true after CDN verification.
+ * All 6 ui/ui_home_*.webp confirmed 200 on jsDelivr
+ * (create / stories_map / library / explore / profile / cast).
+ * MenuCard auto-renders <img>; letter placeholder removed from Home.
  */
-const USE_ICON_ASSETS = false;
+const USE_ICON_ASSETS = true;
 
 interface MenuItem {
   id: string;
@@ -44,6 +42,26 @@ interface MenuItem {
   action: () => void;
 }
 
+/*
+ * TV v1.0 §2.1 — locked 6-entry layout (3×2):
+ *
+ *   Row 1: [ 1. 来讲故事 / Create     ] [ 2. 故事乐园 / Stories ] [ 3. 小熊星光 / Bear Stars ]
+ *   Row 2: [ 4. 手机投屏 / Cast       ] [ 5. 小熊小屋 / My Den  ] [ 6. 系统设置 / Settings   ]
+ *
+ * Card #2 (Stories) → /library, Card #3 (Bear Stars) → /leaderboard (NEW),
+ * Cards 4 / 6 are stubs (Cast / Settings) wired later via native bridge.
+ *
+ * Per founder note in TV_ASSETS_IN_USE.md §maint #4: Card #5 keeps
+ * `bear/bear_my_home.webp` art (NOT ui_home_profile). Don't revert.
+ */
+function stubAction(kind: string): () => void {
+  return () => {
+    // Real wiring goes to native bridge later (window.AndroidBridge.openSettings()).
+    // eslint-disable-next-line no-console
+    console.log(`[home] stub card '${kind}' pressed — native jump not wired yet`);
+  };
+}
+
 const menus: MenuItem[] = [
   // Row 1
   {
@@ -51,49 +69,52 @@ const menus: MenuItem[] = [
     i18nKey: 'home.menus.create',
     letter: 'C', icon: 'ui/ui_home_create.webp',
     enabled: true,
-    neighbors: { right: 'home-card-stories', down: 'home-card-explore' },
-    action: () => screen.go('dialogue'),
+    neighbors: { right: 'home-card-stories', down: 'home-card-cast' },
+    action: () => screen.go('create'),
   },
   {
     id: 'home-card-stories',
+    // §2.1 #2: 故事乐园 / Stories → /library
     i18nKey: 'home.menus.stories',
-    letter: 'S', icon: 'ui/ui_home_stories_map.webp',
-    enabled: false,
-    neighbors: { left: 'home-card-create', right: 'home-card-library', down: 'home-card-profile' },
-    action: () => {},
-  },
-  {
-    id: 'home-card-library',
-    i18nKey: 'home.menus.library',
-    letter: 'L', icon: 'ui/ui_home_library.webp',
+    letter: 'S', icon: 'ui/ui_home_library.webp',
     enabled: true,
-    neighbors: { left: 'home-card-stories', down: 'home-card-cast' },
+    neighbors: { left: 'home-card-create', right: 'home-card-bearstars', down: 'home-card-myden' },
     action: () => screen.go('library'),
   },
-  // Row 2
   {
-    id: 'home-card-explore',
-    i18nKey: 'home.menus.explore',
-    letter: 'E', icon: 'ui/ui_home_explore.webp',
-    enabled: false,
-    neighbors: { right: 'home-card-profile', up: 'home-card-create' },
-    action: () => {},
-  },
-  {
-    id: 'home-card-profile',
-    i18nKey: 'home.menus.profile',
-    letter: 'P', icon: 'ui/ui_home_profile.webp',
+    id: 'home-card-bearstars',
+    // §2.1 #3: 小熊星光 / Bear Stars → /leaderboard (NEW screen).
+    i18nKey: 'home.menus.bearStars',
+    letter: 'B', icon: 'ui/ui_home_stories_map.webp',
     enabled: true,
-    neighbors: { left: 'home-card-explore', right: 'home-card-cast', up: 'home-card-stories' },
-    action: () => screen.go('profile'),
+    neighbors: { left: 'home-card-stories', down: 'home-card-settings' },
+    action: () => screen.go('leaderboard'),
   },
+  // Row 2
   {
     id: 'home-card-cast',
     i18nKey: 'home.menus.cast',
     letter: 'T', icon: 'ui/ui_home_cast.webp',
-    enabled: false,
-    neighbors: { left: 'home-card-profile', up: 'home-card-library' },
-    action: () => {},
+    enabled: true,
+    neighbors: { right: 'home-card-myden', up: 'home-card-create' },
+    action: stubAction('cast'),
+  },
+  {
+    id: 'home-card-myden',
+    // §2.1 #5: 小熊小屋 / My Den → /profile.
+    i18nKey: 'home.menus.myDen',
+    letter: 'P', icon: 'bear/bear_my_home.webp',
+    enabled: true,
+    neighbors: { left: 'home-card-cast', right: 'home-card-settings', up: 'home-card-stories' },
+    action: () => screen.go('profile'),
+  },
+  {
+    id: 'home-card-settings',
+    i18nKey: 'home.menus.settings',
+    letter: 'G', icon: 'ui/ui_home_explore.webp',
+    enabled: true,
+    neighbors: { left: 'home-card-myden', up: 'home-card-bearstars' },
+    action: stubAction('settings'),
   },
 ];
 
@@ -132,35 +153,24 @@ onMounted(async () => {
     <img class="bg" :src="asset('bg/bg_home_cozy.webp')" alt="" aria-hidden="true" onerror="this.style.display='none'" />
 
     <!--
-      TV_TASKS v1.1 P0-3: bear_idle decoration bottom-right of home, 280×280.
-      Kept separate from the 6 menu cards so it reads as a passive companion.
+      bg_home_cozy already paints cozy bears / shelves / plants in the
+      background watercolor, so a foreground bear_idle deco adds visual
+      noise and competes with the 6 menu cards for attention. Removed
+      2026-04-23; re-add with a smaller deco if designer asks.
     -->
-    <img
-      class="home-bear-deco"
-      :src="asset('bear/bear_idle.webp')"
-      alt=""
-      aria-hidden="true"
-    />
 
-    <!-- Top status bar -->
+    <!-- Top status bar — iter5: "Switch child" removed; child switching lives
+         on the Profile screen. Home topbar only *reads* the current child. -->
     <header class="topbar">
       <div class="topbar-left">
-        <!-- bear emoji replaced by the active child's avatar image per TV_TASKS_v6 rule #1. -->
         <img class="avatar" :src="childAvatarUrl" alt="" />
         <div class="meta">
-          <div class="t-md greeting">{{ greeting() }}</div>
-          <div class="t-sm coins">
-            <!-- coin emoji replaced by deco/deco_coins.webp (already in git). -->
+          <div class="greeting wb-text-outline">{{ greeting() }}</div>
+          <div class="coins wb-text-outline-sm">
             <img class="coin-icon" :src="asset('deco/deco_coins.webp')" alt="" />
             <span>{{ child.active?.coins ?? 0 }}</span>
           </div>
         </div>
-      </div>
-      <div class="topbar-center">
-        <div class="logo t-lg">{{ device.brandName }}</div>
-      </div>
-      <div class="topbar-right">
-        <div class="t-sm switch-child">{{ t('home.switchChild') }}</div>
       </div>
     </header>
 
@@ -180,6 +190,14 @@ onMounted(async () => {
         @enter="handleEnter"
       />
     </div>
+
+    <!--
+      iter6: HintBar removed entirely from Home — the 6 bear cards speak
+      for themselves. Frees up the bottom 40-ish px for bigger bears.
+      (Other screens still use HintBar; this is a Home-only removal.)
+    -->
+
+    
   </div>
 </template>
 
@@ -207,20 +225,6 @@ onMounted(async () => {
   pointer-events: none;
 }
 
-.home-bear-deco {
-  position: absolute;
-  bottom: -24px;
-  right: -24px;
-  width: 280px;
-  height: 280px;
-  object-fit: contain;
-  opacity: 0.9;
-  z-index: 0;
-  filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.35));
-  pointer-events: none;
-  user-select: none;
-}
-
 /* Keep topbar + grid above background layers. */
 .topbar, .menu-grid {
   position: relative;
@@ -229,64 +233,74 @@ onMounted(async () => {
 
 .topbar {
   flex: 0 0 auto;
-  height: 80px;
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  /* iter5: TV safe-area top padding 36 px (≈5% of 720 vertical overscan).
+   * Removed 3-column grid since the right slot (Switch child) is gone — now
+   * just a left-aligned status block. Topbar wrapper height = 40 px content
+   * + 36 px top safe-area = 76 px. */
+  height: 76px;
+  display: flex;
   align-items: center;
-  padding: 0 var(--sp-5);
+  padding: 36px 64px 8px;
   /*
-   * WCAG AA: cream text sits over bg_home_cozy warm bright zones.
-   * Dark gradient fade gives the topbar its own contrast zone without
-   * hiding the watercolor — fades out smoothly into the card grid below.
+   * 2026-04-24 Phase B iter2: the dark gradient strip is no longer needed
+   * now that every topbar text carries .wb-text-outline* (4-way black
+   * stroke + glow). Letting the watercolor show through full strength
+   * stops the topbar reading as a chrome bar floating above the scene.
    */
-  background: linear-gradient(180deg,
-    rgba(26, 15, 10, 0.65) 0%,
-    rgba(26, 15, 10, 0.35) 70%,
-    rgba(26, 15, 10, 0) 100%);
-}
-.topbar .greeting,
-.topbar .logo,
-.topbar .switch-child,
-.topbar .coins {
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 .topbar-left { display: flex; align-items: center; gap: var(--sp-3); }
 .avatar {
-  width: 64px;
-  height: 64px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   background: rgba(255, 200, 87, 0.2);
   object-fit: cover;
-  border: 2px solid var(--c-amber-soft);
+  border: 2px solid var(--c-focus);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
 }
-.greeting { color: var(--c-cream); font-weight: 600; }
+/*
+ * iter5: topbar is read-only status; font-sizes reduced so the block
+ * stays compact inside the 36 px top safe-area.
+ */
+.greeting {
+  font-family: var(--ff-display);
+  color: var(--c-cream);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.1;
+}
 .coins {
-  color: var(--c-amber);
+  color: var(--c-cream);
+  font-size: 18px;
+  font-weight: 600;
   display: inline-flex;
   align-items: center;
   gap: var(--sp-1);
 }
 .coin-icon {
-  width: 32px;
-  height: 32px;
+  width: 24px;
+  height: 24px;
   object-fit: contain;
   margin-right: 4px;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
 }
-.topbar-center { text-align: center; }
-.logo {
-  color: var(--c-cream-soft);
-  letter-spacing: 0.1em;
-  font-weight: 700;
-}
-.topbar-right { text-align: right; color: var(--c-cream-soft); }
-.switch-child { padding: var(--sp-2) var(--sp-3); }
+/* iter5: topbar-center / topbar-right / switch-child rules removed — DOM is gone. */
 
 .menu-grid {
   flex: 1;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   grid-template-rows: 1fr 1fr;
-  gap: var(--sp-4);
-  padding: var(--sp-4) var(--sp-6) var(--sp-6);
+  /*
+   * iter11: TV overscan on some panels crops the bottom 60-80 px, pushing
+   * the lower row off-screen. Bumped bottom padding from 36→96 px and
+   * reduced top/gap so both rows shift up into the visible center zone.
+   *   top padding:   16 →  0
+   *   row gap:       16 →  0   (rows tighten together)
+   *   bottom pad:    36 → 96   (keep bottom bears safe from overscan crop)
+   */
+  gap: 0;
+  padding: 0 64px 96px;
+  min-height: 0;
 }
 </style>
