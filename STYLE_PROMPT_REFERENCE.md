@@ -231,10 +231,20 @@ const STYLE_SUFFIXES = {
 };
 ```
 
-### 8.2 路由策略
-- **Cover**: Nano Banana 主路径(快、省、不拒)
-- **内页**: fal-kontext img2img(reference cover 保持角色一致)
-- **不再用 OpenAI cover 主路径**(78% 拒绝率)
+### 8.2 路由策略(2026-04-26 凌晨更新,基于教训 39)
+
+**双引擎互补兜底**:
+- **Cover**: Nano Banana 主 → OpenAI 兜底 → FAL 兜底
+- **内页**: fal-kontext img2img → Nano Banana 兜底 → OpenAI 兜底
+
+**为什么不能单引擎**:
+- Nano Banana 优势:速度快、成本低、内容审核宽松
+- Nano Banana 劣势:IP 角色名敏感(Cinderella / Disney / Pokemon 等被拒)
+- OpenAI 优势:IP 宽松(可以画 Cinderella)
+- OpenAI 劣势:儿童内容审核极严(实测 78% 拒绝率)
+- → **两家盲区互补**,组合命中率 95%+
+
+**实施位置**:server-v7 `src/services/imageGen.js` 的 fallback 链顺序
 
 ### 8.3 跨服务器架构
 - 美国/欧洲服务器 → Nano Banana(同 STYLE)
