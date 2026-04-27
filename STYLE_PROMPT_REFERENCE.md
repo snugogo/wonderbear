@@ -1,10 +1,20 @@
 # WonderBear 视觉风格 DNA
 
-**版本**:v1.3(WonderBear Modern Gouache,当代欧美童书版)
+> **⚠️ 2026-04-27 update — v1.3 已回滚**
+>
+> v1.3(Carson Ellis 4212 字 WONDERBEAR_MODERN_GOUACHE)经 4 次真实引擎 A/B 对照实验
+> ($3.72 总成本)证明导致**风格混乱 + 跨页一致性退化**。已回滚到 v1.0/v1.x 旧版
+> "vibrant saturated + Miyazaki-inspired + clear outlines"。
+>
+> **当前 production STYLE 见 §三 v1.4**。
+> **完整代码 + 测试流程见 `server-v7/docs/spec/IMAGE_PIPELINE_PLAYBOOK.md`**。
+> **回滚证据:`/debug/story/cmog60h1m0001xss835absxpu`**(浏览器验收通过)
+
+**版本**:v1.4(Rollback to vibrant saturated + Miyazaki-inspired,2026-04-27 锁定)
 **位置**:仓库根目录 `STYLE_PROMPT_REFERENCE.md`
 **适用对象**:所有图像生成任务(server-v7 / 本地 PY 工具 / 任何外部生成)
-**确立日期**:2026-04-26 凌晨 5 点
-**确立方式**:Kristy 基于 9 轮 Nano Banana 真实生成对比测试 + Qwen 跨模型验证
+**v1.4 锁定方式**:Kristy 基于 4 次真实引擎单变量对照实验(Phase A / kill-switch / STYLE rollback / cover-anchored)收敛
+**v1.3 失败教训**:见 §六 教训 39-42
 
 ---
 
@@ -64,13 +74,45 @@
 
 ---
 
-## 三、固化的 STYLE_SUFFIX(完整版,production 直接用)
+## 三、固化的 STYLE_SUFFIX — v1.4 当前 production(2026-04-27 锁定)
 
-**使用方式**:任何图片生成 prompt 末尾**直接贴这一整段**,不修改。
+**配置位置**:`server-v7/src/utils/storyPrompt.js` `STYLE_SUFFIXES` 字典(3 个变体)
+**调用方式**:`getStyleSuffix('default')` (server-v7 内部),不需要在 prompt 里手贴
+
+### 3.1 Default(默认 — 12 页生产路径都用这个)
 
 ```
-art style: contemporary children's book illustration in the tradition of Carson Ellis, Oliver Jeffers, and Jon Klassen, painted with bold visible broad brush strokes and color block technique, each stroke a clear color shape, NOT smooth digital rendering, NOT cel shading, NOT airbrushed, NOT anime style, NO outlined shapes, NO line drawings, NO black contour lines, NO pencil sketch lines, surfaces built from multiple thick brush strokes laid side by side, shapes defined by color and brushwork alone, never by drawn lines, characters are drawn with care and contemporary craftsmanship, with expressive faces, rounded soft features, charming and lovable in modern picture book tradition, each brush stroke shows tonal variation within itself, darker where paint pools and lighter where brush runs dry, visible dry brush effect with broken streaks, visible bristle marks as fine parallel lines within strokes, paint absorbing into rough watercolor paper showing fiber texture and slight bleeding edges, uneven paint coverage with thinner washes letting paper texture show through, some strokes overlapping wet-on-wet creating natural color mixing, available pigments to choose from when painting: highly vibrant saturated pure pigments at maximum intensity, brilliant cadmium reds and oranges, deep cobalt and ultramarine blues, golden cadmium yellows, emerald and viridian greens, sap greens, rich burnt sienna and raw umber browns, pure titanium white highlights, think of children's poster paint freshly squeezed from the tube, never dilute, never muted, object colors must remain naturally true to life: trees and grass should be GREEN (use sap green or emerald), sky should be BLUE (use cobalt or ultramarine), brick walls should be RED-BROWN (use burnt sienna), do NOT paint trees orange or yellow unless the scene is explicitly autumn, do NOT change the natural local color of objects to fit a warm mood, global lighting and atmosphere should feel warm and inviting: warm late afternoon or golden hour sunlight bathing the scene from one direction, sunlit surfaces glow with golden warmth, shadows are slightly warm-toned, overall mood is cozy and comforting, but the underlying object colors stay realistic and natural, high color contrast and dramatic warm-cool tension throughout, warm sunlit areas vs cooler shadow areas creating visual depth, each color region painted in pure intense pigment without muddy mixing, apply specific brush technique to every element: warm objects (skin, wood, lamps, sunlit areas) built from confident yellow ochre and burnt sienna strokes, cool objects (sky, water, shadows) built from ultramarine and cobalt slashes, foliage built from quick stamping brush dabs in saturated green tones, fabric and clothing in their own natural colors painted with visible parallel strokes, each shape painted in 2-3 confident strokes, no smooth blending, visible heavy watercolor paper texture, paint sitting on top of paper grain, flat color regions with hard or soft edges where brush strokes meet, hand-painted quality where individual brushstrokes are countable, contemporary western children's picture book art style with rounded friendly characters, character designs follow modern award-winning storybook tradition, backgrounds depict western suburban or rural environments, CRITICAL composition rule: full-bleed edge-to-edge artwork filling 100 percent of the canvas, ABSOLUTELY NO white border, NO paper edge frame, NO margin, NO scanned page effect, the painting must extend completely to all four edges of the image, no visible paper edges or frame whatsoever, absolutely NO smooth gradients, NO smooth watercolor washes, NO digital airbrush, NO illustration sheen, NO desaturated colors, NO muted pastels, NO flat plastic color blocks, NO pale tones, NO washed out look, NO unnatural object color shifts, NO crude or simplified character faces, NO Japanese cartoon big-eye style, characters must look polished and lovable in modern western tradition, must look like real gouache paint on watercolor paper at maximum vibrancy with visible brush physics, shapes must be defined purely by color and brushwork, never by drawn lines, aspect ratio 16:9, landscape orientation
+vibrant saturated colors, bright cheerful children's book illustration,
+clean crisp watercolor style, vivid warm palette, luminous glowing colors,
+high contrast, professional storybook art, projection-display optimized,
+Miyazaki-inspired color richness, clear outlines
 ```
+
+### 3.2 Screen HD(高清屏适配)
+
+```
+vibrant saturated colors, bright storybook illustration, sharp detail,
+rich color depth, HD screen optimized, professional children's book art,
+clean digital illustration
+```
+
+### 3.3 Print(印刷版)
+
+```
+soft watercolor illustration, gentle pastel tones, fine brushwork detail,
+printable color range, warm natural palette, children's book print quality
+```
+
+### 3.4 v1.4 设计原则(教训 39 + 41 + 42)
+
+- **轻量化**:每个 SUFFIX < 200 字,留权重给场景描述
+- **不强调作家**:Miyazaki 是色彩描述锚点(不是技法绑定),不深挖 Carson Ellis / Oliver Jeffers / Jon Klassen 这种"画家+笔触+材质"重 prompt
+- **跨页一致**:配合 storyJob `cover-anchored ref`(P_n→P_1,不漂移),12 页风格自然统一
+- **测试入口**:`tools/run_dora_test_mock.mjs --real` 一次性完成 4 层验证(详见 PLAYBOOK)
+
+### 3.5 ⛔ v1.3 历史版(已废弃,**仅作教训对照,不要复用**)
+
+v1.3 是 4212 字超长 prompt,锚定 Carson Ellis / Oliver Jeffers / Jon Klassen + 笔触 + 颜料 + 纸张材质 + reverse anchors。实测把生成模型(Nano Banana Pro / Gemini 3)推向风格混乱。完整内容见 git history `tag v1.3-deprecated` 或 commit `3448b32^`。
 
 ---
 
@@ -142,11 +184,21 @@ art style: contemporary children's book illustration in the tradition of Carson 
 - **画家锚定**:Helen Oxenbury / Garth Williams / Beatrix Potter
 - **结果**:角色画工提升,但风格偏 1990s 古典,不够现代
 
-### v1.3 final(2026-04-26 凌晨 5 点) ⭐ 当前锁定
+### v1.3(2026-04-26 凌晨 5 点) ❌ 已回滚
 - **画家锚定**:Carson Ellis / Oliver Jeffers / Jon Klassen(当代国际童书获奖派)
-- **结果**:角色精致可爱 + 笔刷感保留 + 西方场景 + 当代美式亲切感
-- **测试场景**:Mia 上学 + Dora 看云 + WonderBear 户外
-- **验证模型**:Nano Banana(主)+ Qwen(辅)
+- **prompt 长度**:4212 字(WONDERBEAR_MODERN_GOUACHE 单常量)
+- **回滚原因**:见 §六 教训 39。在 4 次真实引擎对照里(2026-04-27)主体 Dora 故事画面**风格混乱 + 跨 12 页角色一致性退化**,不及 v1.0 旧版基线。
+- **测试场景**:Mia 上学(2026-04-26 静态测试,过) → Dora 故事(2026-04-27 12 页动态测试,败)
+- **结论**:静态单图测试 ≠ 12 页动态生成测试,**v1.3 在动态场景失效**
+
+### v1.4 final(2026-04-27 晚) ⭐ 当前锁定 — Rollback to vibrant + Miyazaki
+- **路线**:回滚到 v1.0/v1.x 基线("vibrant saturated + Miyazaki-inspired + clear outlines"),不强调画家+笔触
+- **prompt 长度**:default 9 行 ~80 字(vs v1.3 的 4212 字,**减压 50×**)
+- **配套**:storyJob 改 cover-anchored ref(P_n→P_1),不漂移
+- **测试场景**:Dora "不下雨的云" 12 页动态生成 + 4 层验证
+- **验证 storyId**:`/debug/story/cmog60h1m0001xss835absxpu`(2026-04-27 Kristy 浏览器验收"好了")
+- **总成本**:$3.72(4 次真实跑)+ Layer 1-4 全过(Layer 4 仅 FAL 平台预设 1.851 与画质无关)
+- **流程文档**:`server-v7/docs/spec/IMAGE_PIPELINE_PLAYBOOK.md`(完整故障排查 + ENV 开关)
 
 ---
 
@@ -192,6 +244,54 @@ AI 学画家基因优先,prompt 里的 "broad strokes" 被忽视
 - 要粗笔触 → 选 Carson Ellis / Mary Blair(色块派 + 当代精致)
 - 不能"色块派画家但要精致可爱" — 这种本质冲突会让 AI 摇摆
 
+### 教训 39(2026-04-27)— 静态单图测试 ≠ 12 页动态测试,STYLE 锁定必须经动态验证
+v1.3 Carson Ellis 在 Mia 上学 + Dora 看云**单张静态测试**全过,被 lock 为 production。
+然而真实生成 Dora "不下雨的云" 12 页时,跨页角色发型/服装/比例**累积漂移**,
+画风混乱(STYLE 4212 字过长稀释场景描述权重)。
+**正确做法**:STYLE 锁定**必须**跑一次 12 页 fixture(`run_dora_test_mock.mjs --real`)
+浏览器肉眼验跨页一致性,数据层 4 层验证全过才算 lock。
+
+### 教训 40(2026-04-27)— 强提示词不一定优于弱提示词,prompt 长度有最优区间
+v1.0 旧版 STYLE_SUFFIX 默认变体仅 ~80 字 → 跨场景一致性好。
+v1.3 加压到 4212 字(放进画家+笔触+颜料+纸张+reverse anchors)→ 跨页混乱。
+**prompt 长度 sweet spot 实测 50-200 字**,过长会:
+1. 稀释场景描述权重(LLM/IMG 模型 attention 散开)
+2. 增加 reverse anchors 跟正向描述冲突的概率
+3. 增加 Google 审核命中风险
+**单变量隔离实证此教训**:`/debug/story/cmog5lgtb0001i3z7sx5jtjw8`(STYLE 回滚后即改善)
+
+### 教训 41(2026-04-27)— 跨页一致性靠 ref strategy,不靠 prompt
+原假设:"链式 ref(P_n→P_{n-1})让相邻页连贯"。
+实证打脸:**链式 ref 累积漂移**,12 页跑下来主角发型/服装走偏。
+正确:**cover-anchored**(P_n→P_1)— 全部内页都 ref Cover,Cover 一锚,12 页都锚。
+代码已固化(`storyJob.js` 默认 cover-anchored,`USE_CHAINED_REF=1` 留 ENV 兜底)。
+**对照实证**:`/debug/story/cmog5lgtb...`(链式)vs `/debug/story/cmog60h1m...`(cover-anchored)。
+
+### 教训 42(2026-04-27)— 任何 STYLE / orchestrator 改动都要走"4 步单变量对照流程"
+
+**4 步流程**(已固化进 IMAGE_PIPELINE_PLAYBOOK.md §7):
+
+```
+Step 1.  跑 mock 验结构层(0 成本)
+         node tools/run_dora_test_mock.mjs
+         全过 → Layer 1 没坏,可进 Step 2
+
+Step 2.  跑 --real 与 Kai 标杆对照(成本 ~$0.93)
+         node tools/run_dora_test_mock.mjs --real
+         浏览器看 /debug/story/<新>  vs  /debug/story/cmocuudx700012u0mgkjaycho
+
+Step 3.  单变量隔离(每跑一次只改一处)
+         风格嫌疑 → cp storyPrompt.js.backup 临时回滚
+         ref 嫌疑  → set USE_CHAINED_REF=1 / 0
+         prompt 嫌疑 → 在 storyJob.js 加临时 kill switch
+         每次跑一次 --real --baseline,Kristy 浏览器拍
+
+Step 4.  找到凶手 → commit + 写 coordination/factory-to-claude/<日期>.md 留痕
+         最后更新 STYLE_PROMPT_REFERENCE.md + IMAGE_PIPELINE_PLAYBOOK.md
+```
+
+**禁止**:跳过 Step 2,直接看模型 demo 图就 lock production STYLE。教训 39 的代价是 $3.72 + 一夜调试。
+
 ---
 
 ## 七、未来升级触发条件
@@ -212,41 +312,58 @@ AI 学画家基因优先,prompt 里的 "broad strokes" 被忽视
 
 ---
 
-## 八、Production 实施细节
+## 八、Production 实施细节(v1.4 当前状态)
 
 ### 8.1 server-v7 集成位置
-路径:`src/utils/storyPrompt.js` 的 `STYLE_SUFFIXES` 字典
+路径:`src/utils/storyPrompt.js`(commit `3448b32` 起 Carson Ellis WONDERBEAR_MODERN_GOUACHE 已删除)
 
 ```javascript
-// WonderBear Modern Gouache v1.3
-// Source: STYLE_PROMPT_REFERENCE.md (repo root)
-// Locked: 2026-04-26 after 9 iterations of Nano Banana real-generation testing
-// DO NOT modify without PR + Kristy approval (see PRODUCT_CONSTITUTION §7)
-const WONDERBEAR_MODERN_GOUACHE = `art style: contemporary children's book illustration in the tradition of Carson Ellis, Oliver Jeffers, and Jon Klassen, ...`;
-
-const STYLE_SUFFIXES = {
-  "default": WONDERBEAR_MODERN_GOUACHE,
-  "screen_hd": WONDERBEAR_MODERN_GOUACHE,
-  "print": WONDERBEAR_MODERN_GOUACHE,
+// v7.1 style suffixes — v1.4 (2026-04-27 rollback)
+export const STYLE_SUFFIXES = {
+  default:
+    'vibrant saturated colors, bright cheerful children\'s book illustration, ' +
+    'clean crisp watercolor style, vivid warm palette, luminous glowing colors, ' +
+    'high contrast, professional storybook art, projection-display optimized, ' +
+    'Miyazaki-inspired color richness, clear outlines',
+  screen_hd:
+    'vibrant saturated colors, bright storybook illustration, sharp detail, ' +
+    'rich color depth, HD screen optimized, professional children\'s book art, ' +
+    'clean digital illustration',
+  print:
+    'soft watercolor illustration, gentle pastel tones, fine brushwork detail, ' +
+    'printable color range, warm natural palette, children\'s book print quality',
 };
+
+export function getStyleSuffix(variant = 'default', envOverride = null) {
+  if (envOverride && envOverride.length > 0) return envOverride;
+  return STYLE_SUFFIXES[variant] || STYLE_SUFFIXES.default;
+}
 ```
 
-### 8.2 路由策略(2026-04-26 凌晨更新,基于教训 39)
+`storyJob.runOne` 调用 `getStyleSuffix('default')`,production 12 页都用 default 变体。
 
-**双引擎互补兜底**:
-- **Cover**: Nano Banana 主 → OpenAI 兜底 → FAL 兜底
-- **内页**: fal-kontext img2img → Nano Banana 兜底 → OpenAI 兜底
+### 8.2 路由策略(2026-04-27 锁定,实证版)
 
-**为什么不能单引擎**:
-- Nano Banana 优势:速度快、成本低、内容审核宽松
-- Nano Banana 劣势:IP 角色名敏感(Cinderella / Disney / Pokemon 等被拒)
-- OpenAI 优势:IP 宽松(可以画 Cinderella)
-- OpenAI 劣势:儿童内容审核极严(实测 78% 拒绝率)
-- → **两家盲区互补**,组合命中率 95%+
+**双引擎,cover-anchored**:
+- **Cover (P1)**: Nano Banana Pro 2K (gemini-3-pro-image-preview) → OpenAI gpt-image-1.5 → FAL flux/dev
+- **Interior (P2-P12)**: FAL flux-pro/kontext img2img → Nano Banana Flash → OpenAI
+- **Reference**: ALL P2-P12 ref **Cover URL**(不漂移,教训 41)
+- **Mock 模式**: USE_MOCK_AI=true 全部走 mock(LLM + image + TTS),0 成本验结构层
 
-**实施位置**:server-v7 `src/services/imageGen.js` 的 fallback 链顺序
+**详细成本表 + ENV 开关 + 故障排查**:见 `server-v7/docs/spec/IMAGE_PIPELINE_PLAYBOOK.md`
 
-### 8.3 跨服务器架构
+### 8.3 测试入口(2026-04-27 新增)
+
+```bash
+cd /opt/wonderbear/server-v7
+node tools/run_dora_test_mock.mjs              # mock,0 成本
+node tools/run_dora_test_mock.mjs --real       # 真实引擎,~$0.93,~5 分钟
+node tools/run_dora_test_mock.mjs --real --baseline   # A/B 隔离用
+```
+
+测试 runner 自带 4 层验证(DB / R2 image / R2 audio / 16:9 像素)+ post-hoc 成本统计。
+
+### 8.4 跨服务器架构(规划)
 - 美国/欧洲服务器 → Nano Banana(同 STYLE)
 - 中国/东南亚服务器 → Qwen Image(同 STYLE,已验证可用)
 - 双服务器架构保证品牌视觉一致性
@@ -254,4 +371,5 @@ const STYLE_SUFFIXES = {
 ---
 
 **By: 创始人 Kristy + 协作 AI(Claude + Factory)**
-**v1.3 final:2026-04-26 凌晨 5 点,9 轮迭代收敛后锁定**
+**v1.4 final:2026-04-27 晚,4 次单变量对照实验 ($3.72) 后回滚锁定**
+**v1.3 final:2026-04-26 凌晨 5 点,9 轮静态迭代锁定 → 实证不行已废弃 (见 §六 教训 39)**
