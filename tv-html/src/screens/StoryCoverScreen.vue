@@ -20,6 +20,7 @@ import { useBgmStore } from '@/stores/bgm';
 import { useI18n } from 'vue-i18n';
 import { bridge } from '@/services/bridge';
 import { useFocusable } from '@/services/focus';
+import { api, ApiError } from '@/services/api';
 import { ERR } from '@/utils/errorCodes';
 import { asset } from '@/utils/assets';
 
@@ -66,25 +67,55 @@ useFocusable(okCaptureEl, {
   onEnter: () => { advance(); },
 });
 
-onMounted(() => {
-  if (!storyStore.active) {
-    if (isDevBrowser) {
-      // Gallery/demo mode: skip the strict check, show the ceremony layout.
-    } else {
-      bridge.log('story-cover', { event: 'mounted_without_active_story' });
-      screen.goError(ERR.STORY_NOT_FOUND);
-      return;
-    }
+/*
+ * 2026-04-28 PHASE1: payload-driven story load.
+ *
+ * Some upstream surfaces (Bear Stars editor_picks, deep-links) navigate
+ * here with `screen.payload = { storyId }` but WITHOUT a pre-fetched
+ * Story in storyStore. Instead of bouncing through ErrorScreen we
+ * fetch /api/story/:id here, hydrate storyStore.active, then continue
+ * the ceremony as if Library / Create had primed it.
+ *
+ * Dev gallery flows still synthesize a demo story upstream and pass
+ * no payload, so isDevBrowser short-circuits the API call.
+ */
+async function ensureActiveStory(): Promise<boolean> {
+  if (storyStore.active) return true;
+  if (isDevBrowser) return true; // ceremony renders with placeholders.
+
+  const payload = (screen.payload ?? {}) as Record<string, unknown>;
+  const wantedId = typeof payload.storyId === 'string' ? payload.storyId : null;
+  if (!wantedId) {
+    bridge.log('story-cover', { event: 'mounted_without_active_story' });
+    screen.goError(ERR.STORY_NOT_FOUND);
+    return false;
   }
+  try {
+    const { data } = await api.storyDetail(wantedId);
+    storyStore.loadStory(data.story);
+    return true;
+  } catch (e) {
+    bridge.log('story-cover', { event: 'detail_load_failed', storyId: wantedId, err: String(e) });
+    const code = e instanceof ApiError ? e.code : ERR.STORY_NOT_READY;
+    screen.goError(code);
+    return false;
+  }
+}
 
-  bgm.play('story_cover');
+onMounted(() => {
+  void (async () => {
+    const ok = await ensureActiveStory();
+    if (!ok || !mounted) return;
 
-  // Trigger CSS fade-in next frame
-  window.requestAnimationFrame(() => { visible.value = true; });
+    bgm.play('story_cover');
 
-  advanceTimer = window.setTimeout(() => {
-    if (mounted) advance();
-  }, AUTO_ADVANCE_MS);
+    // Trigger CSS fade-in next frame
+    window.requestAnimationFrame(() => { visible.value = true; });
+
+    advanceTimer = window.setTimeout(() => {
+      if (mounted) advance();
+    }, AUTO_ADVANCE_MS);
+  })();
 });
 
 onBeforeUnmount(() => {
