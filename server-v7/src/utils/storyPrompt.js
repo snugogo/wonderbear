@@ -253,6 +253,8 @@ export function buildDialogueSystemPrompt({ age = 5, primaryLang = 'en', learnin
     '3. Build progressively: main character → friend → place → wish/problem → emotion.',
     '4. If the child\'s reply is unintelligible, gently re-ask the same beat.',
     '5. On the final round, end with a soft confirmation, not a question.',
+    '6. Reference the prior turns shown in this conversation. NEVER repeat a question you (or the previous turn) already asked.',
+    '7. Each new question MUST advance to a different beat (character → friend → place → wish/problem → emotion). Build on what the child just said.',
     '',
     'OUTPUT FORMAT — respond with ONLY a valid JSON object, no markdown, no code fences:',
     '{',

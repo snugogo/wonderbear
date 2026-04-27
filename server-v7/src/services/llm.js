@@ -124,6 +124,9 @@ async function liveDialogueTurn({ systemPrompt, history = [], userInput, round, 
         temperature: 0.85,
         maxOutputTokens: 400,
         responseMimeType: 'application/json',
+        thinkingConfig: {
+          thinkingBudget: 0,
+        },
       },
     }),
   });
