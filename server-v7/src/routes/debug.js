@@ -97,6 +97,39 @@ export default async function debugRoutes(fastify) {
       .send(renderGalleryList(stories));
   });
 
+  // -- GET /debug/proxy-audio?url=<r2-url> -------------------------------
+  // Streaming proxy for R2 audio so the <audio> element is same-origin.
+  // Avoids any cross-origin / mixed-content / range-request quirks.
+  fastify.get('/debug/proxy-audio', async (req, reply) => {
+    const targetUrl = req.query?.url;
+    if (typeof targetUrl !== 'string' || !targetUrl) {
+      reply.code(400).type('text/plain').send('missing url');
+      return;
+    }
+    const r2Pub = env.R2_PUBLIC_URL || '';
+    if (!targetUrl.startsWith(r2Pub) && !targetUrl.startsWith('https://pub-')) {
+      reply.code(403).type('text/plain').send('forbidden host');
+      return;
+    }
+    const range = req.headers.range;
+    let upstream;
+    try {
+      upstream = await fetch(targetUrl, { headers: range ? { Range: range } : {} });
+    } catch (e) {
+      reply.code(502).type('text/plain').send(`upstream fetch failed: ${e.message}`);
+      return;
+    }
+    reply.code(upstream.status);
+    const passHeaders = ['content-type', 'content-length', 'accept-ranges', 'content-range', 'last-modified', 'etag'];
+    for (const h of passHeaders) {
+      const v = upstream.headers.get(h);
+      if (v) reply.header(h, v);
+    }
+    reply.header('cache-control', 'public, max-age=3600');
+    const buf = Buffer.from(await upstream.arrayBuffer());
+    reply.send(buf);
+  });
+
   // -- GET /debug/story/:id ---------------------------------------------
   fastify.get('/debug/story/:id', async (req, reply) => {
     const story = await fastify.prisma.story.findUnique({
@@ -186,12 +219,13 @@ function renderStoryDetail(story, logs) {
       const tier = winner?.tier ?? '-';
       const attempts = pageLogs.length;
 
+      const proxyUrl = (u) => `/debug/proxy-audio?url=${encodeURIComponent(u)}`;
       const audioMain = p.ttsUrl
-        ? `<div class="audio-row"><span class="lang-tag">${escapeHtml(primaryLang)}</span><audio controls preload="none" src="${escapeHtml(p.ttsUrl)}"></audio></div>`
+        ? `<div class="audio-row"><span class="lang-tag">${escapeHtml(primaryLang)}</span><audio controls preload="metadata" src="${escapeHtml(proxyUrl(p.ttsUrl))}"></audio></div>`
         : '';
       const audioLearning =
         p.ttsUrlLearning && learningLang
-          ? `<div class="audio-row"><span class="lang-tag learning">${escapeHtml(learningLang)}</span><audio controls preload="none" src="${escapeHtml(p.ttsUrlLearning)}"></audio></div>`
+          ? `<div class="audio-row"><span class="lang-tag learning">${escapeHtml(learningLang)}</span><audio controls preload="metadata" src="${escapeHtml(proxyUrl(p.ttsUrlLearning))}"></audio></div>`
           : '';
 
       const hdLink = p.imageUrlHd

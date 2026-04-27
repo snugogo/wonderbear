@@ -25,11 +25,50 @@ import { synthesize as ttsSynthesize } from '../services/tts.js';
 import { persistImage, persistImageHd } from '../services/mediaStorage.js';
 import { buildStorySystemPrompt } from '../utils/storyPrompt.js';
 
+// ---------------------------------------------------------------------------
+// Prompt-override helper (2026-04-27 task 7 — simplified after STYLE rollback)
+//
+// Production: pass-through (page.imagePrompt unchanged).
+// Test only:  DORA_TEST_P12_OVERRIDE=1 swaps P12 with the Dora seed-frame
+//             prompt. Default OFF so normal production stories are unaffected.
+// ---------------------------------------------------------------------------
+const DORA_P12_SEED_PROMPT = (
+  'A 5-year-old girl named Dora as the main subject, centered in the frame, '
+  + 'with long brown curly hair clearly visible, wearing a yellow skirt and '
+  + 'white sleeveless top distinctly painted, laughing joyfully with a warm '
+  + 'gentle expression, arms outstretched, two cloud friends (one pink, one '
+  + 'white) dancing under a brilliant rainbow in the sky behind her, red '
+  + 'flowers blooming on the green grass around her, warm golden afternoon '
+  + 'light bathing her clearly, magical happy ending atmosphere, full body '
+  + 'view of Dora.'
+);
+
+function applyImagePromptOverrides(page) {
+  // Production default: pass-through (Kai-baseline behavior).
+  // The P1/P8 "big bright eyes" → "expressive eyes" defensive replacement
+  // (originally added for the Carson-Ellis v1.3 STYLE that was rolled back)
+  // proved unnecessary and was removed (2026-04-27 task 7).
+  // DORA_TEST_P12_OVERRIDE=1 retained as a test affordance for the Dora
+  // seed-frame prompt; off by default in production.
+  if (
+    page.pageNum === 12
+    && (process.env.DORA_TEST_P12_OVERRIDE === '1'
+      || process.env.DORA_TEST_P12_OVERRIDE === 'true')
+  ) {
+    return DORA_P12_SEED_PROMPT;
+  }
+  return page.imagePrompt;
+}
+
 export function createStoryQueue(prisma, options = {}) {
   const high = [];
   const normal = [];
   let running = false;
-  const maxPagesConcurrent = options.maxPagesConcurrent || 3;
+  // maxPagesConcurrent retained in API surface for backward-compat with
+  // existing tests/callers, but ignored after 2026-04-27 task 3 refactor —
+  // pages 2-12 now run strictly sequential for chained-reference consistency.
+  // eslint-disable-next-line no-unused-vars
+  const maxPagesConcurrent = options.maxPagesConcurrent || 1;
 
   function enqueue(job) {
     const lane = job.priority === 'high' ? high : normal;
@@ -157,11 +196,11 @@ export function createStoryQueue(prisma, options = {}) {
         emotion: page.emotion,
       });
 
-      // ---------- Cover first (page 1) — text2image (OpenAI → Gemini) -------
+      // ---------- Cover first (page 1) — Nano Banana Pro → OpenAI → FAL ----
       const coverSrc = pages.find((p) => p.pageNum === 1) || pages[0];
       const coverIdx = pages.indexOf(coverSrc);
       const coverResult = await generatePageImage({
-        imagePrompt: coverSrc.imagePrompt,
+        imagePrompt: applyImagePromptOverrides(coverSrc),
         characterDesc: storyJson.characterDescription,
         pageNum: coverSrc.pageNum,
         seed: `${storyId}:${coverSrc.pageNum}`,
@@ -179,40 +218,63 @@ export function createStoryQueue(prisma, options = {}) {
         data: { pagesGenerated: 1 },
       });
 
-      // ---------- Pages 2-12 — img2img conditioned on the cover URL --------
-      // Run up to maxPagesConcurrent at once so the founder-demo latency is
-      // acceptable (12 pages sequential at ~6s each = 72s; parallel = ~30s).
-      // If cover fell through to placeholder, the "referenceImageUrl" is fake
-      // (placeholder.webp) and FAL Kontext img2img will 422. In that case force
-      // pages 2-12 through text2image (consistency lost but story completes).
+      // ---------- Pages 2-12 — strict sequential chained reference --------
+      // 2026-04-27 (task 3): switched from parallel batches to strict serial
+      // chained reference (P2 ref P1, P3 ref P2, ..., P12 ref P11) so character
+      // consistency carries through the whole book.
+      //
+      // Q1 D safety net: if any page falls through to placeholder, the next
+      // page's reference falls back to the cover URL (instead of breaking the
+      // whole chain). This keeps the rest of the book aligned to the cover at
+      // worst.
+      //
+      // If cover itself fell through to placeholder, the entire chain is forced
+      // to text2image (no reference available).
       const coverIsPlaceholder = coverResult.provider === 'placeholder';
-      const referenceImageUrl = coverIsPlaceholder ? null : coverResult.imageUrl;
+      const coverRefUrl = coverIsPlaceholder ? null : coverResult.imageUrl;
       if (coverIsPlaceholder) {
         console.warn(`[storyJob ${storyId}] cover is placeholder — pages 2-12 forced to text2image`);
       }
       const restIndices = pages
         .map((_, i) => i)
-        .filter((i) => i !== coverIdx);
-      const concurrency = maxPagesConcurrent;
+        .filter((i) => i !== coverIdx)
+        .sort((a, b) => pages[a].pageNum - pages[b].pageNum);
+      // Reference strategy (2026-04-27 task 7):
+      //   default = COVER-ANCHORED (Kai-baseline behavior, all P2-P12 ref cover)
+      //   USE_CHAINED_REF=1 → chained (P_n refs P_{n-1}, original Phase A choice)
+      // Cover-anchored eliminates accumulated drift across 11 pages and matches
+      // the consistency profile of the proven Kai baseline. Chained ref kept
+      // behind env flag for revert if needed.
+      const USE_CHAINED = (
+        process.env.USE_CHAINED_REF === '1'
+        || process.env.USE_CHAINED_REF === 'true'
+      );
+      let prevRefUrl = coverRefUrl;
       let finished = 1;
-      for (let batchStart = 0; batchStart < restIndices.length; batchStart += concurrency) {
-        const batch = restIndices.slice(batchStart, batchStart + concurrency);
-        await Promise.all(batch.map(async (i) => {
-          const page = pages[i];
-          const imgResult = await generatePageImage({
-            imagePrompt: page.imagePrompt,
-            characterDesc: storyJson.characterDescription,
-            pageNum: page.pageNum,
-            referenceImageUrl,
-            forceText2Image: coverIsPlaceholder,
-            seed: `${storyId}:${page.pageNum}`,
-            onAttempt: logAttempt(page.pageNum),
-          });
-          await persistImageOutputs(imgResult, page.pageNum);
-          pagesWithImages[i] = materializePage(page, imgResult);
-          totalCostCents += imgResult.costCents;
-        }));
-        finished += batch.length;
+      for (const i of restIndices) {
+        const page = pages[i];
+        const refForThisPage = USE_CHAINED ? prevRefUrl : coverRefUrl;
+        const imgResult = await generatePageImage({
+          imagePrompt: applyImagePromptOverrides(page),
+          characterDesc: storyJson.characterDescription,
+          pageNum: page.pageNum,
+          referenceImageUrl: refForThisPage,
+          forceText2Image: !refForThisPage,
+          seed: `${storyId}:${page.pageNum}`,
+          onAttempt: logAttempt(page.pageNum),
+        });
+        await persistImageOutputs(imgResult, page.pageNum);
+        pagesWithImages[i] = materializePage(page, imgResult);
+        totalCostCents += imgResult.costCents;
+        // Chained-mode bookkeeping: advance prevRefUrl only on real success.
+        if (USE_CHAINED) {
+          if (imgResult.provider !== 'placeholder' && imgResult.imageUrl) {
+            prevRefUrl = imgResult.imageUrl;
+          } else {
+            prevRefUrl = coverRefUrl;
+          }
+        }
+        finished += 1;
         await prisma.story.update({
           where: { id: storyId },
           data: { pagesGenerated: finished },
