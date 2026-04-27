@@ -1,0 +1,6 @@
+
+# Coordination runtime state (do not track in git)
+coordination/locks/
+coordination/HALT.signal
+coordination/format-violations/
+coordination/responses/
