@@ -80,6 +80,18 @@ function onLangToggle(): void {
   if (!langToggleAvailable.value) return;
   langSide.value = langSide.value === 'native' ? 'learning' : 'native';
   bridge.log('story-body', { event: 'lang_toggled', side: langSide.value });
+  /*
+   * 2026-04-28 PHASE1: re-cue audio for the newly active language so
+   * the kid hears the same line in the language they just selected.
+   * Only kick off if we were actively playing — paused state stays
+   * paused (per-toggle replay would surprise the user).
+   */
+  if (playing.value && !ended.value) {
+    bridge.stopTts();
+    clearFallback();
+    advanceGuard = false;
+    playCurrentPage();
+  }
 }
 
 let mounted = true;
@@ -157,10 +169,25 @@ function playCurrentPage(): void {
   // Manual Next / Prev still work via their button handlers.
   if (!playing.value) return;
 
-  if (page.ttsUrl) {
-    bridge.playTts(page.ttsUrl);
+  /*
+   * 2026-04-28 PHASE1: when the language toggle flips to 'learning'
+   * we play the per-page learning-language TTS (`ttsUrlLearning`) so
+   * audio matches the visible primary text. Falls back to the native
+   * track when the server hasn't emitted a learning track yet (older
+   * mock stories), and to a length-based fallback timer when neither
+   * URL is present.
+   */
+  const activeTtsUrl = (langSide.value === 'learning' && page.ttsUrlLearning)
+    ? page.ttsUrlLearning
+    : (page.ttsUrl ?? page.ttsUrlLearning ?? null);
+  const activeText = (langSide.value === 'learning' && page.textLearning)
+    ? page.textLearning
+    : page.text;
+
+  if (activeTtsUrl) {
+    bridge.playTts(activeTtsUrl);
   } else {
-    const fallbackMs = Math.min(12000, 3500 + page.text.length * 60);
+    const fallbackMs = Math.min(12000, 3500 + (activeText?.length ?? 0) * 60);
     fallbackTimer = window.setTimeout(() => {
       fallbackTimer = null;
       if (mounted && playing.value) advance();
