@@ -35,6 +35,7 @@
 import { computed, onMounted, onBeforeUnmount, ref, watch, nextTick } from 'vue';
 import { useScreenStore } from '@/stores/screen';
 import { useStoryStore } from '@/stores/story';
+import { useChildStore } from '@/stores/child';
 import { useBgmStore } from '@/stores/bgm';
 import { useI18n } from 'vue-i18n';
 import { asset } from '@/utils/assets';
@@ -88,6 +89,7 @@ const tabs: Array<{ id: TabId; i18nKey: string }> = [
 
 const screen = useScreenStore();
 const storyStore = useStoryStore();
+const child = useChildStore();
 const bgm = useBgmStore();
 const { t } = useI18n();
 
@@ -224,19 +226,32 @@ function onRowEnter(idx: number): void {
   void openStory(row.story_id);
 }
 
+/*
+ * 2026-04-28 PHASE1: real story rows in editor_picks carry server
+ * story IDs (cm…) that we can resolve via storyDetail. Mock writers /
+ * weekly_plays rows still use synthetic IDs (story_xxxx) and short-
+ * circuit to avoid 90002 ROUTE_NOT_FOUND noise.
+ */
+function isLikelyRealStoryId(id: string): boolean {
+  // Prisma cuid: 25 chars, lowercase alphanum, leading 'c'.
+  return /^c[a-z0-9]{20,30}$/i.test(id);
+}
+
 async function openStory(storyId: string): Promise<void> {
-  // mock-mode: skip API and just go to a placeholder cover screen.
-  // Once the server lands we'll fetch real story detail.
-  if (USE_MOCK) {
+  if (!isLikelyRealStoryId(storyId)) {
     bridge.log('leaderboard', { event: 'mock_open_story', story_id: storyId });
-    // No real story payload to load — bounce home with a notice.
-    // The PRD allows graceful degradation here.
+    // Mock IDs (story_001 etc.) — graceful no-op, PRD allows this.
     return;
   }
+  /*
+   * Real story id → defer the storyDetail fetch to StoryCoverScreen
+   * (PHASE1 wired it to honor screen.payload.storyId). This keeps the
+   * editor_picks click path light and lets the cover screen own its
+   * own loading + error states.
+   */
   try {
-    const { data: detail } = await api.storyDetail(storyId);
-    storyStore.loadStory(detail.story);
-    screen.go('story-cover');
+    storyStore.clearPlayback();
+    screen.go('story-cover', { storyId });
   } catch (e) {
     const code = e instanceof ApiError ? e.code : ERR.STORY_NOT_READY;
     screen.goError(code);
@@ -265,6 +280,67 @@ watch(activeTab, async () => {
   }
 });
 
+/*
+ * 2026-04-28 PHASE1: editor_picks is the only Bear Stars tab driven
+ * by real server data this phase. We fetch the active child's full
+ * shelf via /api/story/list and randomly sample 5–8 rows to splice
+ * into `data.editor_picks`, preserving the StoryRow shape the rest
+ * of the screen already consumes. Writers / weekly_plays / self_summary
+ * stay on the mock JSON per workorder §2.2 ("保持前端 mock json 不动").
+ *
+ * On any failure (no token / 401 in dev / network) we silently retain
+ * the mock rows so the screen never goes blank.
+ */
+const EDITOR_PICK_MIN = 5;
+const EDITOR_PICK_MAX = 8;
+
+function pickRandom<T>(arr: T[], min: number, max: number): T[] {
+  if (arr.length === 0) return [];
+  const target = Math.min(arr.length, Math.max(min, Math.min(max, arr.length)));
+  const pool = arr.slice();
+  // Fisher–Yates partial shuffle, take first `target`.
+  for (let i = 0; i < target; i++) {
+    const j = i + Math.floor(Math.random() * (pool.length - i));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool.slice(0, target);
+}
+
+async function refreshEditorPicksFromServer(): Promise<void> {
+  try {
+    const { data: list } = await api.storyList({
+      childId: child.activeChildId ?? undefined,
+      sort: 'newest',
+      limit: 50,
+    });
+    if (!mounted) return;
+    const sampled = pickRandom(list.items, EDITOR_PICK_MIN, EDITOR_PICK_MAX);
+    if (sampled.length === 0) return; // keep mock if shelf is empty
+    const realRows: StoryRow[] = sampled.map((s, idx) => ({
+      rank: idx + 1,
+      story_id: s.id,
+      title: s.title,
+      cover_url: s.coverUrl,
+      // Editor picks don't expose creator nicknames yet — surface a
+      // friendly editorial blurb instead of an empty string.
+      creator_nickname: t('leaderboard.editorPickBadge'),
+      is_editor_pick: true,
+    }));
+    // Mutate inside an immutable replacement so reactivity + the
+    // existing podium-top3 computed pick up the new shelf.
+    data.value = { ...data.value, editor_picks: realRows };
+    bridge.log('leaderboard', {
+      event: 'editor_picks_refreshed',
+      count: realRows.length,
+      total: list.total,
+    });
+  } catch (e) {
+    bridge.log('leaderboard', { event: 'editor_picks_refresh_failed', err: String(e) });
+    // Silent: mock rows already populated, and Bear Stars must never
+    // bounce to ErrorScreen for a non-essential overlay refresh.
+  }
+}
+
 onMounted(() => {
   bgm.play('home');
   bridge.log('leaderboard', { event: 'mounted', mock: USE_MOCK });
@@ -279,6 +355,9 @@ onMounted(() => {
   unsubFocus = onFocusChange((id) => {
     if (mounted) focusedId.value = id ?? '';
   });
+  // Best-effort overlay: real shelf → editor_picks. Always attempt
+  // (works in both dev and production) — failure is silent.
+  void refreshEditorPicksFromServer();
 });
 
 onBeforeUnmount(() => {
