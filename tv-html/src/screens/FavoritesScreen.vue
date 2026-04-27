@@ -126,12 +126,19 @@ async function loadFavorites(): Promise<void> {
   }
   loading.value = true;
   try {
+    /*
+     * 2026-04-28 PHASE1: server-side filter via `onlyFavorited` (per
+     * StoryListQuery; verified against /api/story/list which honors the
+     * flag). Client used to fetch up to 50 and filter locally — wasteful
+     * on a long shelf and made empty-state hit a stale snapshot.
+     */
     const { data } = await api.storyList({
       childId: child.activeChildId ?? undefined,
       sort: 'newest',
       limit: 50,
+      onlyFavorited: true,
     });
-    items.value = data.items.filter((s) => s.favorited);
+    items.value = data.items;
   } catch (e) {
     bridge.log('favorites', { event: 'list_failed', err: String(e) });
     if (e instanceof ApiError && e.code !== ERR.STORY_NOT_FOUND) {
@@ -175,13 +182,37 @@ function downloadStory(s: StorySummary): void {
 }
 
 function deleteStory(s: StorySummary): void {
-  const beforeLen = items.value.length;
+  /*
+   * 2026-04-28 PHASE1: from the Favorites surface, the X button is the
+   * "remove from my favorites" affordance (the kid still owns the story
+   * elsewhere in Library). We unfavorite on the server via
+   * POST /api/story/:id/favorite { favorited:false } and disappear the
+   * row optimistically. On API failure we restore the row at its
+   * original position so nothing is lost silently.
+   *
+   * Dev / browser sessions skip the server call (no real auth) and
+   * keep the existing soft-remove behaviour to preserve gallery UX.
+   */
+  const idx = items.value.findIndex((x) => x.id === s.id);
+  if (idx < 0) return;
+  const snapshot = items.value[idx];
   items.value = items.value.filter((x) => x.id !== s.id);
-  if (items.value.length < beforeLen) {
-    flashHint(t('favorites.actions.removed'));
-    const target = Math.max(0, Math.min(items.value.length - 1, 0));
-    if (items.value.length > 0) setFocus(`fav-thumb-${target}`);
-  }
+  flashHint(t('favorites.actions.removed'));
+  const target = Math.max(0, Math.min(items.value.length - 1, 0));
+  if (items.value.length > 0) setFocus(`fav-thumb-${target}`);
+
+  if (isDevBrowser) return;
+
+  api.storyFavorite(s.id, { favorited: false }).catch((err) => {
+    bridge.log('favorites', { event: 'unfavorite_failed', storyId: s.id, err: String(err) });
+    // Rollback: re-insert the row at its original index so the kid
+    // doesn't lose the entry to a transient network failure.
+    if (!mounted) return;
+    const next = items.value.slice();
+    next.splice(idx, 0, snapshot);
+    items.value = next;
+    flashHint(t('favorites.actions.removeFailed'));
+  });
 }
 
 /*

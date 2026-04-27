@@ -141,6 +141,7 @@ export default {
       downloading: 'Downloading…',
       alreadyDownloaded: 'Already on this device',
       playHint: 'Demo only — story not loaded',
+      removeFailed: 'Could not unfavorite — try again later',
     },
   },
 

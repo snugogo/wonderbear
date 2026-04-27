@@ -156,6 +156,7 @@ export default {
       downloading: '下载中…',
       alreadyDownloaded: '本机已存',
       playHint: '演示模式 · 暂无内容',
+      removeFailed: '取消收藏失败,请稍后重试',
     },
   },
 
