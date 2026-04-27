@@ -33,7 +33,20 @@ const screen = useScreenStore();
 const bgm = useBgmStore();
 const { t } = useI18n();
 
-const POLL_INTERVAL_MS = 2000;
+/*
+ * PHASE2 2026-04-28: workorder §3.4 calls for 1.5s polling on the real
+ * /story/:id/status endpoint (was 2.0s). Tighter cadence keeps the
+ * progress bar / stage label in sync with what the server is actually
+ * doing while the bear paints. Demo path is unaffected — see
+ * `isDemoMode()` early-return below.
+ *
+ * Real generation runs ~4.5 minutes end-to-end (workorder §1.1), so even
+ * at 1.5s we sit well under the 120s TIMEOUT_MS guard for any single
+ * stall. NOTE: this poll path triggers only after a successful
+ * /story/generate (paid LLM + image + TTS, ~$0.92). Kristy will trigger
+ * that manually in the morning — droid does not run /story/generate.
+ */
+const POLL_INTERVAL_MS = 1500;
 const TIMEOUT_MS = 120_000;
 
 let pollTimer: number | null = null;
@@ -58,20 +71,51 @@ const progressRatio = computed<number>(() =>
 );
 
 /*
- * TV v1.0 §4.6: stage-based progress copy.
+ * TV v1.0 §4.6 + PHASE2 §3.5: stage-based progress copy.
+ *
+ * Demo / dev path keeps the original percent-band mapping so the
+ * gallery preview keeps animating through every label even without a
+ * backend (demoPercent climbs 0→95 over 40s):
  *   0-10  → 小熊在想故事呢...
  *   10-30 → 正在画第一页...
  *   30-65 → 画其余 11 页...
  *   65-95 → 小熊在录音...
  *   95+   → 快好了!
+ *
+ * Production path (real /story/:id/status poll) prefers the server's
+ * `progress.stage` enum directly (workorder §3.5):
+ *   queue / llm        → stages.thinking
+ *   image (page 1)     → stages.firstPage
+ *   image (page 2-12)  → stages.morePages
+ *   tts                → stages.recording
+ *   assembly / done    → stages.almost
+ * Falls back to thinking if the server hasn't sent a stage yet.
  */
 const stageLabel = computed<string>(() => {
-  const p = progressPercent.value;
-  if (p >= 95) return t('generating.stages.almost');
-  if (p >= 65) return t('generating.stages.recording');
-  if (p >= 30) return t('generating.stages.morePages');
-  if (p >= 10) return t('generating.stages.firstPage');
-  return t('generating.stages.thinking');
+  if (isDemoMode()) {
+    const p = progressPercent.value;
+    if (p >= 95) return t('generating.stages.almost');
+    if (p >= 65) return t('generating.stages.recording');
+    if (p >= 30) return t('generating.stages.morePages');
+    if (p >= 10) return t('generating.stages.firstPage');
+    return t('generating.stages.thinking');
+  }
+  switch (storyStore.genStage) {
+    case 'queue':
+    case 'llm':
+      return t('generating.stages.thinking');
+    case 'image':
+      return storyStore.pagesGenerated <= 1
+        ? t('generating.stages.firstPage')
+        : t('generating.stages.morePages');
+    case 'tts':
+      return t('generating.stages.recording');
+    case 'assembly':
+    case 'done':
+      return t('generating.stages.almost');
+    default:
+      return t('generating.stages.thinking');
+  }
 });
 const statusLabel = computed<string>(() => {
   if (progressPercent.value >= 80 || elapsedSec.value >= 60) {
