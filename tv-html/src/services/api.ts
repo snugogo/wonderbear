@@ -140,7 +140,7 @@ export interface Child {
 /** Per §11.1 + protocol patch v2 (h5BaseUrl). Server returns this from /api/oem/config. */
 export interface OemConfig {
   oemId: string;
-  brandName: { zh: string; en: string; pl?: string; ro?: string };
+  brandName: { zh: string; en: string; pl?: string; ro?: string; ja?: string; de?: string; es?: string };
   logoUrl: string;
   colors: {
     primary: string;

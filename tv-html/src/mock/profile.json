@@ -1,0 +1,32 @@
+{
+  "_": "Mock data for ProfileScreen — subscription + per-child stats. Replace with /api/profile/summary once backend lands. Per-child stats keyed by child id; falls back to default block if id missing.",
+
+  "family": {
+    "subscription_plan": "yearly",
+    "plan_expires_in_days": 245,
+    "plan_renews_at": "2027-01-01",
+    "family_name": "Moon Family",
+    "family_id": "WB-FA0012",
+    "parent_phone_masked": "+86 138****1234",
+    "billing_qr_url": "https://h5.wonderbear.app/#/family/WB-FA0012/billing"
+  },
+
+  "child_stats": {
+    "default": {
+      "stories_created": 12,
+      "learn_seconds": 8100,
+      "watch_seconds": 5400
+    },
+    "by_id": {
+      "child-luna": { "stories_created": 12, "learn_seconds": 8100, "watch_seconds": 5400 },
+      "child-tom":  { "stories_created":  7, "learn_seconds": 4200, "watch_seconds": 3000 },
+      "child-mia":  { "stories_created":  3, "learn_seconds": 1500, "watch_seconds":  900 }
+    }
+  },
+
+  "kids_demo": [
+    { "id": "child-luna", "name": "Luna", "age": 5, "avatar": "avatar_bear_classic", "active": true  },
+    { "id": "child-tom",  "name": "Tom",  "age": 7, "avatar": "avatar_dog",          "active": false },
+    { "id": "child-mia",  "name": "Mia",  "age": 4, "avatar": "avatar_rabbit",       "active": false }
+  ]
+}

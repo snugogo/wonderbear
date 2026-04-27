@@ -10,8 +10,28 @@ html, body, #app {
   overflow: hidden;
   background: var(--c-bg-deep);
   color: var(--c-cream);
-  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB',
-    'Microsoft YaHei', 'Helvetica Neue', sans-serif;
+  /*
+   * 2026-04-25 iter: Fredoka is now the global default.
+   * Stack:
+   *   1. Fredoka          → Latin glyphs (local woff2, ~34 KB)
+   *   2. LXGW WenKai      → CJK glyphs (chinese-fonts-cdn dynamic chunks)
+   *   3. HanziPen SC      → Apple-only handwriting fallback (if CDN fails)
+   *   4. STHupo / PingFang → Chinese fallbacks
+   *   5. system stack     → ultimate fallback
+   * Browser uses each font only for the glyphs it covers, so a Chinese
+   * sentence with English words will get Fredoka for EN + LXGW WenKai
+   * for the CJK characters automatically.
+   */
+  font-family:
+    'Fredoka',
+    'LXGW WenKai',
+    'HanziPen SC',
+    'STHupo', 'ST Hupo',
+    'PingFang SC',
+    'Hiragino Sans GB',
+    'Microsoft YaHei',
+    -apple-system, BlinkMacSystemFont,
+    'Helvetica Neue', sans-serif;
   font-size: var(--fs-md);
   -webkit-font-smoothing: antialiased;
   user-select: none;
@@ -38,12 +58,14 @@ body[data-dev='1'] * { cursor: auto !important; }
 
 /* Global focus indicator. Driven by data-focused attribute set by focus store. */
 [data-focused='true'] {
-  outline: 4px solid var(--c-amber);
+  /* Outline is the hot coral ring; --shadow-focus adds dark inner halo + outer glow. */
+  outline: 4px solid var(--c-focus);
   outline-offset: 4px;
   box-shadow: var(--shadow-focus);
   transition: outline-color var(--t-fast) var(--ease-out),
               box-shadow var(--t-fast) var(--ease-out);
   z-index: 1;
+  position: relative;
 }
 
 /* Screen transition: 240ms cross-fade (lighter than 400ms to start; we'll heavy-it-up later) */
@@ -114,4 +136,44 @@ body[data-dev='1'] * { cursor: auto !important; }
   padding: 6px 14px;
   border-radius: 999px;
   backdrop-filter: none; /* GP15 has no GPU budget for blur */
+}
+
+/*
+ * Text outline utility — 4-way hard black stroke via text-shadow plus a
+ * soft drop glow. Use on any text sitting over watercolor imagery that
+ * needs to stay legible regardless of background zone brightness.
+ * HOME screen uses this strong version because its label font is small
+ * and shares cells with high-saturation bear icons.
+ */
+.wb-text-outline {
+  text-shadow:
+    -2px -2px 0 #000000,
+     2px -2px 0 #000000,
+    -2px  2px 0 #000000,
+     2px  2px 0 #000000,
+     0 3px 6px rgba(0, 0, 0, 0.4);
+}
+.wb-text-outline-sm {
+  text-shadow:
+    -1px -1px 0 #000000,
+     1px -1px 0 #000000,
+    -1px  1px 0 #000000,
+     1px  1px 0 #000000,
+     0 2px 4px rgba(0, 0, 0, 0.4);
+}
+
+/*
+ * Soft shadow utility — gentler drop shadow alternative for screens
+ * where the watercolor BG is calmer and hard black strokes feel heavy
+ * (Dialogue / Generating / Library / etc. — everything except Home).
+ */
+.wb-text-shadow {
+  text-shadow:
+    0 2px 6px rgba(26, 15, 10, 0.7),
+    0 0 14px rgba(26, 15, 10, 0.45);
+}
+.wb-text-shadow-sm {
+  text-shadow:
+    0 1px 3px rgba(26, 15, 10, 0.7),
+    0 0 10px rgba(26, 15, 10, 0.4);
 }

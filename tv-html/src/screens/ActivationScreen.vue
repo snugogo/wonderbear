@@ -34,6 +34,29 @@ const unsubActivation = ref<(() => void) | null>(null);
 
 const activationCode = computed(() => device.activationCode || '------');
 
+/*
+ * 2026-04-25 iter: 3-frame bear loop on the right column.
+ * Cycles bear_talk -> bear_think -> bear_wave every 700ms with a CSS
+ * cross-fade for warmth. Pure src-swap is fine since these assets are
+ * pre-loaded in <link rel="prefetch"> if needed; the browser cache
+ * absorbs the rest after the first cycle.
+ */
+const BEAR_FRAMES = ['bear_talk', 'bear_think', 'bear_wave'] as const;
+const bearFrameIdx = ref<number>(0);
+let bearTimer: number | null = null;
+
+/*
+ * 2026-04-25 iter: support the Back hardware key in dev / gallery mode.
+ * Real first-boot activation has no prior screen, so we only honour Back
+ * when ?dev=1 or ?gallery=1 is in the URL (preview / audit context).
+ */
+let backHandler: ((e: KeyboardEvent) => void) | null = null;
+function isDevPreview(): boolean {
+  if (typeof window === 'undefined') return false;
+  const p = new URLSearchParams(window.location.search);
+  return p.has('dev') || p.has('gallery');
+}
+
 async function renderQrCode(): Promise<void> {
   if (!device.deviceId || !device.activationCode || !canvasEl.value) return;
   const url = buildBindingUrl(device.deviceId, device.activationCode, device.oem);
@@ -41,7 +64,7 @@ async function renderQrCode(): Promise<void> {
   bridge.log('activation', { event: 'qr_url_built', url });
   try {
     await QRCode.toCanvas(canvasEl.value, url, {
-      width: 320,
+      width: 240,
       margin: 2,
       color: { dark: '#1a0f0a', light: '#fff5e6' },
       errorCorrectionLevel: 'M',
@@ -86,25 +109,42 @@ onMounted(async () => {
   pollTimer.value = window.setInterval(pollStatus, 3000);
   // Initial check
   pollStatus();
+
+  // 3-frame bear loop
+  bearTimer = window.setInterval(() => {
+    bearFrameIdx.value = (bearFrameIdx.value + 1) % BEAR_FRAMES.length;
+  }, 700);
+
+  // Back key (dev preview only)
+  if (isDevPreview()) {
+    backHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Backspace' || e.key === 'Escape' || e.key === 'GoBack') {
+        e.preventDefault();
+        screen.go('home');
+      }
+    };
+    window.addEventListener('keydown', backHandler);
+  }
 });
 
 onBeforeUnmount(() => {
   if (pollTimer.value !== null) clearInterval(pollTimer.value);
   unsubActivation.value?.();
+  if (bearTimer !== null) clearInterval(bearTimer);
+  if (backHandler) window.removeEventListener('keydown', backHandler);
 });
 </script>
 
 <template>
   <div class="activation-screen">
     <!--
-      TV_TASKS v1.1 P0-1: use bg_activation.webp (⏳ in NAMING_CONTRACT §四).
-      The left half of the image is designed as a blank area for the QR card
-      to sit over. Until the designer delivers, the img 404s and onerror
-      hides it, exposing the warm gradient fallback underneath.
+      2026-04-25 iter: switched to bg_send.webp (Kristy's new send-themed
+      illustration — left frame stays as the QR overlay slot, right side
+      keeps a soft warmth zone for the bear animation).
     -->
     <img
       class="bg"
-      :src="asset('bg/bg_activation.webp')"
+      :src="asset('bg/bg_send.webp')"
       alt=""
       aria-hidden="true"
       onerror="this.style.display='none'"
@@ -119,15 +159,15 @@ onBeforeUnmount(() => {
       over the cozy bedroom scene (bookshelf, sunset window) — lets the
       marketing moment breathe against the mood backdrop.
     -->
-    <!-- Left column: QR card (sits over bg_activation's white frame) -->
+    <!--
+      Left column: QR card sits high in the watercolor's white frame slot.
+      Iter 2026-04-25 round 3: bear is no longer above the QR (moved to a
+      free-floating lower-left position) so the card returns to its
+      original chest-height placement.
+    -->
     <div class="qr-card">
       <div class="qr-frame">
         <canvas ref="canvasEl" class="qr-canvas"></canvas>
-        <!--
-          bear_qr_peek.webp is "✅ 已交付" in NAMING_CONTRACT.md (1024×1024).
-          The old bear emoji fallback has been fully retired per TV_TASKS rule #1.
-        -->
-        <img class="bear-peek" :src="asset('bear/bear_qr_peek.webp')" alt="" />
       </div>
       <p class="scan-hint t-md">{{ t('activation.scanHint') }}</p>
       <p class="code-line t-sm">
@@ -136,10 +176,30 @@ onBeforeUnmount(() => {
       </p>
     </div>
 
-    <!-- Right column: hero text (over cozy bedroom watercolor) -->
+    <!--
+      Right column: subtitle only.
+      Iter 2026-04-25 round 6: text could clip on overscan-heavy TVs when
+      anchored to the bottom; pulled to the TOP and shrunk one notch so
+      it sits well inside the TV safe zone (top inset ≈ var(--sp-7)).
+    -->
     <div class="hero">
-      <h1 class="title t-display">{{ t('activation.title') }}</h1>
-      <p class="subtitle t-xl">{{ t('activation.subtitle') }}</p>
+      <p class="subtitle t-lg">{{ t('activation.subtitle') }}</p>
+    </div>
+
+    <!--
+      Animated bear floats over the bottom-left of the watercolor (lower
+      paw of the white rug). Absolute positioning lets it sit outside the
+      2-column grid so the QR card stays compact and centered.
+    -->
+    <div class="bear-anim" aria-hidden="true">
+      <img
+        v-for="(name, i) in BEAR_FRAMES"
+        :key="name"
+        class="bear-frame"
+        :class="{ active: bearFrameIdx === i }"
+        :src="asset(`bear/${name}.webp`)"
+        alt=""
+      />
     </div>
 
     <!-- Bottom strip: waiting state -->
@@ -195,9 +255,14 @@ onBeforeUnmount(() => {
 .hero {
   position: relative;
   z-index: 1;
-  padding-right: var(--sp-5);
-  /* Hero lives in column 2; slight horizontal padding detaches it from the
-     watercolor's right edge. */
+  /*
+   * Iter 2026-04-25 round 8: the painted bear's ears start around y≈200
+   * so the round-7 128px push collided with the head. Pulled back to
+   * 48px top inset (still inside the TV safe zone, ~7% of 720h) so the
+   * 3 lines fit between top edge and the bear's ear line.
+   */
+  align-self: start;
+  padding: var(--sp-6) var(--sp-5) 0 var(--sp-7);
 }
 /*
  * WCAG AA: hero now sits over bg_activation's right-side cozy bedroom
@@ -209,21 +274,56 @@ onBeforeUnmount(() => {
  * window zone (cream #FFF5E6 on #FFDAA5 shadow lifts effective 6.5:1+)
  * and the dark bookshelf zone (cream on #5C4030 = 6.9:1 AA native).
  */
-.title {
-  margin: 0 0 var(--sp-4);
-  color: var(--c-cream);
-  font-weight: 700;
-  text-shadow:
-    0 2px 8px rgba(0, 0, 0, 0.7),
-    0 0 24px rgba(26, 15, 10, 0.55);
-}
+/*
+ * Iter 2026-04-25 round 4: subtitle dialled down from display to xl so
+ * the line wraps shorter and clears the painted bear's head; still solid
+ * cream + heavy halo for readability over the watercolor.
+ */
 .subtitle {
   margin: 0;
-  color: var(--c-cream-soft);
-  line-height: 1.4;
+  color: var(--c-cream);
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: 0.005em;
+  /*
+   * Iter round 9: locale string carries an explicit \n so the line
+   * breaks deterministically into 2 lines regardless of TV width.
+   */
+  white-space: pre-line;
   text-shadow:
-    0 1px 4px rgba(0, 0, 0, 0.7),
-    0 0 16px rgba(26, 15, 10, 0.5);
+    0 2px 8px rgba(0, 0, 0, 0.75),
+    0 0 24px rgba(26, 15, 10, 0.55);
+}
+
+/*
+ * 3-frame bear loop. Round 4: scaled up 160 → 220 so the lively bear
+ * reads from across the room. Position nudged slightly so the bigger
+ * footprint still sits clear of both the QR card and the screen edge.
+ */
+.bear-anim {
+  position: absolute;
+  left: 80px;
+  bottom: 60px;
+  width: 220px;
+  height: 220px;
+  z-index: 2;
+  pointer-events: none;
+  user-select: none;
+}
+.bear-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0;
+  transform: scale(0.96);
+  transition: opacity 280ms var(--ease-out), transform 280ms var(--ease-out);
+  filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.45));
+}
+.bear-frame.active {
+  opacity: 1;
+  transform: scale(1);
 }
 
 /*
@@ -231,71 +331,82 @@ onBeforeUnmount(() => {
  * We keep the glass look using only rgba + border. Solid translucent cream
  * gives the QR card enough contrast on top of bg_activation's painted area.
  */
+/*
+ * Iter 2026-04-25 round 7: cream card chrome stripped — bg / border /
+ * padding / shadow all dropped. Only the QR canvas (which already paints
+ * its own cream bg as part of the QR image) and the helper text remain
+ * floating directly on the watercolor.
+ */
 .qr-card {
   position: relative;
   z-index: 1;
-  background: rgba(255, 248, 240, 0.88);
-  border: 1px solid rgba(232, 166, 88, 0.35);
-  border-radius: var(--r-xl);
-  padding: var(--sp-5);
+  align-self: start;
+  /* Round 10: pushed down ~64px so it lines up with the painted bear's
+     mid-body — a touch lower feels more anchored on the watercolor. */
+  margin: 96px auto 0 auto;
   text-align: center;
-  width: 380px;
-  margin: 0 auto;
-  box-shadow: 0 12px 32px rgba(60, 42, 30, 0.25);
+  width: 300px;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  box-shadow: none;
 }
 .qr-frame {
   position: relative;
   display: inline-block;
-  background: var(--c-cream);
-  border-radius: var(--r-md);
-  padding: var(--sp-3);
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
 }
 .qr-canvas {
   display: block;
-  width: 320px;
-  height: 320px;
+  width: 240px;
+  height: 240px;
 }
-.bear-peek {
-  position: absolute;
-  bottom: -32px;
-  right: -32px;
-  width: 140px;
-  height: 140px;
-  object-fit: contain;
-  pointer-events: none;
-  user-select: none;
-  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.35));
-}
+/*
+ * Iter round 7: card chrome removed → these labels now sit directly on
+ * the watercolor. Switched the dark-on-cream palette to dark-with-halo
+ * so the text still reads on every zone of bg_send (mostly amber/cream
+ * tones, deep enough to keep dark ink legible with a soft cream halo).
+ */
 .scan-hint {
   margin: var(--sp-4) 0 var(--sp-2);
   color: #3C2A1E;
-  font-weight: 600;
+  font-weight: 700;
+  text-shadow: 0 0 12px rgba(255, 245, 230, 0.85);
 }
 .code-line {
-  color: rgba(60, 42, 30, 0.7);
+  color: rgba(60, 42, 30, 0.85);
   margin: 0;
+  text-shadow: 0 0 10px rgba(255, 245, 230, 0.8);
 }
 .code {
   font-family: monospace;
   letter-spacing: 0.15em;
-  color: #FF8A3D;
+  color: #C95A1A;
   font-weight: bold;
+  text-shadow: 0 0 10px rgba(255, 245, 230, 0.85);
 }
 
 .bottom-strip {
+  /*
+   * Iter 2026-04-25 round 5: chip parked next to the animated bear's
+   * right shoulder so the message reads with the action, not as an
+   * unrelated bottom-of-screen status. This also frees up the right
+   * column so the "Discover…" line below isn't bisected.
+   */
   position: absolute;
-  bottom: var(--sp-5);
-  left: 50%;
-  transform: translateX(-50%);
+  bottom: 110px;
+  left: 310px;
   display: flex;
   align-items: center;
   gap: var(--sp-2);
   color: var(--c-cream);
-  z-index: 1;
-  /* Pill chip so "等待绑定中..." always reads over wooden-floor bg zone. */
-  background: rgba(26, 15, 10, 0.55);
+  z-index: 2;
+  background: rgba(26, 15, 10, 0.6);
   padding: 8px 18px;
   border-radius: 999px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
 }
 .dot {
   width: 8px;

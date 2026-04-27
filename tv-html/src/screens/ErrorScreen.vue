@@ -285,20 +285,29 @@ onBeforeUnmount(() => {
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
 }
 
+/*
+ * 2026-04-25 iter:
+ *   - Bear shrunk 340 → 240 and stage padding bumped so the action
+ *     buttons clear the TV safe zone (overscan eats ~5-7% bottom on
+ *     cheap panels — was clipping the "Try again" button).
+ *   - Message line was using cream-soft (rgba 70%) → muddy gray on the
+ *     watercolor; switched to solid cream + heavier shadow halo.
+ *   - Action buttons restyled to match the Story End cartoon
+ *     vocabulary (rounded amber slabs with focus ring).
+ */
 .content {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--sp-3);
-  padding: var(--sp-6);
+  padding: var(--sp-7) var(--sp-6);
   text-align: center;
   max-width: 900px;
 }
 
 .bear {
-  /* TV_TASKS v1.1 P0-3: 220 -> 340. Source is 1024x1024 so no quality loss. */
-  width: 340px;
-  height: 340px;
+  width: 240px;
+  height: 240px;
   object-fit: contain;
   filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.45));
   margin-bottom: var(--sp-2);
@@ -308,13 +317,14 @@ onBeforeUnmount(() => {
   color: var(--c-cream);
   font-weight: 700;
   margin: 0;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.65);
+  text-shadow: 0 3px 10px rgba(0, 0, 0, 0.7);
 }
 .message {
-  color: var(--c-cream-soft);
+  color: var(--c-cream);
+  font-weight: 600;
   margin: 0 0 var(--sp-3);
   line-height: 1.5;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7), 0 0 18px rgba(26, 15, 10, 0.45);
 }
 .support {
   color: var(--c-amber);
@@ -339,31 +349,40 @@ onBeforeUnmount(() => {
 
 .actions {
   display: flex;
-  gap: var(--sp-4);
+  gap: var(--sp-3);
   margin-top: var(--sp-3);
 }
 
 .action-btn {
   appearance: none;
-  background: rgba(255, 245, 230, 0.08);
-  border: 2px solid rgba(255, 200, 87, 0.25);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 245, 230, 0.12);
+  border: 2px solid rgba(255, 200, 87, 0.35);
   color: var(--c-cream);
-  padding: var(--sp-3) var(--sp-6);
+  padding: 14px 32px;
   border-radius: var(--r-lg);
   cursor: pointer;
-  transition: all var(--t-fast) var(--ease-out);
+  font-family: var(--ff-display);
+  font-size: 24px;
+  font-weight: 700;
   min-width: 200px;
-  font-family: inherit;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.55);
+  transition: transform var(--t-fast) var(--ease-out),
+              border-color var(--t-fast) var(--ease-out),
+              box-shadow var(--t-fast) var(--ease-out);
 }
 .action-btn.primary {
-  background: rgba(255, 200, 87, 0.18);
+  background: rgba(255, 200, 87, 0.22);
   border-color: var(--c-amber-soft);
 }
-/* transform scale lives on .wb-focus-feedback.is-focused (global). */
 .action-btn.is-focused {
-  background: var(--c-amber);
+  transform: scale(1.08);
   border-color: var(--c-amber);
-  color: #1a0f0a;
-  box-shadow: var(--shadow-focus);
+  box-shadow:
+    0 0 0 3px rgba(245, 158, 11, 0.55),
+    0 0 22px 6px var(--c-focus-soft);
 }
 </style>

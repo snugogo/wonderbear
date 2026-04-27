@@ -18,12 +18,42 @@ import { i18n, getLocale } from './i18n';
 import { bridge } from './services/bridge';
 import { startKeyRouter } from './services/focus';
 import { useDeviceStore } from './stores/device';
-import { useScreenStore } from './stores/screen';
+import { useScreenStore, type ScreenName } from './stores/screen';
 import { api } from './services/api';
 import { ApiError } from './services/api';
 import './styles/global.css';
 
+/**
+ * Gallery mode short-circuit. Activated by ?gallery=1 (dev only).
+ * Mounts GalleryView instead of App and skips all activation/refresh logic.
+ * Zero impact on normal bootstrap.
+ *
+ * 2026-04-23: startKeyRouter() must run here too, otherwise arrow/OK/Back
+ * keys are dead inside the previewed screen (normal bootstrap path is skipped).
+ */
+async function bootstrapGallery(): Promise<void> {
+  const { default: GalleryView } = await import('./dev/GalleryView.vue');
+  const app = createApp(GalleryView);
+  app.use(createPinia());
+  app.use(i18n);
+  startKeyRouter();
+  app.mount('#app');
+}
+
 async function bootstrap(): Promise<void> {
+  // Dev-only: show the real OS cursor so mouse input works for testing.
+  // (global.css defaults `cursor: none !important` for TV kiosk mode; this
+  // lifts that for any session with ?dev=1, independent of DevConsole mount.)
+  if (typeof window !== 'undefined'
+      && new URLSearchParams(window.location.search).has('dev')) {
+    document.body.setAttribute('data-dev', '1');
+  }
+
+  if (typeof window !== 'undefined'
+      && new URLSearchParams(window.location.search).get('gallery') === '1') {
+    return bootstrapGallery();
+  }
+
   const app = createApp(App);
   const pinia = createPinia();
   app.use(pinia);
@@ -82,6 +112,40 @@ async function bootstrap(): Promise<void> {
     }
   } else {
     screen.go('activation');
+  }
+
+  /*
+   * Dev-only: ?screen=<name> deep-link into any screen.
+   * iter7 hardening — apply the override BEFORE app.mount so the target
+   * screen boots directly (no activation → flash → screen). Also seed
+   * minimal store data for screens that would otherwise goError without
+   * a real server session (generating / story-*).
+   *
+   * Suppress the auth-error handler globally — in dev browser mode every
+   * OEM / status API call 401s (no real server) and would otherwise
+   * punt the user back to ActivationScreen moments after our override.
+   */
+  if (typeof window !== 'undefined') {
+    const p = new URLSearchParams(window.location.search);
+    const want = p.get('screen');
+    const VALID: ScreenName[] = ['activation','home','create','dialogue','generating',
+      'story-cover','story-body','story-end','library','favorites','learning','profile',
+      'leaderboard','create-invite','offline','error'];
+    if (want && (VALID as string[]).includes(want)) {
+      api.onAuthError(() => { /* deep-link mode — stay on the chosen screen */ });
+      if (want === 'generating') {
+        const { useStoryStore } = await import('./stores/story');
+        const s = useStoryStore();
+        s.generatingStoryId = 'demo-gen';
+        s.genStatus = 'generating';
+        s.genStage = 'image';
+        s.pagesGenerated = 5;
+        s.totalPages = 12;
+        s.percent = 42;
+        s.genStartedAt = Date.now() - 18_000;
+      }
+      screen.go(want as ScreenName);
+    }
   }
 
   app.mount('#app');
