@@ -221,6 +221,12 @@ async function startGenerationAndNavigate(): Promise<void> {
     screen.goError(ERR.CHILD_NOT_FOUND);
     return;
   }
+  // PHASE2 2026-04-28 §1.1: this kicks off the real /story/generate
+  // (LLM + 12 fal-kontext images + ElevenLabs TTS, ≈$0.92 / story).
+  // Droid MUST NOT trigger this during the night shift; Kristy will
+  // walk through the dialogue → ready-painter CTA manually in the
+  // morning. Production contract per E2E-TV-002 report §2: payload
+  // must include BOTH dialogueId AND childId (not just dialogueId).
   try {
     const { data } = await api.storyGenerate({
       dialogueId: dialogue.dialogueId,
@@ -404,6 +410,12 @@ async function submitTurn(payload: {
     speakOrAdvance();
     return;
   }
+  // PHASE2 2026-04-28 §3.1: real /story/dialogue/:id/turn round trip.
+  // Server runs ASR internally on audioBase64 (patch v3) and returns
+  // the bear's next question or a `done=true` summary. Each turn costs
+  // ~$0.02 (Whisper ASR + Gemini LLM); 7 turns ≈ $0.14. Acceptable for
+  // a real run, but the night shift droid only validates 1 turn via
+  // /tmp/p1.mp3 fallback (workorder §4.4) — never the full ceremony.
   try {
     // Per patch v3: audioMimeType is REQUIRED when audioBase64 is present.
     // Browser mock bridge produces audio/webm (MediaRecorder default on Chromium).
