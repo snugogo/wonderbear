@@ -4,3 +4,4 @@ coordination/locks/
 coordination/HALT.signal
 coordination/format-violations/
 coordination/responses/
+coordination/droid-runs/
