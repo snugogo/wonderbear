@@ -321,9 +321,10 @@ async function refreshEditorPicksFromServer(): Promise<void> {
       story_id: s.id,
       title: s.title,
       cover_url: s.coverUrl,
-      // Editor picks don't expose creator nicknames yet — surface a
-      // friendly editorial blurb instead of an empty string.
-      creator_nickname: t('leaderboard.editorPickBadge'),
+      // Editor picks don't expose creator nicknames yet — match the
+      // existing mock label ("WonderBear Studio") so the row visual
+      // language stays consistent across the list.
+      creator_nickname: 'WonderBear Studio',
       is_editor_pick: true,
     }));
     // Mutate inside an immutable replacement so reactivity + the
