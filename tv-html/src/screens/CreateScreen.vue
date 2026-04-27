@@ -31,6 +31,7 @@ import {
   type FocusableNeighbors,
 } from '@/services/focus';
 import { asset } from '@/utils/assets';
+import { buildDemoStory } from '@/utils/demoStory';
 import type { StorySummary } from '@/services/api';
 import StoryCell from './CreateScreen.StoryCell.vue';
 
@@ -48,8 +49,9 @@ const loading = ref<boolean>(true);
 const mounted = ref<boolean>(true);
 const focusedId = ref<string>('');
 
-const isDevBrowser = typeof window !== 'undefined'
-  && new URLSearchParams(window.location.search).has('dev');
+const isDevBrowser = import.meta.env.DEV
+  || (typeof window !== 'undefined'
+      && new URLSearchParams(window.location.search).has('dev'));
 
 const plusId = 'create-plus';
 interface Slot {
@@ -174,22 +176,21 @@ function startNewStory(): void {
 async function playStory(summary: StorySummary): Promise<void> {
   bridge.log('create', { event: 'play_pressed', storyId: summary.id });
   if (isDevBrowser) {
-    storyStore.active = {
-      id: summary.id,
-      childId: child.activeChildId ?? 'demo-child',
-      title: summary.title,
-      titleLearning: null,
-      coverUrl: summary.coverUrl,
-      pages: [],
-      dialogue: { summary: { mainCharacter: '', scene: '', conflict: '' }, rounds: [] },
-      metadata: { primaryLang: 'en', learningLang: 'zh', provider: 'mock' },
-      status: 'completed',
-      isPublic: false,
-      favorited: summary.favorited,
-      playCount: summary.playCount,
-      createdAt: summary.createdAt,
-      completedAt: summary.createdAt,
-    };
+    // 2026-04-27: seed full demo (pages + dialogue) so the entire
+    // playback chain (cover → body → end → learning) is reviewable.
+    storyStore.active = buildDemoStory(
+      {
+        id: summary.id,
+        title: summary.title,
+        coverUrl: summary.coverUrl,
+        createdAt: summary.createdAt,
+        playCount: summary.playCount,
+        favorited: summary.favorited,
+        primaryLang: 'en',
+      },
+      child.activeChildId ?? 'demo-child',
+    );
+    storyStore.pageIndex = 0;
     screen.go('story-cover');
     return;
   }

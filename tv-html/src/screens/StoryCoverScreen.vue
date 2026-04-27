@@ -32,8 +32,9 @@ const { t } = useI18n();
 
 // iter8 gallery-safe: when loaded via ?dev=1 deep-link without a real story,
 // don't bail — show the "ready" ceremony with a placeholder title.
-const isDevBrowser = typeof window !== 'undefined'
-  && new URLSearchParams(window.location.search).has('dev');
+const isDevBrowser = import.meta.env.DEV
+  || (typeof window !== 'undefined'
+      && new URLSearchParams(window.location.search).has('dev'));
 
 const okCaptureEl = ref<HTMLElement | null>(null);
 let advanceTimer: number | null = null;

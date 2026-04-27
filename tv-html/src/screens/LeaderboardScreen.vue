@@ -244,12 +244,23 @@ async function openStory(storyId: string): Promise<void> {
 }
 
 /*
- * Reset row focus when switching tabs so the new list's row 0 lands
- * focus instead of leaving it pointing at a now-stale lb-row-N.
+ * Reset row focus when switching tabs — but only if the user is
+ * already navigating inside the row list. When the user is just
+ * stepping left/right between tabs (focus still on a tab button),
+ * we must NOT yank the focus down into the rows or it feels like
+ * "the cursor jumped randomly" (Kristy 2026-04-27 feedback).
+ *
+ * Hierarchy contract:
+ *   - left/right between tabs = stay in the tab row
+ *   - down from a tab          = enter the row list (handled by
+ *                                rowNeighbors / static down target)
+ *   - clicking a tab via mouse / OK from a row tab swap   → row 0
  */
 watch(activeTab, async () => {
   await nextTick();
-  if (activeRowsCount.value > 0) {
+  const cur = getCurrentFocusId();
+  const focusInRows = typeof cur === 'string' && cur.startsWith('lb-row-');
+  if (focusInRows && activeRowsCount.value > 0) {
     setFocus('lb-row-0');
   }
 });

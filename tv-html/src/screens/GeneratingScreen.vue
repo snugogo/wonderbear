@@ -157,6 +157,13 @@ async function loadAndNavigate(storyId: string): Promise<void> {
  * screen can sit on its demo progress bar without 401-ing to ErrorScreen.
  */
 function isDemoMode(): boolean {
+  // 2026-04-27: include import.meta.env.DEV so the vite dev server
+  // (localhost:5173/5176) qualifies even when the URL has no `?dev=1`
+  // query — otherwise pressing Ctrl+G or arriving via the dialogue
+  // ready-painter on a clean URL would fall into the production poll
+  // path, hit a 401 against no backend, and bounce ErrorScreen →
+  // activation → home (the "一闪而过" symptom).
+  if (import.meta.env.DEV) return true;
   if (typeof window === 'undefined') return false;
   const p = new URLSearchParams(window.location.search);
   return p.has('dev') || p.has('gallery') || p.get('screen') === 'generating';
@@ -164,6 +171,21 @@ function isDemoMode(): boolean {
 
 onMounted(() => {
   bgm.stop();
+
+  // 2026-04-27 dev/gallery: when entering Generating via demo paths
+  // (Ctrl+G hotkey, dev URL, or DialogueScreen ready-painter without a
+  // prior /story/generate call), the store may not have a generating
+  // storyId yet. Seed a fake one BEFORE the guard below so we never
+  // bounce to ErrorScreen → activation → home in dev. Production
+  // paths always seed via storyStore.startGeneration first, so this
+  // is purely a dev-mode safety net.
+  if (isDemoMode() && !storyStore.generatingStoryId) {
+    storyStore.startGeneration({
+      storyId: 'demo-gen-' + Date.now(),
+      estimatedDurationSec: 75,
+      queuePosition: 1,
+    });
+  }
 
   if (!storyStore.generatingStoryId) {
     bridge.log('generating', { event: 'mounted_without_story_id' });
@@ -227,14 +249,10 @@ const libraryBtnRef = ref<HTMLElement | null>(null);
 useFocusable(libraryBtnRef, {
   id: 'generating-btn-library',
   autoFocus: true,
-  /*
-   * iter13i-4: play button jumps into the Stories hub (Dream Factory /
-   * CreateScreen) — that's where the user's existing story tiles live
-   * and can be played back while the new story is still rendering in
-   * the background. Earlier this went to 'library' (Bear Stars
-   * achievements) which wasn't the kid's goal.
-   */
-  onEnter: () => { screen.go('create'); },
+  // 2026-04-27: home menu's "Stories" card maps to LibraryScreen (per
+  // HomeScreen.vue line 78), so the "while you wait, go look at your
+  // stories" CTA on this screen routes there too.
+  onEnter: () => { screen.go('library'); },
   onBack: () => { screen.go('home'); },
 });
 </script>

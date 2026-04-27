@@ -92,6 +92,7 @@ function readDemoPhase(): DemoPhase | null {
   return null;
 }
 function readIsDevBrowser(): boolean {
+  if (import.meta.env.DEV) return true;
   if (typeof window === 'undefined') return false;
   return new URLSearchParams(window.location.search).has('dev');
 }
@@ -182,6 +183,14 @@ function speakOrAdvance(): void {
   if (q?.ttsUrl) {
     dialogue.setPhase('bear-speaking');
     bridge.playTts(q.ttsUrl);
+  } else if (isDevBrowser) {
+    // 2026-04-27 dev: hold the 3C "bear speaking" bubble visible long
+    // enough for reviewers to read the new question, then drop back to
+    // waiting-for-child so they can press OK again to advance.
+    dialogue.setPhase('bear-speaking');
+    window.setTimeout(() => {
+      if (mounted) dialogue.setPhase('waiting-for-child');
+    }, 2200);
   } else {
     // No TTS provided — assume bear "spoke" instantly, jump to waiting.
     dialogue.setPhase('waiting-for-child');
@@ -189,6 +198,19 @@ function speakOrAdvance(): void {
 }
 
 async function startGenerationAndNavigate(): Promise<void> {
+  // 2026-04-27 dev/gallery: skip the real /story/generate call, seed the
+  // store with a mock id and let GeneratingScreen run its built-in demo
+  // progress animation. Lets reviewers walk the full create→cover→body
+  // chain offline.
+  if (isDevBrowser) {
+    storyStore.startGeneration({
+      storyId: 'demo-gen-' + Date.now(),
+      estimatedDurationSec: 75,
+      queuePosition: 1,
+    });
+    screen.go('generating');
+    return;
+  }
   if (!dialogue.dialogueId) {
     bridge.log('dialogue', { event: 'generate_no_dialogue_id' });
     screen.goError(ERR.STORY_GEN_FAILED);
@@ -295,10 +317,32 @@ async function onVoiceKeyUp(): Promise<void> {
 
 async function onOkKey(): Promise<void> {
   if (!mounted) return;
-  if (!dialogue.canEarlyEnd) return;
   if (dialogue.phase !== 'waiting-for-child' && dialogue.phase !== 'bear-speaking') return;
   if (inFlight) return;
 
+  // 2026-04-27 dev/gallery: pressing OK simulates one full turn of the
+  // child speaking. We deliberately step through the visual states so
+  // reviewers SEE every screen of the ceremony:
+  //   3A waiting → 3B "bear listening" with mic pulse (1.4s)
+  //   → 3C "bear replying" with speech bubble (≥2.2s, via speakOrAdvance)
+  //   → back to 3A waiting OR to ready-painter on the final round.
+  if (isDevBrowser) {
+    bridge.stopTts();
+    inFlight = true;
+    dialogue.setPhase('recording');
+    startMicAlternation();
+    window.setTimeout(() => {
+      if (!mounted) return;
+      stopMicAlternation();
+      dialogue.setPhase('uploading');
+      void submitTurn({ skipRemaining: false }).then(() => {
+        inFlight = false;
+      });
+    }, 1400);
+    return;
+  }
+
+  if (!dialogue.canEarlyEnd) return;
   bridge.stopTts();
   inFlight = true;
   dialogue.setPhase('uploading');
@@ -312,6 +356,52 @@ async function submitTurn(payload: {
 }): Promise<void> {
   if (!dialogue.dialogueId) {
     screen.goError(ERR.STORY_GEN_FAILED);
+    return;
+  }
+  // 2026-04-27 dev/gallery: skip /dialogue/turn — synthesize a mock
+  // next-question or done payload so reviewers can experience the full
+  // back-and-forth ceremony (你一句我一句 → 5 rounds → generating).
+  if (isDevBrowser) {
+    const demoQs = [
+      'What kind of adventure do you want today?',
+      'Where should our hero live — a forest, the ocean, or the clouds?',
+      'Who joins them on the journey — a friend, a pet, or a magical creature?',
+      'What is the biggest challenge they have to overcome?',
+      'And how do you want it to end — happy, brave, or full of surprise?',
+    ];
+    const nextRound = dialogue.round + 1;
+    const isDone = payload.skipRemaining || nextRound > dialogue.roundCount;
+    if (isDone) {
+      // Final round in dev: stay on 3C with a "summary" bubble +
+      // painter-bear ready button focused. User must press OK on the
+      // button to actually launch GeneratingScreen — gives reviewers
+      // a beat to see the bear's wrap-up + the launch CTA.
+      dialogue.summary = {
+        mainCharacter: 'Luna',
+        scene: 'glowing forest',
+        conflict: 'lost the golden key',
+      };
+      dialogue.currentQuestion = {
+        text: t('dialogue.demoReply'),
+        textLearning: null,
+        ttsUrl: null,
+      };
+      dialogue.setPhase('bear-speaking');
+      void nextTick().then(() => setFocus('dialogue-ready-painter'));
+      return;
+    }
+    dialogue.applyTurn({
+      done: false,
+      nextQuestion: {
+        round: nextRound,
+        text: demoQs[nextRound - 1] ?? demoQs[0]!,
+        textLearning: null,
+        ttsUrl: null,
+      },
+      summary: null,
+      safetyLevel: 'ok',
+    });
+    speakOrAdvance();
     return;
   }
   try {
@@ -409,7 +499,15 @@ async function onScenePick(s: Scene): Promise<void> {
   const hint = t(`dialogue.scenes.${s.id}.hint`);
   setSoftHint(t('dialogue.sceneSelected', { title }), 1800);
 
-  if (demoPhase || isDevBrowser) return;
+  // 2026-04-27 dev/gallery: previously this bailed early, leaving scene
+  // cards completely unresponsive in dev — kids/reviewers pressed OK on
+  // a card and nothing happened. Now route through the same mock-turn
+  // path as the OK-capture, so picking a scene drives a full
+  // 3B → 3C → 3A round just like pressing the mic.
+  if (demoPhase || isDevBrowser) {
+    void onOkKey();
+    return;
+  }
 
   // Real flow: submit the scene's canned reply as the first turn, then
   // the existing server-side flow picks up from round 2 naturally.
@@ -535,9 +633,12 @@ function stopReactLoop(): void {
 watch(uiState, (cur, prev) => {
   if (cur === '3B') startMicAlternation(); else if (prev === '3B') stopMicAlternation();
   if (cur === '3C') startReactLoop(); else if (prev === '3C') stopReactLoop();
-  // iter13j-2: when entering 3C, park focus on the painter-bear CTA so
-  // the kid's OK press triggers "Ready for painting" out of the gate.
-  if (cur === '3C') {
+  // 2026-04-27: only park focus on ready-painter when it actually
+  // exists (final round, summary set). Mid-ceremony 3C bubbles must NOT
+  // show the painter CTA, so blindly setFocus there silently failed and
+  // sometimes left focus stranded. Keep dialogue-ok-capture focused
+  // during mid-rounds so the next OK keystroke advances normally.
+  if (cur === '3C' && dialogue.summary) {
     nextTick().then(() => setFocus('dialogue-ready-painter'));
   }
 }, { immediate: false });
@@ -557,10 +658,51 @@ onMounted(() => {
   // Demo / dev mode — skip server calls entirely; pin to demoPhase
   // (or default to 3A). This is what keeps ?dev=1 URLs from 401→ErrorScreen.
   if (demoPhase || isDevBrowser) {
+    // 2026-04-27: seed a demo first question so the speech bubble shows
+    // real "你一句" copy instead of an empty box. Without this, dev/dialogue
+    // visits looked like the screen was broken.
+    if (!demoPhase) {
+      // Reset summary BEFORE applyStart so a second visit (e.g. ESC
+      // back from GeneratingScreen) starts fresh — otherwise the
+      // ready-painter button would stay visible from the prior session
+      // and the auto-demo loop would short-circuit on its first tick.
+      dialogue.summary = null;
+      dialogue.applyStart({
+        dialogueId: 'demo-dialogue-' + Date.now(),
+        roundCount: 5,
+        firstQuestion: {
+          text: t('dialogue.demoQuestion'),
+          textLearning: null,
+          ttsUrl: null,
+        },
+      });
+      dialogue.canEarlyEnd = true;
+    }
     const ph = demoPhase ?? '3A';
     if (ph === '3A') {
-      // Waiting for kid — single static bear_magic_wand (no wing flap).
-      dialogue.setPhase('waiting-for-child');
+      // 2026-04-27: per founder, the dialogue ceremony itself isn't
+      // worth fighting in dev — real data wires it up later. What
+      // matters NOW is that reviewers can SEE the painter-bear CTA and
+      // the GeneratingScreen behind it. So: drop the dev session
+      // straight onto the final round (3C bubble + summary + ready
+      // button focused). Pressing OK on the button kicks off
+      // GeneratingScreen with its progress bar + walking bear.
+      dialogue.summary = {
+        mainCharacter: 'Luna',
+        scene: 'glowing forest',
+        conflict: 'lost the golden key',
+      };
+      dialogue.currentQuestion = {
+        text: t('dialogue.demoReply'),
+        textLearning: null,
+        ttsUrl: null,
+      };
+      dialogue.round = dialogue.roundCount;
+      dialogue.setPhase('bear-speaking');
+      // Park focus on the painter-bear button so OK launches generation.
+      // ready-row uses v-show so readyBtnRef is registered at mount,
+      // making this setFocus reliable.
+      nextTick().then(() => setFocus('dialogue-ready-painter'));
     }
     if (ph === '3B') {
       // Kid is talking → bear is LISTENING (headphones pose) + mic pulses.
@@ -793,8 +935,17 @@ onBeforeUnmount(() => {
         Shown directly BELOW the bubble. Focusable + autoFocus so the
         kid's thumb naturally lands on it after hearing the reply.
         Pressing OK kicks off story generation (advanceFromBearTalks).
+
+        2026-04-27: kept always mounted (v-show vs v-if) so useFocusable
+        can register readyBtnRef on first mount. Earlier v-if="summary"
+        meant the button was absent at onMounted time, useFocusable's
+        ref-not-bound branch fired, and the focusable was never
+        registered — so even after the 5-round ceremony placed
+        dialogue.summary, pressing OK on what looked like the painter
+        button did nothing (focus had never moved there). v-show keeps
+        DOM/focusable alive; CSS hides it for rounds 1-4.
       -->
-      <div class="ready-row">
+      <div v-show="dialogue.summary" class="ready-row">
         <button
           ref="readyBtnRef"
           type="button"

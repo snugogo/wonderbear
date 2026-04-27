@@ -158,5 +158,11 @@ export function resetForScreenChange(): void {
     if (prev) prev.el.removeAttribute('data-focused');
   }
   currentFocusId = null;
+  // 2026-04-27: notify listeners so dev badges / focus-tracking refs see
+  // the cleared state. Previously this skipped the broadcast, leaving
+  // stale id values in onFocusChange subscribers across screen changes.
+  focusChangeListeners.slice().forEach((fn) => {
+    try { fn(null); } catch (e) { console.error('[focus] listener:', e); }
+  });
   // Scope stack stays — popups within new screen will push their own
 }

@@ -82,8 +82,9 @@ let softHintTimer: number | null = null;
 let unsubFocus: (() => void) | null = null;
 let mounted = true;
 
-const isDevBrowser = typeof window !== 'undefined'
-  && new URLSearchParams(window.location.search).has('dev');
+const isDevBrowser = import.meta.env.DEV
+  || (typeof window !== 'undefined'
+      && new URLSearchParams(window.location.search).has('dev'));
 
 const fallbackCovers = [
   asset('story/story_generic_forest.webp'),

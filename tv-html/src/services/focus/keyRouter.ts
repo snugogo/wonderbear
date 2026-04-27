@@ -30,6 +30,18 @@ export function pushBackHandler(fn: () => boolean): () => void {
   };
 }
 
+/*
+ * 2026-04-27: global Back fallback.
+ * Runs only when neither scope-level pushBackHandler nor the current
+ * focusable's onBack consumed the key. App.vue installs a screen-aware
+ * fallback so every screen has at least an "escape" path even when the
+ * focused element forgot to register onBack.
+ */
+let globalBackFallback: (() => void) | null = null;
+export function setGlobalBackFallback(fn: (() => void) | null): void {
+  globalBackFallback = fn;
+}
+
 function mapKey(e: KeyboardEvent): FocusKey | null {
   switch (e.key) {
     case 'ArrowUp':    return 'up';
@@ -73,7 +85,12 @@ function handleBack(): void {
   }
   // Then ask current focused element
   const current = getCurrentEntry();
-  current?.options.onBack?.();
+  if (current?.options.onBack) {
+    current.options.onBack();
+    return;
+  }
+  // 2026-04-27: nothing claimed it → global fallback (App.vue installs one).
+  globalBackFallback?.();
 }
 
 let started = false;

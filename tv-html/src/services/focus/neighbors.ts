@@ -24,6 +24,11 @@ function isInDirection(from: Centroid, to: Centroid, dir: Direction): boolean {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
   const minDelta = 8; // Avoid considering same-row/col elements as neighbors
+  // Strict axis-dominant check — preserves hierarchical navigation:
+  // left/right only finds elements whose horizontal distance dominates;
+  // up/down only finds elements whose vertical distance dominates.
+  // This stops, e.g. a list-row's "right" press from snagging a tab
+  // sitting above-and-to-the-right of it (off-axis bleed).
   switch (dir) {
     case 'up':    return dy < -minDelta && Math.abs(dy) > Math.abs(dx);
     case 'down':  return dy > minDelta && Math.abs(dy) > Math.abs(dx);

@@ -30,7 +30,9 @@ import { useFocusable, setFocus } from '@/services/focus';
 import { api } from '@/services/api';
 import { ERR } from '@/utils/errorCodes';
 import { asset } from '@/utils/assets';
-import FlashcardOverlay from '@/components/FlashcardOverlay.vue';
+// 2026-04-27: FlashcardOverlay decommissioned — the bear button on the
+// player goes straight to LearningScreen now (founder's original
+// design). Keeping the import map clean.
 
 const storyStore = useStoryStore();
 const screen = useScreenStore();
@@ -74,67 +76,10 @@ const subtitleSecondaryText = computed<string>(() => {
   return p.textLearning ?? '';
 });
 
-/*
- * TV v1.0 §3.3: flashcard overlay state. When opened we pause story
- * playback (TTS + auto-advance) and re-render with a top-level
- * <FlashcardOverlay> component. Closing the overlay (ok/back/timeout)
- * resumes playback if it was running before.
- */
-const flashcardOpen = ref<boolean>(false);
-let resumePlayingAfterFlashcard = false;
-
-/*
- * Vocabulary derivation. PRD §3.3.6 expects each page to ship a
- * vocabulary array; the current StoryPage type doesn't carry it yet,
- * so until the server contract lands we synthesize a small list from
- * the current page's two-language texts (zip-by-position best-effort).
- * 建议人工补图 / 服务端契约扩展: StoryPage.vocabulary[].
- */
-const currentVocabulary = computed<Array<{ learning: string; native: string; image_url?: string | null }>>(() => {
-  const page = currentPage.value;
-  if (!page) return [];
-  const learning = (page.textLearning ?? '').trim();
-  const native = (page.text ?? '').trim();
-  if (!learning || !native) return [];
-  // Tokenize: CJK = single char; Latin = whitespace-split words.
-  const splitTokens = (s: string): string[] => {
-    const cjk = /[\u4e00-\u9fff\u3400-\u4dbf]/.test(s);
-    if (cjk) return Array.from(s).filter((c) => /[\u4e00-\u9fff\u3400-\u4dbf]/.test(c));
-    return s.split(/[^A-Za-z']+/).filter((w) => w.length > 1);
-  };
-  const lTokens = splitTokens(learning).slice(0, 5);
-  const nTokens = splitTokens(native).slice(0, 5);
-  const len = Math.min(lTokens.length, nTokens.length);
-  if (len === 0) return [];
-  const out: Array<{ learning: string; native: string; image_url?: string | null }> = [];
-  for (let i = 0; i < len; i += 1) {
-    out.push({ learning: lTokens[i] ?? '', native: nTokens[i] ?? '', image_url: null });
-  }
-  return out;
-});
-
 function onLangToggle(): void {
   if (!langToggleAvailable.value) return;
   langSide.value = langSide.value === 'native' ? 'learning' : 'native';
   bridge.log('story-body', { event: 'lang_toggled', side: langSide.value });
-}
-function openFlashcard(): void {
-  resumePlayingAfterFlashcard = playing.value;
-  if (playing.value) {
-    bridge.stopTts();
-    clearFallback();
-    playing.value = false;
-  }
-  flashcardOpen.value = true;
-  bridge.log('story-body', { event: 'flashcard_opened' });
-}
-function closeFlashcard(reason: 'ok' | 'back' | 'timeout'): void {
-  flashcardOpen.value = false;
-  bridge.log('story-body', { event: 'flashcard_closed', reason });
-  if (resumePlayingAfterFlashcard) {
-    playing.value = true;
-    playCurrentPage();
-  }
 }
 
 let mounted = true;
@@ -319,14 +264,18 @@ useFocusable(playBtnRef, {
 });
 useFocusable(nextBtnRef, {
   id: 'body-ctrl-next',
-  neighbors: { left: 'body-ctrl-play', right: 'body-ctrl-flashcard' },
+  neighbors: { left: 'body-ctrl-play', right: 'body-ctrl-learn' },
   onEnter: goNext,
   onBack: () => { screen.go('create'); },
 });
 useFocusable(learnCtrlBtnRef, {
-  id: 'body-ctrl-flashcard',
+  // 2026-04-27: this control was previously wired to openFlashcard
+  // (in-place modal). Per founder, the design has always been: the
+  // bear button on the player goes straight to LearningScreen (the
+  // full reading-with-bear-cursor experience). Restoring that link.
+  id: 'body-ctrl-learn',
   neighbors: { left: 'body-ctrl-next' },
-  onEnter: openFlashcard,
+  onEnter: () => { screen.go('learning'); },
   onBack: () => { screen.go('create'); },
 });
 
@@ -357,6 +306,14 @@ watch(ended, async (now) => {
   setFocus('body-end-learn');
 });
 
+// 2026-04-27 dev shortcut: pressing "E" anywhere on this screen jumps
+// to the end-of-story overlay so the Learn / Sequel buttons can be
+// reached without sitting through 12 pages of mock TTS.
+const isDevBrowser = import.meta.env.DEV
+  || (typeof window !== 'undefined'
+      && new URLSearchParams(window.location.search).has('dev'));
+let unsubDevEndShortcut: (() => void) | null = null;
+
 onMounted(() => {
   if (!storyStore.active) {
     bridge.log('story-body', { event: 'mounted_without_active_story' });
@@ -372,6 +329,20 @@ onMounted(() => {
     advance();
   });
 
+  if (isDevBrowser) {
+    const handler = (e: KeyboardEvent): void => {
+      if (e.key === 'e' || e.key === 'E') {
+        e.preventDefault();
+        const total = storyStore.active?.pages.length ?? 0;
+        if (total > 0) storyStore.pageIndex = total - 1;
+        completed = true;
+        ended.value = true;
+      }
+    };
+    window.addEventListener('keydown', handler);
+    unsubDevEndShortcut = () => window.removeEventListener('keydown', handler);
+  }
+
   playCurrentPage();
 });
 
@@ -380,6 +351,7 @@ onBeforeUnmount(() => {
   bridge.stopTts();
   clearFallback();
   unsubTtsEnd?.();
+  unsubDevEndShortcut?.();
   if (!completed) {
     fireStat({ event: 'abort' });
   }
@@ -494,19 +466,6 @@ onBeforeUnmount(() => {
         <img :src="asset('bear/bear_read.webp')" alt="" />
       </button>
     </div>
-
-    <!--
-      TV v1.0 §3.3 FlashcardOverlay. Mounted only while the chip is
-      pressed; closes via OK / Back / 10s timeout. We pass the
-      current page's derived vocabulary (server contract for per-page
-      vocab arrays is pending).
-    -->
-    <FlashcardOverlay
-      v-if="flashcardOpen"
-      :vocabulary="currentVocabulary"
-      :primary-side="langSide === 'native' ? 'learning' : 'native'"
-      @close="closeFlashcard"
-    />
 
     <!--
       iter13j: end-of-story overlay. Two focusable CTAs float above the

@@ -34,6 +34,7 @@ import {
 } from '@/services/focus';
 import { ERR } from '@/utils/errorCodes';
 import { asset } from '@/utils/assets';
+import { buildDemoStory } from '@/utils/demoStory';
 import LibraryStoryCell from '@/components/LibraryStoryCell.vue';
 
 const PAGE_SIZE = 50;
@@ -83,8 +84,9 @@ let mounted = true;
  * Same seed strategy as CreateScreen: under ?dev=1 / gallery we synthesize
  * a richer mock list so the screen never reads as "empty".
  */
-const isDevBrowser = typeof window !== 'undefined'
-  && new URLSearchParams(window.location.search).has('dev');
+const isDevBrowser = import.meta.env.DEV
+  || (typeof window !== 'undefined'
+      && new URLSearchParams(window.location.search).has('dev'));
 
 /*
  * iter13k-3 client-side filtering. Server returns the unfiltered list
@@ -235,6 +237,18 @@ async function loadList(): Promise<void> {
 }
 
 async function openStory(storyId: string): Promise<void> {
+  // 2026-04-27: dev/gallery — synthesize a full demo story (pages + dialogue)
+  // so StoryCover / StoryBody / StoryEnd / Learning can all be exercised
+  // without a live server. Real sessions still hit /story/detail below.
+  if (isDevBrowser) {
+    const item = items.value.find((i) => i.id === storyId);
+    if (item) {
+      storyStore.active = buildDemoStory(item, child.activeChildId ?? 'demo-child');
+      storyStore.pageIndex = 0;
+      screen.go('story-cover');
+      return;
+    }
+  }
   try {
     const { data } = await api.storyDetail(storyId);
     storyStore.loadStory(data.story);

@@ -8,5 +8,5 @@ export {
   onFocusChange,
   resetForScreenChange,
 } from './store';
-export { startKeyRouter, pushBackHandler } from './keyRouter';
+export { startKeyRouter, pushBackHandler, setGlobalBackFallback } from './keyRouter';
 export type { FocusableOptions, FocusableNeighbors, Direction, FocusKey } from './types';

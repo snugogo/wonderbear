@@ -86,11 +86,28 @@ async function bootstrap(): Promise<void> {
   device.loadDeviceInfo();
   bridge.log('boot', { event: 'device_info_loaded', deviceId: device.deviceId });
 
-  // Wire api auth-error → re-activate flow
-  api.onAuthError(() => {
-    api.clearDeviceToken();
-    screen.go('activation');
-  });
+  /*
+   * 2026-04-27 dev-mode guard.
+   * In ?dev browser sessions there's no real backend, so every API call
+   * 401s and this handler would yo-yo the user back to ActivationScreen
+   * the instant they navigate away (e.g. via remote-Back / ESC). Disable
+   * the auto-reactivate path in dev so the Back key actually escapes.
+   * Production behaviour is unchanged.
+   */
+  const isDevQuery = import.meta.env.DEV
+    || (typeof window !== 'undefined'
+        && new URLSearchParams(window.location.search).has('dev'));
+  if (isDevQuery) {
+    api.onAuthError(() => {
+      bridge.log('boot', { event: 'auth_error_ignored_in_dev' });
+    });
+  } else {
+    // Wire api auth-error → re-activate flow
+    api.onAuthError(() => {
+      api.clearDeviceToken();
+      screen.go('activation');
+    });
+  }
 
   api.setLocale(getLocale());
 
@@ -100,7 +117,17 @@ async function bootstrap(): Promise<void> {
   // Determine initial screen.
   // If we have a token, ask server for current binding state.
   // Otherwise jump to activation (factory case).
-  if (api.getDeviceToken()) {
+  //
+  // 2026-04-27 dev-mode override: in browser dev sessions activation is
+  // a one-time ceremony that already passed (mock token / bound device).
+  // Forcing the user back through activation on every Ctrl+F5 is just
+  // friction. Boot straight into home unless they explicitly deep-link
+  // to ?screen=activation to review that screen's UI.
+  if (isDevQuery) {
+    device.status = 'bound';
+    screen.go('home');
+    bridge.log('boot', { event: 'dev_default_home' });
+  } else if (api.getDeviceToken()) {
     try {
       await device.refreshStatus();
       screen.go(device.isActivated ? 'home' : 'activation');

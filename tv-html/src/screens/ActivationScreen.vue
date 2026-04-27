@@ -49,9 +49,14 @@ let bearTimer: number | null = null;
  * 2026-04-25 iter: support the Back hardware key in dev / gallery mode.
  * Real first-boot activation has no prior screen, so we only honour Back
  * when ?dev=1 or ?gallery=1 is in the URL (preview / audit context).
+ *
+ * 2026-04-27: also enabled automatically under `npm run dev` (Vite DEV
+ * build) so localhost without query params still gets the escape hatch.
+ * Production builds are unaffected.
  */
 let backHandler: ((e: KeyboardEvent) => void) | null = null;
 function isDevPreview(): boolean {
+  if (import.meta.env.DEV) return true;
   if (typeof window === 'undefined') return false;
   const p = new URLSearchParams(window.location.search);
   return p.has('dev') || p.has('gallery');
@@ -115,11 +120,21 @@ onMounted(async () => {
     bearFrameIdx.value = (bearFrameIdx.value + 1) % BEAR_FRAMES.length;
   }, 700);
 
-  // Back key (dev preview only)
+  // Back key (dev preview only).
+  // 2026-04-27: pre-mark device as bound in-memory so any global guard
+  // that watches device.status (or HomeScreen children that 401 in dev)
+  // doesn't yo-yo us back to ActivationScreen. Pure store mutation,
+  // not persisted (no localStorage / API write).
   if (isDevPreview()) {
     backHandler = (e: KeyboardEvent) => {
       if (e.key === 'Backspace' || e.key === 'Escape' || e.key === 'GoBack') {
         e.preventDefault();
+        if (pollTimer.value !== null) {
+          clearInterval(pollTimer.value);
+          pollTimer.value = null;
+        }
+        unsubActivation.value?.();
+        device.status = 'bound';
         screen.go('home');
       }
     };

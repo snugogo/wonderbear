@@ -30,14 +30,36 @@ import { useScreenStore } from '@/stores/screen';
 import { useBgmStore } from '@/stores/bgm';
 import { useI18n } from 'vue-i18n';
 import { bridge } from '@/services/bridge';
-import { useFocusable, getCurrentFocusId, onFocusChange } from '@/services/focus';
+import { useFocusable, getCurrentFocusId, onFocusChange, setFocus } from '@/services/focus';
 import { ERR } from '@/utils/errorCodes';
 import { asset } from '@/utils/assets';
+import { buildDemoStory } from '@/utils/demoStory';
 
 const storyStore = useStoryStore();
 const screen = useScreenStore();
 const bgm = useBgmStore();
 const { t } = useI18n();
+
+// 2026-04-27 dev/gallery: seed a demo story SYNCHRONOUSLY during setup
+// so the v-if="currentPage" template branch renders on first paint and
+// `useFocusable(textRowEl)` finds a real DOM node when its onMounted
+// hook fires. Doing this in onMounted was too late — the focusable's
+// own onMounted (registered earlier in setup order) had already
+// silently bailed with "ref not bound", which left autoFocus dead and
+// the bear-pointer hidden (opacity: 0 until the row gets focus).
+{
+  const isDevBrowser = import.meta.env.DEV
+    || (typeof window !== 'undefined'
+        && new URLSearchParams(window.location.search).has('dev'));
+  if (isDevBrowser && !storyStore.active) {
+    storyStore.active = buildDemoStory({
+      id: 'demo-learning',
+      title: 'The Brave Little Bear',
+      coverUrl: '',
+    });
+    storyStore.pageIndex = 0;
+  }
+}
 
 const textRowEl = ref<HTMLElement | null>(null);
 const charSpanEls = ref<HTMLElement[]>([]);
@@ -262,6 +284,7 @@ watch(currentPage, () => {
 
 onMounted(() => {
   if (!storyStore.active) {
+    // Production fallback (dev seed already happened synchronously above).
     bridge.log('learning', { event: 'mounted_without_active_story' });
     screen.goError(ERR.STORY_NOT_FOUND);
     return;
@@ -278,7 +301,17 @@ onMounted(() => {
   });
 
   window.addEventListener('keydown', onKeyCapture, { capture: true });
-  void nextTick(recomputeBearPos);
+  // 2026-04-27: belt-and-suspenders — useFocusable's autoFocus only
+  // fires when scope/currentFocusId line up at register time. If the
+  // previous screen left a stale focus id mid-transition, autoFocus
+  // would silently skip and the bear-pointer (CSS opacity:0 unless
+  // .is-following) would stay invisible. Force the row focus AFTER
+  // mount so navigating in from StoryBody / Library reliably lights
+  // up the cursor + bear-tracking.
+  void nextTick(() => {
+    setFocus('learning-text-row');
+    recomputeBearPos();
+  });
 });
 
 onBeforeUnmount(() => {
@@ -560,8 +593,13 @@ function setCharRef(el: Element | null, index: number): void {
   height: 180px;
   object-fit: contain;
   filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.5));
-  transition: transform 220ms var(--ease-out);
-  opacity: 0;
+  transition: transform 220ms var(--ease-out), opacity 220ms var(--ease-out);
+  /* 2026-04-27: bear is the cursor, not a focus indicator. Always
+   * visible while the reader strip is rendered. Slight dim when row
+   * isn't focused so it reads as "ready" vs "active". The earlier
+   * opacity:0 default was masking the bear whenever focus failed to
+   * register on first paint (e.g. nav from StoryBody). */
+  opacity: 0.55;
   pointer-events: none;
   z-index: 3;
 }
