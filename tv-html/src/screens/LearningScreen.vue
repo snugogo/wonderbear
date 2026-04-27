@@ -173,9 +173,15 @@ function replayPage(): void {
   const page = currentPage.value;
   if (!page) return;
   bridge.stopTts();
-  if (page.ttsUrl) {
-    bridge.playTts(page.ttsUrl);
-  }
+  /*
+   * 2026-04-28 PHASE1: when the toggle is on the learning side play the
+   * learning-language audio track. Falls back to whichever URL is
+   * present — older / mock stories may carry only one language.
+   */
+  const url = (langMode.value === 'secondary' && page.ttsUrlLearning)
+    ? page.ttsUrlLearning
+    : (page.ttsUrl ?? page.ttsUrlLearning ?? null);
+  if (url) bridge.playTts(url);
 }
 
 function exitReading(): void {
