@@ -42,7 +42,13 @@ const child = useChildStore();
 const bgm = useBgmStore();
 
 const COLUMNS = 3;
-const PAGE_SIZE = 12;
+/*
+ * 2026-04-28 PHASE1: production fetch caps at 3 most-recent stories
+ * (workorder §2.1 / §4.6 — Dream Factory shows the latest 3 alongside
+ * the "+" plus tile). Dev / gallery seeds 4 mock entries to exercise
+ * the row-wrap visual; that stays untouched in the isDevBrowser branch.
+ */
+const PAGE_SIZE = 3;
 
 const items = ref<StorySummary[]>([]);
 const loading = ref<boolean>(true);
