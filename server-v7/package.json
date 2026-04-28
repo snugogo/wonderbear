@@ -12,7 +12,8 @@
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
     "check-keys": "bash scripts/check-keys.sh",
-    "smoke": "node test/smoke/run.mjs"
+    "smoke": "node test/smoke/run.mjs",
+    "test:llm": "node --test test/llm.dialogue.test.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.658.1",
