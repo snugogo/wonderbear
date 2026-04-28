@@ -692,4 +692,58 @@ export default async function deviceRoutes(fastify) {
       };
     },
   );
+
+  // ------------------------------------------------------------------
+  // 5.X POST /api/device/demo-bind  [TEMPORARY · 48h showcase only]
+  // ------------------------------------------------------------------
+  // Returns a device token bound to the FIRST `bound` device in the DB
+  // so showcase visitors can land on home + library without going
+  // through the H5 QR-bind ceremony.
+  //
+  // Disabled by default. Enable by setting `WB_DEMO_BIND_ENABLED=1`
+  // in server-v7/.env. After the showcase, unset that env var to
+  // disable (or remove this route entirely; PRs welcome).
+  //
+  // No request body. Idempotent: returns the same device's token on
+  // every call. Multiple browsers sharing one device-id is fine for
+  // read-only library/story playback during a 48h demo.
+  fastify.post('/api/device/demo-bind', async (request, reply) => {
+    if (process.env.WB_DEMO_BIND_ENABLED !== '1') {
+      return reply.code(404).send({
+        code: 90002,
+        message: 'Not found',
+        messageEn: 'Not found',
+        details: { reason: 'demo bind disabled' },
+      });
+    }
+
+    // Pick the earliest bound device in the DB. We sort by boundAt asc
+    // so we deterministically pick the same device across restarts.
+    const device = await prisma.device.findFirst({
+      where: { status: 'bound' },
+      orderBy: { boundAt: 'asc' },
+      include: { oemConfig: true },
+    });
+
+    if (!device) {
+      throw new BizError(ErrorCodes.DEVICE_NOT_FOUND, {
+        details: { reason: 'no bound device available for demo' },
+      });
+    }
+
+    const { token, expiresAt } = await signDeviceToken(fastify, device.id);
+
+    fastify.log.info({
+      msg: 'demo-bind issued',
+      deviceId: device.deviceId,
+      ttl: expiresAt,
+    });
+
+    return {
+      deviceToken: token,
+      device: deviceToResponse(device),
+      oemConfig: oemConfigToResponse(device.oemConfig),
+      tokenExpiresAt: expiresAt,
+    };
+  });
 }

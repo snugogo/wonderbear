@@ -54,6 +54,53 @@ async function bootstrap(): Promise<void> {
     return bootstrapGallery();
   }
 
+  /*
+   * 2026-04-28 · ?demoToken=1 (48h showcase)
+   * Fetch a demo device token from /api/device/demo-bind, write it to
+   * localStorage, then reload WITHOUT the query so a normal token-based
+   * boot kicks in and lands on home+library with real data.
+   *
+   * Enabled server-side by `WB_DEMO_BIND_ENABLED=1`. If disabled the
+   * server returns 404 and we fall through to the regular activation
+   * boot path so nothing breaks.
+   */
+  if (typeof window !== 'undefined') {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('demoToken') === '1') {
+      try {
+        const baseUrl = (() => {
+          try { return localStorage.getItem('wb_api_base') ?? '/api'; }
+          catch { return '/api'; }
+        })();
+        const r = await fetch(`${baseUrl}/device/demo-bind`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}',
+        });
+        if (r.ok) {
+          const j = await r.json();
+          const token: string | undefined =
+            j?.deviceToken ?? j?.data?.deviceToken;
+          if (typeof token === 'string' && token.length > 0) {
+            try { localStorage.setItem('wb_device_token', token); }
+            catch { /* private mode / quota — ignore */ }
+            // Reload without the demoToken query so the normal boot
+            // path runs with the freshly-stored token.
+            const url = new URL(window.location.href);
+            url.searchParams.delete('demoToken');
+            window.location.replace(url.toString());
+            return;
+          }
+        }
+        // eslint-disable-next-line no-console
+        console.warn('[boot] demo-bind disabled or failed, falling through');
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('[boot] demo-bind error:', e);
+      }
+    }
+  }
+
   const app = createApp(App);
   const pinia = createPinia();
   app.use(pinia);
