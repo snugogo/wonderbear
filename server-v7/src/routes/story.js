@@ -20,6 +20,7 @@ import { ErrorCodes } from '../utils/errorCodes.js';
 import { BizError } from '../utils/response.js';
 import {
   buildDialogueFirstQuestion,
+  buildDialogueSystemPrompt,
   roundCountForAge,
 } from '../utils/storyPrompt.js';
 import { classify as classifySafety } from '../utils/contentSafety.js';
@@ -287,7 +288,11 @@ export default async function storyRoutes(fastify) {
 
       if (!done) {
         const gen = await generateDialogueTurn({
-          systemPrompt: 'You are Little Bear.', // live mode would use proper prompt
+          systemPrompt: buildDialogueSystemPrompt({
+            age: session.childProfile.age,
+            primaryLang: session.childProfile.primaryLang,
+            learningLang: session.childProfile.secondLang,
+          }),
           history: session.history,
           userInput: text,
           round,

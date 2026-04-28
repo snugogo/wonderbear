@@ -124,6 +124,22 @@ async function liveDialogueTurn({ systemPrompt, history = [], userInput, round, 
         temperature: 0.85,
         maxOutputTokens: 400,
         responseMimeType: 'application/json',
+        responseSchema: {
+          type: 'object',
+          properties: {
+            nextQuestion: {
+              type: 'object',
+              properties: {
+                text: { type: 'string' },
+                textLearning: { type: 'string', nullable: true },
+              },
+              required: ['text'],
+            },
+            safetyLevel: { type: 'string' },
+            safetyReplacement: { type: 'string', nullable: true },
+          },
+          required: ['nextQuestion'],
+        },
       },
     }),
   });
@@ -136,8 +152,15 @@ async function liveDialogueTurn({ systemPrompt, history = [], userInput, round, 
   } catch {
     throw new Error(`Gemini dialogue returned non-JSON: ${raw.slice(0, 200)}`);
   }
+  // Fallback: handle common alternative field names Gemini may emit despite schema
+  const nq = parsed.nextQuestion
+    ?? (parsed.question ? { text: parsed.question, textLearning: null } : null)
+    ?? (parsed.next_question
+      ? { text: parsed.next_question?.text ?? parsed.next_question, textLearning: null }
+      : null)
+    ?? null;
   return {
-    nextQuestion: parsed.nextQuestion ?? null,
+    nextQuestion: nq,
     done: round >= roundCount,
   };
 }
