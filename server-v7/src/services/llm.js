@@ -29,6 +29,81 @@ export function isMockMode() {
 }
 
 // ---------------------------------------------------------------------------
+// Dialogue default question bank — used by mock mode AND as live-mode fallback
+// when Gemini fails / returns malformed JSON. Indexed by round (1-based via
+// round-1). Round 1 is the opener (handled in dialoguePromptPool); these cover
+// rounds 2..7 of a multi-turn dialogue.
+// ---------------------------------------------------------------------------
+const DEFAULT_DIALOGUE_QUESTIONS = {
+  zh: [
+    '主角会有一个什么样的好朋友呢?',
+    '他们会去哪里冒险呢?',
+    '他们会遇到什么有趣的事?',
+    '他们会怎么解决呢?',
+    '最后他们回家了吗?',
+    '这个故事的结局是开心的吧?',
+    '要给这个故事起个什么名字?',
+  ],
+  en: [
+    "Who will be the hero's best friend?",
+    'Where will they go on their adventure?',
+    'What fun thing will they find there?',
+    'How will they solve the little problem?',
+    'Do they come home in the end?',
+    'Is the ending a happy one?',
+    'What should we call this story?',
+  ],
+  pl: [
+    'Kto będzie najlepszym przyjacielem bohatera?',
+    'Dokąd wyruszą na przygodę?',
+    'Co zabawnego tam znajdą?',
+    'Jak rozwiążą mały problem?',
+    'Czy wrócą do domu?',
+    'Czy zakończenie jest szczęśliwe?',
+    'Jak nazwiemy tę historię?',
+  ],
+  ro: [
+    'Cine va fi cel mai bun prieten al eroului?',
+    'Unde vor merge într-o aventură?',
+    'Ce lucru distractiv vor găsi acolo?',
+    'Cum vor rezolva mica problemă?',
+    'Se vor întoarce acasă?',
+    'Este finalul unul fericit?',
+    'Cum să numim această poveste?',
+  ],
+};
+
+/**
+ * Return a guaranteed-non-null nextQuestion shape for a given round + locale.
+ * Used by:
+ *   - mock mode (deterministic test path)
+ *   - liveDialogueTurn after the LLM fails / returns garbage (defense in depth)
+ *   - the route layer as a final fallback (defense in depth)
+ *
+ * @param {object} args
+ * @param {number} args.round         current 1-based round index
+ * @param {'zh'|'en'|'pl'|'ro'} args.primaryLang
+ * @param {'zh'|'en'|'pl'|'ro'|'none'} [args.learningLang='none']
+ * @returns {{text:string, textLearning:string|null}}
+ */
+export function defaultDialogueQuestion({
+  round,
+  primaryLang = 'en',
+  learningLang = 'none',
+}) {
+  const langBank = DEFAULT_DIALOGUE_QUESTIONS[primaryLang] || DEFAULT_DIALOGUE_QUESTIONS.en;
+  const learningBank =
+    learningLang && learningLang !== 'none'
+      ? DEFAULT_DIALOGUE_QUESTIONS[learningLang] || null
+      : null;
+  const idx = Math.max(0, Math.min((round || 1) - 1, langBank.length - 1));
+  return {
+    text: langBank[idx] || langBank[0],
+    textLearning: learningBank ? learningBank[idx] || learningBank[0] : null,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Dialogue turn
 // ---------------------------------------------------------------------------
 
@@ -49,62 +124,21 @@ export async function generateDialogueTurn(args) {
 }
 
 function mockDialogueTurn({ round, roundCount, primaryLang = 'en', learningLang = 'none' }) {
-  const questionsByRound = {
-    zh: [
-      '主角会有一个什么样的好朋友呢?',
-      '他们会去哪里冒险呢?',
-      '他们会遇到什么有趣的事?',
-      '他们会怎么解决呢?',
-      '最后他们回家了吗?',
-      '这个故事的结局是开心的吧?',
-      '要给这个故事起个什么名字?',
-    ],
-    en: [
-      'Who will be the hero\'s best friend?',
-      'Where will they go on their adventure?',
-      'What fun thing will they find there?',
-      'How will they solve the little problem?',
-      'Do they come home in the end?',
-      'Is the ending a happy one?',
-      'What should we call this story?',
-    ],
-    pl: [
-      'Kto będzie najlepszym przyjacielem bohatera?',
-      'Dokąd wyruszą na przygodę?',
-      'Co zabawnego tam znajdą?',
-      'Jak rozwiążą mały problem?',
-      'Czy wrócą do domu?',
-      'Czy zakończenie jest szczęśliwe?',
-      'Jak nazwiemy tę historię?',
-    ],
-    ro: [
-      'Cine va fi cel mai bun prieten al eroului?',
-      'Unde vor merge într-o aventură?',
-      'Ce lucru distractiv vor găsi acolo?',
-      'Cum vor rezolva mica problemă?',
-      'Se vor întoarce acasă?',
-      'Este finalul unul fericit?',
-      'Cum să numim această poveste?',
-    ],
-  };
-  const langBank = questionsByRound[primaryLang] || questionsByRound.en;
-  const learningBank = learningLang !== 'none' ? questionsByRound[learningLang] : null;
-
   const done = round >= roundCount;
-  const idx = Math.min(round - 1, langBank.length - 1);
-
   return {
     nextQuestion: done
       ? null
-      : {
-          text: langBank[idx] || langBank[0],
-          textLearning: learningBank ? learningBank[idx] || null : null,
-        },
+      : defaultDialogueQuestion({ round, primaryLang, learningLang }),
     done,
   };
 }
 
-async function liveDialogueTurn({ systemPrompt, history = [], userInput, round, roundCount }) {
+/**
+ * One Gemini round-trip. Returns parsed `nextQuestion` or `null` on any
+ * non-fatal failure (HTTP non-2xx, non-JSON body, missing fields). Throws
+ * only on fetch-level network errors (so the caller can retry).
+ */
+async function callGeminiDialogueOnce({ systemPrompt, history, userInput, round, roundCount }) {
   const messages = [
     { role: 'user', parts: [{ text: systemPrompt }] },
     { role: 'model', parts: [{ text: 'Understood. I am Little Bear.' }] },
@@ -143,24 +177,96 @@ async function liveDialogueTurn({ systemPrompt, history = [], userInput, round, 
       },
     }),
   });
-  if (!resp.ok) throw new Error(`Gemini dialogue HTTP ${resp.status}`);
-  const data = await resp.json();
+  if (!resp.ok) {
+    console.warn(`[llm] dialogue Gemini HTTP ${resp.status}`);
+    return null;
+  }
+  let data;
+  try {
+    data = await resp.json();
+  } catch {
+    console.warn('[llm] dialogue Gemini returned non-JSON envelope');
+    return null;
+  }
   const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';
   let parsed;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    throw new Error(`Gemini dialogue returned non-JSON: ${raw.slice(0, 200)}`);
+    console.warn(`[llm] dialogue Gemini returned non-JSON body: ${String(raw).slice(0, 200)}`);
+    return null;
   }
-  // Fallback: handle common alternative field names Gemini may emit despite schema
-  const nq = parsed.nextQuestion
-    ?? (parsed.question ? { text: parsed.question, textLearning: null } : null)
-    ?? (parsed.next_question
-      ? { text: parsed.next_question?.text ?? parsed.next_question, textLearning: null }
-      : null)
-    ?? null;
+  // Field-name fallback — Gemini occasionally emits alternative shapes despite
+  // responseSchema. We try, in order: canonical → question → next_question →
+  // q → text-at-top-level.
+  const nq =
+    parsed.nextQuestion ??
+    (parsed.question
+      ? { text: parsed.question, textLearning: parsed.questionLearning ?? null }
+      : null) ??
+    (parsed.next_question
+      ? {
+          text: parsed.next_question?.text ?? parsed.next_question,
+          textLearning: parsed.next_question?.textLearning ?? null,
+        }
+      : null) ??
+    (parsed.q ? { text: parsed.q, textLearning: null } : null) ??
+    (typeof parsed.text === 'string' ? { text: parsed.text, textLearning: null } : null) ??
+    null;
+  if (!nq || typeof nq.text !== 'string' || nq.text.trim() === '') {
+    console.warn(
+      `[llm] dialogue Gemini returned no usable nextQuestion field: ${JSON.stringify(parsed).slice(0, 200)}`,
+    );
+    return null;
+  }
+  return { text: nq.text, textLearning: nq.textLearning ?? null };
+}
+
+export async function liveDialogueTurn({
+  systemPrompt,
+  history = [],
+  userInput,
+  round,
+  roundCount,
+  primaryLang = 'en',
+  learningLang = 'none',
+}) {
+  // Try Gemini twice (retry once on transient failure). On both failing, fall
+  // back to the deterministic default question bank — never return null mid-
+  // dialogue, since the client will display "I didn't hear you" and stall.
+  let nextQuestion = null;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      nextQuestion = await callGeminiDialogueOnce({
+        systemPrompt,
+        history,
+        userInput,
+        round,
+        roundCount,
+      });
+    } catch (err) {
+      console.warn(`[llm] dialogue Gemini attempt ${attempt} threw:`, err?.message || err);
+      nextQuestion = null;
+    }
+    if (nextQuestion) break;
+    if (attempt === 1) {
+      console.warn('[llm] dialogue retrying once before falling back to default');
+    }
+  }
+
+  if (!nextQuestion) {
+    console.warn(
+      `[llm] dialogue using default-bank fallback for round ${round}/${roundCount} (${primaryLang})`,
+    );
+    nextQuestion = defaultDialogueQuestion({
+      round: round + 1,
+      primaryLang,
+      learningLang,
+    });
+  }
+
   return {
-    nextQuestion: nq,
+    nextQuestion,
     done: round >= roundCount,
   };
 }

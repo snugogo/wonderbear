@@ -25,7 +25,7 @@ import {
 import { pickOpener, pickTone } from '../data/dialoguePromptPool.js';
 import { getOpenerTtsUrl } from '../services/staticTtsCache.js';
 import { classify as classifySafety } from '../utils/contentSafety.js';
-import { generateDialogueTurn } from '../services/llm.js';
+import { generateDialogueTurn, defaultDialogueQuestion } from '../services/llm.js';
 import { synthesize as ttsSynthesize } from '../services/tts.js';
 import { transcribe as asrTranscribe } from '../services/asr.js';
 import { nanoid } from 'nanoid';
@@ -302,18 +302,39 @@ export default async function storyRoutes(fastify) {
         const systemPrompt = session.toneLines
           ? `${basePrompt}\n\n${session.toneLines.join('\n')}`
           : basePrompt;
-        const gen = await generateDialogueTurn({
-          systemPrompt,
-          history: session.history,
-          userInput: text,
-          round,
-          roundCount: session.roundCount,
-          primaryLang: session.childProfile.primaryLang,
-          learningLang: session.childProfile.secondLang,
-        });
-        nextQuestion = gen.nextQuestion
-          ? { round: round + 1, ...gen.nextQuestion, ttsUrl: null }
-          : null;
+        // Defense in depth (workorder 2026-04-29-server-dialogue-llm-fix §3.3):
+        // generateDialogueTurn now retries + falls back internally, but if the
+        // whole call still throws we MUST NOT bubble null nextQuestion to the
+        // client (TV would display "I didn't hear you" forever). On any error
+        // we synthesize a default question so the dialogue always advances.
+        let gen;
+        try {
+          gen = await generateDialogueTurn({
+            systemPrompt,
+            history: session.history,
+            userInput: text,
+            round,
+            roundCount: session.roundCount,
+            primaryLang: session.childProfile.primaryLang,
+            learningLang: session.childProfile.secondLang,
+          });
+        } catch (err) {
+          request.log.error(
+            { err, dialogueId: id, round },
+            'generateDialogueTurn threw; falling back to default question',
+          );
+          gen = null;
+        }
+        const candidate =
+          gen && gen.nextQuestion && typeof gen.nextQuestion.text === 'string'
+            && gen.nextQuestion.text.trim() !== ''
+            ? gen.nextQuestion
+            : defaultDialogueQuestion({
+                round: round + 1,
+                primaryLang: session.childProfile.primaryLang,
+                learningLang: session.childProfile.secondLang,
+              });
+        nextQuestion = { round: round + 1, ...candidate, ttsUrl: null };
 
         // Pre-gen TTS for next question (non-fatal)
         if (nextQuestion?.text) {
