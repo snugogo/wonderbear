@@ -24,6 +24,7 @@ import prismaPlugin from './plugins/prisma.js';
 import redisPlugin from './plugins/redis.js';
 import authPlugin from './plugins/auth.js';
 import storyQueuePlugin from './plugins/storyQueue.js';
+import { preheatAll as ttsPreHeat } from './services/staticTtsCache.js';
 
 import healthRoutes from './routes/health.js';
 import authRoutes from './routes/auth.js';
@@ -91,6 +92,13 @@ export async function buildApp() {
     version: '0.1.0',
     docs: '/api/health',
   }));
+
+  // 6. Boot-time TTS pre-warm (non-blocking — failures are non-fatal)
+  ttsPreHeat().then(({ ok, fail }) => {
+    app.log.info(`[tts-preheat] done — ${ok} ok / ${fail} failed`);
+  }).catch((err) => {
+    app.log.warn({ err }, '[tts-preheat] unexpected error');
+  });
 
   return app;
 }

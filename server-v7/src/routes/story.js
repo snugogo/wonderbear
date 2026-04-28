@@ -19,10 +19,11 @@
 import { ErrorCodes } from '../utils/errorCodes.js';
 import { BizError } from '../utils/response.js';
 import {
-  buildDialogueFirstQuestion,
   buildDialogueSystemPrompt,
   roundCountForAge,
 } from '../utils/storyPrompt.js';
+import { pickOpener, pickTone } from '../data/dialoguePromptPool.js';
+import { getOpenerTtsUrl } from '../services/staticTtsCache.js';
 import { classify as classifySafety } from '../utils/contentSafety.js';
 import { generateDialogueTurn } from '../services/llm.js';
 import { synthesize as ttsSynthesize } from '../services/tts.js';
@@ -170,6 +171,12 @@ export default async function storyRoutes(fastify) {
       const roundCount = roundCountForAge(child.age);
 
       const dialogueId = `dlg_${nanoid(12)}`;
+
+      // Pick a deterministic tone + opener for this session
+      const tone = pickTone(dialogueId);
+      const opener = pickOpener(primary, dialogueId);
+      const openerLearning = learning !== 'none' ? pickOpener(learning, dialogueId) : null;
+
       const session = {
         dialogueId,
         deviceId: device.id,
@@ -179,6 +186,8 @@ export default async function storyRoutes(fastify) {
           id: child.id, name: child.name, age: child.age,
           primaryLang: primary, secondLang: learning,
         },
+        toneId: tone.id,
+        toneLines: tone.personalityLines,
         roundCount,
         currentRound: 1,
         history: [],
@@ -186,25 +195,23 @@ export default async function storyRoutes(fastify) {
       };
       await saveDialogue(redis, dialogueId, session);
 
-      const firstText = buildDialogueFirstQuestion(primary);
-      const firstTextLearning =
-        learning !== 'none' ? buildDialogueFirstQuestion(learning) : null;
-
-      // Pre-generate TTS for the opener (non-fatal if it fails)
-      let ttsUrl = null;
-      try {
-        const tts = await ttsSynthesize({ text: firstText, lang: primary });
-        ttsUrl = tts.audioUrl;
-      } catch {
-        ttsUrl = null;
+      // Serve pre-warmed TTS; fall back to live synthesis if slot is empty
+      let ttsUrl = getOpenerTtsUrl(opener.lang, opener.index);
+      if (!ttsUrl) {
+        try {
+          const tts = await ttsSynthesize({ text: opener.text, lang: primary });
+          ttsUrl = tts.audioUrl;
+        } catch {
+          ttsUrl = null;
+        }
       }
 
       return {
         dialogueId,
         roundCount,
         firstQuestion: {
-          text: firstText,
-          textLearning: firstTextLearning,
+          text: opener.text,
+          textLearning: openerLearning?.text ?? null,
           ttsUrl,
         },
       };
@@ -287,12 +294,16 @@ export default async function storyRoutes(fastify) {
       let summary = null;
 
       if (!done) {
+        const basePrompt = buildDialogueSystemPrompt({
+          age: session.childProfile.age,
+          primaryLang: session.childProfile.primaryLang,
+          learningLang: session.childProfile.secondLang,
+        });
+        const systemPrompt = session.toneLines
+          ? `${basePrompt}\n\n${session.toneLines.join('\n')}`
+          : basePrompt;
         const gen = await generateDialogueTurn({
-          systemPrompt: buildDialogueSystemPrompt({
-            age: session.childProfile.age,
-            primaryLang: session.childProfile.primaryLang,
-            learningLang: session.childProfile.secondLang,
-          }),
+          systemPrompt,
           history: session.history,
           userInput: text,
           round,
