@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { promisify } = require('util');
 const lessonsHelper = require('./lessons-helper');
+const statusHelper = require('./status-helper');
 
 const CLIENT_ID = process.env.DINGTALK_CLIENT_ID;
 const CLIENT_SECRET = process.env.DINGTALK_CLIENT_SECRET;
@@ -22,7 +23,7 @@ if (!CLIENT_ID || !CLIENT_SECRET) {
   process.exit(1);
 }
 
-console.log('[BOOT] DingTalk bot v0.8 (self-learning) starting...');
+console.log('[BOOT] DingTalk bot v0.9.1 (slim-prompt) starting...');
 console.log('[BOOT] Client ID prefix:', CLIENT_ID.substring(0, 10) + '...');
 console.log('[BOOT] Allowed users:', ALLOWED_USER_IDS.join(',') || '(none)');
 console.log('[BOOT] Workspace:', WORKSPACE);
@@ -92,6 +93,7 @@ function killAllActive() {
 const CLAUDE_MD_PATH = path.join(__dirname, '..', 'CLAUDE.md');
 let CLAUDE_MD_CONTENT = '';
 let LESSONS_MD_CONTENT = '';
+let STATUS_MD_CONTENT = '';
 
 function reloadKnowledge() {
   try {
@@ -109,6 +111,17 @@ function reloadKnowledge() {
     console.log(`[KNOWLEDGE] LESSONS.md loaded: ${LESSONS_MD_CONTENT.length} chars`);
   } catch (err) {
     console.error('[KNOWLEDGE] LESSONS.md load failed:', err.message);
+  }
+  try {
+    STATUS_MD_CONTENT = statusHelper.readStatus();
+    console.log(`[KNOWLEDGE] STATUS.md loaded: ${STATUS_MD_CONTENT.length} chars`);
+    // 启动时扫一眼 Factory 未消化报告
+    const reports = statusHelper.scanFactoryReports(5);
+    if (reports.length > 0) {
+      console.log(`[FACTORY] ${reports.length} 个未消化报告: ${reports.map(r => r.name).join(', ')}`);
+    }
+  } catch (err) {
+    console.error('[KNOWLEDGE] STATUS.md load failed:', err.message);
   }
 }
 
@@ -185,20 +198,41 @@ async function reply(sessionWebhook, content, atUserId) {
 
 // Build prompt with memory history
 function buildPrompt(currentMsg, memory) {
-  let sysHint = '';
-  if (CLAUDE_MD_CONTENT) {
-    sysHint += '# 你的角色定义\n\n' + CLAUDE_MD_CONTENT + '\n\n';
-  }
-  if (LESSONS_MD_CONTENT) {
-    sysHint += '# 知识库 (LESSONS.md - 历史踩坑与解法)\n\n' + LESSONS_MD_CONTENT + '\n\n';
-  }
-  if (!sysHint) {
-    sysHint = `You are operating on a VPS (154.217.234.241) for the WonderBear project.
-Working directory: ${WORKSPACE}
-The user is sending you messages via DingTalk for quick orchestration tasks.
-Be concise (DingTalk reply <2000 chars). If you run commands, summarize results, don't dump raw logs.
-The user is Kristy, a non-coder PM. Don't show diffs or git status raw output.`;
-  }
+  // 精简版 sysHint - 只放路径和触发规则,不再注入全文(节省 90% token)
+  // 解决: Opus/Sonnet headless 长 prompt 下 stdin 写入超时 SIGTERM exit 143
+  // Claude 真需要时自己用 view tool 或 bash cat 读文件
+  const lessonsLen = LESSONS_MD_CONTENT.length;
+  const statusLen = STATUS_MD_CONTENT.length;
+  const claudeLen = CLAUDE_MD_CONTENT.length;
+  let sysHint = '你是 WonderBear 项目 VPS 总指挥, 通过钉钉跟 Kristy(PM,不读代码)沟通。\n';
+  sysHint += '工作目录: ' + WORKSPACE + '\n\n';
+  sysHint += '# 工作风格\n';
+  sysHint += '- 简洁, 中文回复 < 2000 字\n';
+  sysHint += '- 给 A/B/C 选项 + 推荐 + 一句理由, Kristy 拍板\n';
+  sysHint += '- 不要 dump 长 log, 要总结\n';
+  sysHint += '- 不确定就读文档, 不要编\n\n';
+  sysHint += '# 决策权边界\n';
+  sysHint += '- 自主: 改代码、commit 到分支、派 Factory(spawn-droid.sh)、curl 自检、pm2 restart、写 coordination/、烧 < 5 美元\n';
+  sysHint += '- 红线: git push origin main、改 .env 密钥、烧 > 5 美元、改 PRODUCT_CONSTITUTION.md / AGENTS.md / CLAUDE.md\n\n';
+  sysHint += '# 关键文档(需要时用 cat 或 view tool 读)\n';
+  sysHint += '- /opt/wonderbear/dingtalk-bot/CLAUDE.md (' + claudeLen + ' 字符) - 你的角色完整定义\n';
+  sysHint += '- /opt/wonderbear/dingtalk-bot/LESSONS.md (' + lessonsLen + ' 字符) - 踩坑教训库\n';
+  sysHint += '- /opt/wonderbear/dingtalk-bot/STATUS.md (' + statusLen + ' 字符) - 项目最新状态(强烈建议先读)\n';
+  sysHint += '- /opt/wonderbear/AGENTS.md - 协作 AI 行为规则\n';
+  sysHint += '- /opt/wonderbear/PRODUCT_CONSTITUTION.md - 产品锁定决策\n\n';
+  sysHint += '# 自学习触发(粗粒度判断)\n';
+  sysHint += '- 解决了新问题/发现坑/学到命令用法 → 回复末尾追加 [LESSON_CANDIDATE]\n';
+  sysHint += '  格式: 标题: xxx / 场景: xxx / 解决: xxx\n';
+  sysHint += '- 完成实质性工作(改代码commit/解bug/派Factory/做决策) → 末尾追加 [STATUS_UPDATE]\n';
+  sysHint += '  格式: 完成: xxx / 影响: xxx / 下一步: xxx\n';
+  sysHint += '- 鸡毛蒜皮、回答问题、查日志、给建议但没执行 → 不要触发\n\n';
+  sysHint += '# 当不确定时\n';
+  sysHint += '1. 读 LESSONS.md (cat /opt/wonderbear/dingtalk-bot/LESSONS.md)\n';
+  sysHint += '2. 读 STATUS.md\n';
+  sysHint += '3. 跑只读命令查真值 (ls/cat/grep/pm2 status/curl)\n';
+  sysHint += '4. web_search (外部 API/技术细节)\n';
+  sysHint += '5. 告诉 Kristy 不确定 + 1-2 个最可能方向\n';
+  sysHint += '6. 绝不编造\n';
 
   let history = '';
   if (memory && memory.length > 0) {
@@ -321,14 +355,14 @@ client.registerCallbackListener(TOPIC_ROBOT, async (res) => {
     if (content === '/status') {
       const s = loadState();
       await reply(sessionWebhook,
-        `🤖 钉钉机器人 v0.8 (self-learning)\n` +
+        `🤖 钉钉机器人 v0.9.1 (slim-prompt)\n` +
         `今日总次数: ${s.date === todayKey() ? s.count : 0}/${DAILY_LIMIT}\n` +
         `Opus 已用: ${s.date === todayKey() ? (s.opusCount || 0) : 0}/${OPUS_DAILY_LIMIT}\n` +
         `当前模型: ${s.model || 'sonnet'}\n` +
         `记忆: ${(s.memory || []).length}/${MEMORY_TURNS} 轮\n` +
         `冻结状态: ${s.frozen ? '❄️ 已冻结' : '✅ 正常'}\n` +
         `活跃进程: ${activeProcs.size}\n\n` +
-        `指令:\n• /ping\n• /status\n• /myid\n• /kill\n• /freeze /unfreeze\n• /model sonnet | opus | haiku\n• /clear - 清除记忆\n• /lessons - 查看教训库\n• /learn 内容 - 手动记录教训\n• /unlearn - 撤销最近一条\n• 其他文字 → 自由对话(${MEMORY_TURNS} 轮 + LESSONS.md)`,
+        `指令:\n• /ping\n• /status\n• /myid\n• /kill\n• /freeze /unfreeze\n• /model sonnet | opus | haiku\n• /clear - 清除记忆\n• /lessons - 查看教训库\n• /learn 内容 - 手动记录教训\n• /unlearn - 撤销最近一条\n• /status-show - 查看最近进度\n• /sync 内容 - 投递外部进度\n• /status-refresh - 扫描 Factory 报告\n• /archive-status - 归档老进度\n• 其他文字 → 自由对话(${MEMORY_TURNS} 轮 + 全知识库)`,
         senderStaffId);
       return { status: EventAck.SUCCESS, message: 'OK' };
     }
@@ -354,6 +388,88 @@ client.registerCallbackListener(TOPIC_ROBOT, async (res) => {
     if (content === '/clear') {
       const s = loadState(); s.memory = []; saveState(s);
       await reply(sessionWebhook, `🧹 已清除对话记忆`, senderStaffId);
+      return { status: EventAck.SUCCESS, message: 'OK' };
+    }
+
+    if (content === '/status-show') {
+      const recent = statusHelper.listRecentUpdates();
+      if (!recent || recent === '(无最近进度)') {
+        await reply(sessionWebhook, '📊 STATUS.md 暂无最近进度记录', senderStaffId);
+      } else {
+        await reply(sessionWebhook, `📊 最近进度:\n\n${recent.slice(0, 3500)}`, senderStaffId);
+      }
+      return { status: EventAck.SUCCESS, message: 'OK' };
+    }
+
+    if (content.startsWith('/sync ')) {
+      const text = content.slice(6).trim();
+      if (!text) {
+        await reply(sessionWebhook, '用法: /sync 我刚才在外面做了什么(我会自动整理成进度条目)', senderStaffId);
+        return { status: EventAck.SUCCESS, message: 'OK' };
+      }
+      const syncPrompt = `Kristy 让你同步一条外部进度。她说:\n\n${text}\n\n请整理成 STATUS.md 标准格式,直接在回复里输出 [STATUS_UPDATE] 块,source 标记为"Kristy 手动同步",不要其他多余内容。`;
+      runClaude(syncPrompt, 'sonnet', async (err, output) => {
+        if (err) { await reply(sessionWebhook, `❌ 整理失败: ${err.message}`, senderStaffId); return; }
+        const { extracted } = statusHelper.extractStatusUpdates(output || '');
+        if (extracted.length === 0) {
+          await reply(sessionWebhook, '⚠️ Claude 没生成标准格式: ' + (output || '(空)').slice(0, 300), senderStaffId);
+          return;
+        }
+        extracted[0].source = 'Kristy 手动同步';
+        const result = statusHelper.appendUpdate(extracted[0]);
+        if (result.ok) {
+          reloadKnowledge();
+          await reply(sessionWebhook, `📊 已同步: ${extracted[0].summary}${extracted[0].impact ? '\n影响: ' + extracted[0].impact : ''}${extracted[0].next ? '\n下一步: ' + extracted[0].next : ''}`, senderStaffId);
+        } else {
+          await reply(sessionWebhook, `❌ 写入失败: ${result.message}`, senderStaffId);
+        }
+      });
+      return { status: EventAck.SUCCESS, message: 'OK' };
+    }
+
+    if (content === '/status-refresh') {
+      const reports = statusHelper.scanFactoryReports(10);
+      if (reports.length === 0) {
+        await reply(sessionWebhook, '🔍 coordination/done/ 没有未消化的 Factory 报告', senderStaffId);
+        return { status: EventAck.SUCCESS, message: 'OK' };
+      }
+      const reportList = reports.map(r => `- ${r.name} (${r.mtime.toISOString().slice(0, 16)})`).join('\n');
+      await reply(sessionWebhook, `🔍 发现 ${reports.length} 个未消化的 Factory 报告:\n\n${reportList}\n\n我接下来会逐个读取并整理到 STATUS.md (这会烧 ${reports.length} 次 token)`, senderStaffId);
+
+      // 串行处理每个报告
+      for (const report of reports) {
+        try {
+          const reportContent = fs.readFileSync(report.path, 'utf-8').slice(0, 8000);
+          const refreshPrompt = `这是 Factory 完成任务后的报告。请提取关键完成事项,直接输出 [STATUS_UPDATE] 块(source 标记为"Factory droid"):\n\n${reportContent}`;
+          await new Promise((resolve) => {
+            runClaude(refreshPrompt, 'sonnet', async (err, output) => {
+              if (err) { console.error('[STATUS_REFRESH]', err.message); resolve(); return; }
+              const { extracted } = statusHelper.extractStatusUpdates(output || '');
+              for (const update of extracted) {
+                update.source = 'Factory droid';
+                statusHelper.appendUpdate(update);
+              }
+              statusHelper.markFactoryReportProcessed(report.path);
+              resolve();
+            });
+          });
+        } catch (err) {
+          console.error('[STATUS_REFRESH] processing failed for', report.name, err.message);
+        }
+      }
+      reloadKnowledge();
+      await reply(sessionWebhook, `✅ 处理完成,STATUS.md 已更新。/status-show 查看`, senderStaffId);
+      return { status: EventAck.SUCCESS, message: 'OK' };
+    }
+
+    if (content === '/archive-status') {
+      const r = statusHelper.archiveOldLogs();
+      if (r.ok) {
+        reloadKnowledge();
+        await reply(sessionWebhook, `✅ ${r.message}`, senderStaffId);
+      } else {
+        await reply(sessionWebhook, `❌ ${r.message}`, senderStaffId);
+      }
       return { status: EventAck.SUCCESS, message: 'OK' };
     }
 
@@ -447,25 +563,43 @@ client.registerCallbackListener(TOPIC_ROBOT, async (res) => {
       }
       let answer = output || '(空回复)';
 
-      // 自动学习: 检测 [LESSON_CANDIDATE] 块
-      const { extracted, cleanedReply } = lessonsHelper.extractLessonCandidates(answer);
-      if (extracted.length > 0) {
+      // 自动学习: 检测 [LESSON_CANDIDATE] + [STATUS_UPDATE] 块
+      let workingReply = answer;
+      let summaries = [];
+
+      // [LESSON_CANDIDATE]
+      const lessonResult = lessonsHelper.extractLessonCandidates(workingReply);
+      if (lessonResult.extracted.length > 0) {
         const recorded = [];
         const skipped = [];
-        for (const lesson of extracted) {
-          const result = lessonsHelper.appendLesson(lesson);
-          if (result.ok) recorded.push(lesson.title);
-          else skipped.push(`${lesson.title} (${result.message})`);
+        for (const lesson of lessonResult.extracted) {
+          const r = lessonsHelper.appendLesson(lesson);
+          if (r.ok) recorded.push(lesson.title);
+          else skipped.push(`${lesson.title} (${r.message})`);
         }
-        let learnSummary = '';
-        if (recorded.length > 0) {
-          learnSummary += `\n\n📚 已自动记录 ${recorded.length} 条教训: ${recorded.join(', ')}`;
-          reloadKnowledge();
+        if (recorded.length > 0) summaries.push(`📚 已记录 ${recorded.length} 条教训: ${recorded.join(', ')}`);
+        if (skipped.length > 0) summaries.push(`⚠️ 跳过教训 ${skipped.length} 条: ${skipped.join('; ')}`);
+        workingReply = lessonResult.cleanedReply;
+      }
+
+      // [STATUS_UPDATE]
+      const statusResult = statusHelper.extractStatusUpdates(workingReply);
+      if (statusResult.extracted.length > 0) {
+        const recorded = [];
+        const skipped = [];
+        for (const update of statusResult.extracted) {
+          const r = statusHelper.appendUpdate(update);
+          if (r.ok) recorded.push(update.summary);
+          else skipped.push(`${update.summary} (${r.message})`);
         }
-        if (skipped.length > 0) {
-          learnSummary += `\n⚠️ 跳过 ${skipped.length} 条: ${skipped.join('; ')}`;
-        }
-        answer = cleanedReply + learnSummary;
+        if (recorded.length > 0) summaries.push(`📊 已更新 ${recorded.length} 条进度: ${recorded.join('; ')}`);
+        if (skipped.length > 0) summaries.push(`⚠️ 跳过进度 ${skipped.length} 条: ${skipped.join('; ')}`);
+        workingReply = statusResult.cleanedReply;
+      }
+
+      if (summaries.length > 0) {
+        reloadKnowledge();
+        answer = workingReply + '\n\n' + summaries.join('\n');
       }
 
       await reply(sessionWebhook, answer, senderStaffId);
