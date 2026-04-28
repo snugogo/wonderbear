@@ -1,0 +1,17 @@
+{
+  "name": "wonderbear-dingtalk-bot",
+  "version": "0.1.0",
+  "description": "DingTalk bidirectional bot for VPS Claude orchestration",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "dingtalk-stream-sdk-nodejs": "^2.0.4",
+    "axios": "^1.7.0",
+    "dotenv": "^16.4.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
