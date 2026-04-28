@@ -16,7 +16,7 @@
  */
 
 import { onMounted, onBeforeUnmount, watch, type Ref } from 'vue';
-import { register, unregister, currentScope } from './store';
+import { register, unregister, currentScope, setFocus } from './store';
 import type { FocusableOptions } from './types';
 
 export function useFocusable(
@@ -27,16 +27,61 @@ export function useFocusable(
   let mountedScope = scope;
   let registered = false;
 
+  // 2026-04-28: dual-input listener tracking. Same element across
+  // re-mounts gets a fresh handler each cycle so we don't leak.
+  let attachedEl: HTMLElement | null = null;
+  let lastFireAt = 0;
+
+  function onMouseEnterHandler(): void {
+    if (options.disabled) return;
+    setFocus(options.id);
+  }
+
+  function onClickHandler(ev: MouseEvent): void {
+    if (options.disabled) return;
+    // 2026-04-28: dedupe burst clicks (e.g. when a screen template
+    // also wires its own @click on the same element). 200ms window
+    // covers the worst-case bubble + Vue dispatch spread. Without
+    // this, a button with both @click="cb" AND useFocusable would
+    // fire cb twice on a real mouse press.
+    const now = Date.now();
+    if (now - lastFireAt < 200) return;
+    lastFireAt = now;
+    setFocus(options.id);
+    // Suppress synthetic clicks from screen-reader Enter on focused
+    // buttons (they re-trigger keyRouter's onEnter and we'd dispatch
+    // twice). 0,0 is the canonical "synthetic" coordinates Vue uses.
+    if (ev.detail === 0) return;
+    options.onEnter?.();
+  }
+
+  function attachMouse(el: HTMLElement): void {
+    if (attachedEl === el) return;
+    detachMouse();
+    el.addEventListener('mouseenter', onMouseEnterHandler);
+    el.addEventListener('click', onClickHandler);
+    attachedEl = el;
+  }
+
+  function detachMouse(): void {
+    if (!attachedEl) return;
+    attachedEl.removeEventListener('mouseenter', onMouseEnterHandler);
+    attachedEl.removeEventListener('click', onClickHandler);
+    attachedEl = null;
+  }
+
   function tryRegister(): void {
     if (registered || !elRef.value) return;
     mountedScope = options.scope || currentScope();
     register(elRef.value, { ...options, scope: mountedScope });
+    attachMouse(elRef.value);
     registered = true;
   }
 
   function tryUnregister(): void {
     if (!registered) return;
     unregister(options.id, mountedScope);
+    detachMouse();
     registered = false;
   }
 

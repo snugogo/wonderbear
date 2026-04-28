@@ -49,6 +49,16 @@ async function bootstrap(): Promise<void> {
     document.body.setAttribute('data-dev', '1');
   }
 
+  // 2026-04-28: any browser session that fires a mousemove gets the
+  // cursor revealed. Hardware GP15 never moves a mouse so cursor stays
+  // hidden; web reviewers / showcase visitors see it the moment they
+  // touch the trackpad / mouse.
+  if (typeof window !== 'undefined') {
+    window.addEventListener('mousemove', () => {
+      document.body.setAttribute('data-mouse', '1');
+    }, { once: true, passive: true });
+  }
+
   if (typeof window !== 'undefined'
       && new URLSearchParams(window.location.search).get('gallery') === '1') {
     return bootstrapGallery();

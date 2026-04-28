@@ -120,4 +120,34 @@ export function startKeyRouter(): void {
       window.dispatchEvent(new CustomEvent('wb:home-key'));
     }
   });
+
+  // 2026-04-28: mouse parity. The TV remote ships with a 5-way d-pad
+  // + OK + Back; web reviewers expect the same actions to be mouse-
+  // reachable too. Map:
+  //   - right-click / contextmenu → Back (same path as Esc/Backspace)
+  //   - 4th mouse button (Browser-Back) → Back
+  //   - wheel scroll → directional focus move (up/down)
+  // Click → onEnter is handled per-element inside useFocusable so we
+  // can dedupe with screen-level @click handlers.
+  window.addEventListener('contextmenu', (e: MouseEvent) => {
+    e.preventDefault();
+    handleBack();
+  });
+
+  window.addEventListener('mouseup', (e: MouseEvent) => {
+    // Mouse buttons: 0=left, 1=middle, 2=right, 3=back, 4=forward
+    if (e.button === 3) {
+      e.preventDefault();
+      handleBack();
+    }
+  });
+
+  let lastWheelAt = 0;
+  window.addEventListener('wheel', (e: WheelEvent) => {
+    if (Math.abs(e.deltaY) < 20) return;
+    const now = performance.now();
+    if (now - lastWheelAt < DIRECTION_THROTTLE_MS) return;
+    lastWheelAt = now;
+    moveFocus(e.deltaY > 0 ? 'down' : 'up');
+  }, { passive: true });
 }

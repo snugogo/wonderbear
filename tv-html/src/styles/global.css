@@ -38,9 +38,13 @@ html, body, #app {
   -webkit-user-select: none;
 }
 
-/* TV is non-interactive — kill cursor */
+/* TV is non-interactive — kill cursor by default. */
 * { cursor: none !important; }
-body[data-dev='1'] * { cursor: auto !important; }
+/* Reveal cursor in dev sessions (?dev=1) AND any browser where the
+ * user moved the mouse at least once (data-mouse='1' set by main.ts).
+ * The hardware GP15 never fires a mousemove, so cursor stays hidden. */
+body[data-dev='1'] *,
+body[data-mouse='1'] * { cursor: auto !important; }
 
 /* Center the 1280x720 canvas if window is bigger (browser dev) */
 .tv-stage {
