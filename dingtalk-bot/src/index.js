@@ -7,6 +7,10 @@ const path = require('path');
 const { promisify } = require('util');
 const lessonsHelper = require('./lessons-helper');
 const statusHelper = require('./status-helper');
+const promptTrimmer = require('./prompt-trimmer');
+const factoryDispatch = require('./factory-dispatch');
+const doneWatcher = require('./done-watcher');
+const commandRouter = require('./command-router');
 
 const CLIENT_ID = process.env.DINGTALK_CLIENT_ID;
 const CLIENT_SECRET = process.env.DINGTALK_CLIENT_SECRET;
@@ -23,7 +27,7 @@ if (!CLIENT_ID || !CLIENT_SECRET) {
   process.exit(1);
 }
 
-console.log('[BOOT] DingTalk bot v0.9.1 (slim-prompt) starting...');
+console.log('[BOOT] DingTalk bot v0.9.2 (router+watcher) starting...');
 console.log('[BOOT] Client ID prefix:', CLIENT_ID.substring(0, 10) + '...');
 console.log('[BOOT] Allowed users:', ALLOWED_USER_IDS.join(',') || '(none)');
 console.log('[BOOT] Workspace:', WORKSPACE);
@@ -252,6 +256,7 @@ function runClaude(prompt, model, onDone) {
     cwd: WORKSPACE,
     env: { ...process.env, IS_SANDBOX: '1' },
     timeout: 5 * 60 * 1000,
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
 
   activeProcs.add(proc);
@@ -266,6 +271,20 @@ function runClaude(prompt, model, onDone) {
   });
   proc.on('error', (err) => { activeProcs.delete(proc); onDone(err, null); });
 }
+
+// === v0.9.2 done-watcher: 后台轮询 coordination/done/, 推送新报告 ===
+let cachedWebhook = null;
+doneWatcher.start((filename, summary, matched) => {
+  if (!cachedWebhook) {
+    console.log('[DONE-WATCHER] no cachedWebhook yet, skip push for', filename);
+    return;
+  }
+  const head = matched ?
+    ('\u2705 Factory \u5b8c\u6210: ' + matched.workorderId + ' (PID=' + matched.pid + ')\n\n') :
+    ('\u2705 \u65b0\u62a5\u544a: ' + filename + '\n\n');
+  const body = head + summary;
+  reply(cachedWebhook, body, ALLOWED_USER_IDS[0]).catch(e => console.error('[DONE-WATCHER] push failed:', e.message));
+});
 
 client.registerCallbackListener(TOPIC_ROBOT, async (res) => {
   try {
@@ -290,6 +309,9 @@ client.registerCallbackListener(TOPIC_ROBOT, async (res) => {
       await reply(sessionWebhook, `你的 senderStaffId 是:\n${senderStaffId}`, senderStaffId);
       return { status: EventAck.SUCCESS, message: 'OK' };
     }
+
+    // === v0.9.2: \u7f13\u5b58 webhook \u4f9b done-watcher \u63a8\u9001 ===
+    cachedWebhook = sessionWebhook;
 
     if (!ALLOWED_USER_IDS.includes(senderStaffId)) {
       await reply(sessionWebhook, '❌ 无权限', senderStaffId);
@@ -347,6 +369,20 @@ client.registerCallbackListener(TOPIC_ROBOT, async (res) => {
       return { status: EventAck.SUCCESS, message: 'OK' };
     }
 
+    // === v0.9.2: \u4e2d\u6587\u547d\u4ee4\u8def\u7531 ===
+    const routed = commandRouter.route(effectiveContent);
+    if (routed.handled) {
+      await reply(sessionWebhook, routed.reply, senderStaffId);
+      return { status: EventAck.SUCCESS, message: 'OK' };
+    }
+
+    // === v0.9.2: \u5355\u6761\u6d88\u606f\u957f\u5ea6\u62d2\u6536 ===
+    const lenCheck = promptTrimmer.checkUserMessage(effectiveContent);
+    if (!lenCheck.ok) {
+      await reply(sessionWebhook, '\u26a0\ufe0f ' + lenCheck.reason, senderStaffId);
+      return { status: EventAck.SUCCESS, message: 'OK' };
+    }
+
     if (content === '/ping') {
       await reply(sessionWebhook, `🏓 pong\n时间: ${new Date().toISOString()}`, senderStaffId);
       return { status: EventAck.SUCCESS, message: 'OK' };
@@ -355,7 +391,7 @@ client.registerCallbackListener(TOPIC_ROBOT, async (res) => {
     if (content === '/status') {
       const s = loadState();
       await reply(sessionWebhook,
-        `🤖 钉钉机器人 v0.9.1 (slim-prompt)\n` +
+        `🤖 钉钉机器人 v0.9.2 (router+watcher)\n` +
         `今日总次数: ${s.date === todayKey() ? s.count : 0}/${DAILY_LIMIT}\n` +
         `Opus 已用: ${s.date === todayKey() ? (s.opusCount || 0) : 0}/${OPUS_DAILY_LIMIT}\n` +
         `当前模型: ${s.model || 'sonnet'}\n` +
@@ -553,7 +589,9 @@ client.registerCallbackListener(TOPIC_ROBOT, async (res) => {
     const opusInfo = model === 'opus' ? ` | Opus ${gate.opusUsed}/${gate.opusLimit}` : '';
     await reply(sessionWebhook, `🤖 处理中... (今日 ${gate.used}/${gate.limit} | 模型 ${model}${opusInfo} | 记忆 ${memory.length}/${MEMORY_TURNS})`, senderStaffId);
 
-    const fullPrompt = buildPrompt(effectiveContent, memory) + imagePromptHint;
+    // === v0.9.2: \u88c1\u5269\u5386\u53f2 ===
+    const trimmedMemory = promptTrimmer.trimMemory(memory);
+    const fullPrompt = promptTrimmer.clampPrompt(buildPrompt(effectiveContent, trimmedMemory) + imagePromptHint);
 
     runClaude(fullPrompt, model, async (err, output) => {
       safeDeleteFile(imagePath);
