@@ -41,6 +41,24 @@ const env = {
   // speech
   GOOGLE_SPEECH_KEY: process.env.GOOGLE_SPEECH_KEY,
   GOOGLE_APPLICATION_CREDENTIALS: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+  GOOGLE_SPEECH_PROJECT_ID: process.env.GOOGLE_SPEECH_PROJECT_ID,
+
+  // asr / tts dual-provider routing — workorder 2026-04-29-asr-tts-dual-provider
+  ASR_PRIMARY: process.env.ASR_PRIMARY || 'google',
+  ASR_FALLBACK_CHAIN: process.env.ASR_FALLBACK_CHAIN || 'dashscope',
+  ASR_TIMEOUT_MS: parseInt(process.env.ASR_TIMEOUT_MS || '8000', 10),
+  ASR_LANGUAGE_DEFAULT: process.env.ASR_LANGUAGE_DEFAULT || 'zh',
+  TTS_PRIMARY: process.env.TTS_PRIMARY || 'dashscope',
+  TTS_FALLBACK_CHAIN: process.env.TTS_FALLBACK_CHAIN || 'elevenlabs',
+  TTS_TIMEOUT_MS: parseInt(process.env.TTS_TIMEOUT_MS || '15000', 10),
+
+  // dashscope (Aliyun model studio)
+  DASHSCOPE_API_KEY: process.env.DASHSCOPE_API_KEY,
+  DASHSCOPE_TTS_VOICE_ZH: process.env.DASHSCOPE_TTS_VOICE_ZH || 'longhuhu_v3',
+  DASHSCOPE_TTS_VOICE_EN: process.env.DASHSCOPE_TTS_VOICE_EN || 'longhuhu_v3',
+  DASHSCOPE_TTS_VOICE_VOCAB: process.env.DASHSCOPE_TTS_VOICE_VOCAB || 'longxiaoxia_v2',
+  DASHSCOPE_ASR_MODEL: process.env.DASHSCOPE_ASR_MODEL || 'paraformer-v2',
+  DASHSCOPE_TTS_MODEL: process.env.DASHSCOPE_TTS_MODEL || 'cosyvoice-v2',
 
   // stripe
   STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
@@ -115,7 +133,8 @@ export const ENV_GROUPS = {
   mail: ['RESEND_API_KEY', 'MAIL_FROM'],
   ai: ['OPENAI_API_KEY', 'GEMINI_API_KEY', 'FAL_KEY'],
   tts: ['ELEVENLABS_API_KEY', 'VOICE_ID_EN'],
-  speech: ['GOOGLE_SPEECH_KEY'],
+  speech: ['GOOGLE_APPLICATION_CREDENTIALS'],
+  dashscope: ['DASHSCOPE_API_KEY'],
   stripe: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_PRICE_ID_MONTHLY', 'STRIPE_PRICE_ID_YEARLY'],
   paypal: ['PAYPAL_CLIENT_ID', 'PAYPAL_CLIENT_SECRET', 'PAYPAL_WEBHOOK_ID'],
   storage: [
