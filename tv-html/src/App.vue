@@ -17,6 +17,7 @@ import ActivationScreen from '@/screens/ActivationScreen.vue';
 import HomeScreen from '@/screens/HomeScreen.vue';
 import CreateScreen from '@/screens/CreateScreen.vue';
 import DialogueScreen from '@/screens/DialogueScreen.vue';
+import StoryPreviewScreen from '@/screens/StoryPreviewScreen.vue';
 import GeneratingScreen from '@/screens/GeneratingScreen.vue';
 import StoryCoverScreen from '@/screens/StoryCoverScreen.vue';
 import StoryBodyScreen from '@/screens/StoryBodyScreen.vue';
@@ -45,6 +46,7 @@ const screenMap: Record<ScreenName, unknown> = {
   home: HomeScreen,
   create: CreateScreen,
   dialogue: DialogueScreen,
+  'story-preview': StoryPreviewScreen,
   generating: GeneratingScreen,
   'story-cover': StoryCoverScreen,
   'story-body': StoryBodyScreen,

@@ -288,6 +288,17 @@ export interface DialogueSummary {
   mainCharacter: string;
   scene: string;
   conflict: string;
+  /** v7.2 — populated when server has produced storyOutline. */
+  outline?: string[];
+}
+
+/** v7.2 story arc step keys (PROMPT_SPEC_v7_2 §2.3). */
+export type DialogueArcStep =
+  | 'setting' | 'character' | 'goal' | 'obstacle' | 'climax' | 'resolution';
+
+/** v7.2 outline shown on StoryPreviewScreen before generating. */
+export interface DialogueStoryOutline {
+  paragraphs: string[];
 }
 
 export interface DialogueTurnResp {
@@ -301,6 +312,25 @@ export interface DialogueTurnResp {
    * TV can optionally show "I heard: ___" to the child for confirmation.
    */
   recognizedText?: string;
+  /** v7.2 — adaptive mode the LLM picked for this turn (informational). */
+  mode?: 'cheerleader' | 'storyteller' | null;
+  /** v7.2 — short summary of what the child contributed this turn (≤30 chars). */
+  lastTurnSummary?: string | null;
+  /** v7.2 — partial arc map update from this turn. */
+  arcUpdate?: Partial<Record<DialogueArcStep, string>> | null;
+  /** v7.2 — present when done=true; drives StoryPreviewScreen. */
+  storyOutline?: DialogueStoryOutline | null;
+  /** v7.2 — telemetry only ('mock' | 'gemini-v7_2' | 'default-bank' | ...). */
+  _provider?: string | null;
+}
+
+/** v7.2 — POST /api/story/dialogue/:id/confirm response. */
+export interface DialogueConfirmResp {
+  storyId: string;
+  status: 'queued';
+  queuePosition?: number;
+  estimatedDurationSec: number;
+  priority: 'normal' | 'high';
 }
 
 export interface GenerateStoryReq {
@@ -619,6 +649,15 @@ class ApiClient {
   /** §7.4 — kick off async generation, returns 202 */
   storyGenerate(req: GenerateStoryReq) {
     return this.post<GenerateStoryResp>('/story/generate', req, { idempotent: true });
+  }
+  /**
+   * v7.2 — confirm dialogue's storyOutline and trigger generation.
+   * Called by StoryPreviewScreen after the child presses Enter on the 3-5
+   * paragraph outline. Equivalent to /story/generate but starts from the
+   * accumulated dialogue session (no need to re-pass dialogueId/childId).
+   */
+  dialogueConfirm(dialogueId: string) {
+    return this.post<DialogueConfirmResp>(`/story/dialogue/${dialogueId}/confirm`, {}, { idempotent: true });
   }
   /** §7.5 — poll every 2s */
   storyStatus(storyId: string) {

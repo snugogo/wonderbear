@@ -65,6 +65,8 @@ export default {
     holdMicHint: 'Hold the mic key to talk, release when done',
     readyPainter: 'Ready for painting',
     holdMicWithScenes: 'Hold the mic to talk, or pick a theme for the bear to tell',
+    /* v7.2: turn summary ribbon — short "You said: …" line. */
+    youSaid: 'You said:',
     retry: 'Redo',
     send: 'Send',
     confirm: 'Confirm',
@@ -80,6 +82,19 @@ export default {
     sceneSelected: 'OK, {title}!',
     demoQuestion: 'What kind of story do you want to hear today?',
     demoReply: 'I want a story about a brave little bear adventuring in the forest!',
+  },
+
+  /*
+   * v7.2 §1.4 — StoryPreviewScreen
+   * Outline preview shown after dialogue done=true, before generating.
+   * Gives the child a "this is your story" moment of authorship.
+   */
+  storyPreview: {
+    title: 'Your story is taking shape',
+    subtitle: 'Here is how Bear pieced it together',
+    confirm: 'Make this story real',
+    confirmHint: 'Press OK on the remote to confirm',
+    fallbackParagraph: 'Bear is shaping your story into something cozy.',
   },
 
   generating: {

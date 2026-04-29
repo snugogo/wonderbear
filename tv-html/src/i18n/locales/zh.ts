@@ -72,6 +72,8 @@ export default {
     holdMicHint: '按住遥控器话筒说话,说完放开',
     readyPainter: '可以开画啦',
     holdMicWithScenes: '按住遥控器话筒说话,或者挑一个主题让熊熊讲',
+    /* v7.2: turn summary ribbon — "你刚说: …" 30 字以内. */
+    youSaid: '你刚说:',
     retry: '改一改',
     send: '发送',
     confirm: '确认',
@@ -97,6 +99,19 @@ export default {
    *   65-95 → stages.recording '小熊在录音...'
    *   95+   → stages.almost    '快好了!'
    */
+  /*
+   * v7.2 §1.4 — StoryPreviewScreen
+   * 在 dialogue done=true 之后, generating 之前, 显示 3-5 段故事大纲让小孩
+   * 拍板 "就这样画". 给 "创作者" 仪式感.
+   */
+  storyPreview: {
+    title: '故事就快好啦',
+    subtitle: '看看熊熊把你的故事拼成什么样',
+    confirm: '就这样,开始画!',
+    confirmHint: '按遥控器 OK 键确认',
+    fallbackParagraph: '熊熊把你说的话拼成了一个温暖的故事。',
+  },
+
   generating: {
     title: '小熊正在给你画故事…',
     subtitle: '稍等半刻',

@@ -19,13 +19,19 @@
 import { ErrorCodes } from '../utils/errorCodes.js';
 import { BizError } from '../utils/response.js';
 import {
-  buildDialogueSystemPrompt,
+  buildDialogueFirstQuestion,
+  buildDialogueSystemPromptV2,
+  DIALOGUE_ARC_STEPS,
   roundCountForAge,
 } from '../utils/storyPrompt.js';
 import { pickOpener, pickTone } from '../data/dialoguePromptPool.js';
 import { getOpenerTtsUrl } from '../services/staticTtsCache.js';
 import { classify as classifySafety } from '../utils/contentSafety.js';
-import { generateDialogueTurn, defaultDialogueQuestion } from '../services/llm.js';
+import { generateDialogueTurnV2 } from '../services/llm.js';
+import {
+  evaluateReply,
+  shouldForceFinish,
+} from '../services/dialogue-quality.js';
 import { synthesize as ttsSynthesize } from '../services/tts.js';
 import { transcribe as asrTranscribe } from '../services/asr.js';
 import { nanoid } from 'nanoid';
@@ -292,110 +298,263 @@ export default async function storyRoutes(fastify) {
         });
       }
 
-      // Append history, generate next question (or finish)
-      session.history.push({ role: 'user', text, round });
+      // ----- v7.2 co-creation flow ---------------------------------
+      // 1) evaluate child reply quality (server-side adaptive signal)
+      const previousQuestionText = (() => {
+        // Most-recent assistant turn (the question the child was answering)
+        for (let i = session.history.length - 1; i >= 0; i--) {
+          if (session.history[i].role === 'assistant') return session.history[i].text;
+        }
+        return null;
+      })();
+      const quality = evaluateReply({
+        replyText: text,
+        previousQuestionText,
+        locale: session.childProfile.primaryLang,
+      });
 
-      const done = skipRemaining && round >= 4 ? true : round >= session.roundCount;
-      let nextQuestion = null;
-      let summary = null;
+      // 2) record the user turn (with quality signal) into history + arc state
+      session.history.push({ role: 'user', text, round, quality });
+      session.arc = session.arc || {};
 
-      if (!done) {
-        const basePrompt = buildDialogueSystemPrompt({
+      // 3) decide hard-cap conditions BEFORE calling LLM
+      //    - skipRemaining (round >=4): user explicitly ended via OK key
+      //    - hard cap: round === roundCount → must finish this turn
+      //    - quality: 3+ consecutive 'empty' replies → force finish to avoid loop
+      const reachedHardCap = round >= session.roundCount;
+      const skipFinishing = skipRemaining === true && round >= 4;
+      const emptyLoopFinishing = shouldForceFinish(
+        session.history,
+        session.childProfile.primaryLang,
+      ) && round >= 3;
+      const forceDone = reachedHardCap || skipFinishing || emptyLoopFinishing;
+
+      // 4) call v7.2 LLM (built-in retry + default-bank fallback, never null)
+      const llm = await generateDialogueTurnV2({
+        systemPrompt: buildDialogueSystemPromptV2({
           age: session.childProfile.age,
           primaryLang: session.childProfile.primaryLang,
           learningLang: session.childProfile.secondLang,
-        });
-        const systemPrompt = session.toneLines
-          ? `${basePrompt}\n\n${session.toneLines.join('\n')}`
-          : basePrompt;
-        // Defense in depth (workorder 2026-04-29-server-dialogue-llm-fix §3.3):
-        // generateDialogueTurn now retries + falls back internally, but if the
-        // whole call still throws we MUST NOT bubble null nextQuestion to the
-        // client (TV would display "I didn't hear you" forever). On any error
-        // we synthesize a default question so the dialogue always advances.
-        let gen;
-        try {
-          gen = await generateDialogueTurn({
-            systemPrompt,
-            history: session.history,
-            userInput: text,
-            round,
-            roundCount: session.roundCount,
-            primaryLang: session.childProfile.primaryLang,
-            learningLang: session.childProfile.secondLang,
-          });
-        } catch (err) {
-          request.log.error(
-            { err, dialogueId: id, round },
-            'generateDialogueTurn threw; falling back to default question',
-          );
-          gen = null;
-        }
-        const candidate =
-          gen && gen.nextQuestion && typeof gen.nextQuestion.text === 'string'
-            && gen.nextQuestion.text.trim() !== ''
-            ? gen.nextQuestion
-            : defaultDialogueQuestion({
-                round: round + 1,
-                primaryLang: session.childProfile.primaryLang,
-                learningLang: session.childProfile.secondLang,
-              });
-        nextQuestion = { round: round + 1, ...candidate, ttsUrl: null };
+          history: session.history,
+          arc: session.arc,
+          quality,
+          suggestMode: quality.suggestMode,
+          currentRound: round,
+          roundCount: session.roundCount,
+        }),
+        history: session.history,
+        userInput: text,
+        round,
+        roundCount: session.roundCount,
+        primaryLang: session.childProfile.primaryLang,
+        learningLang: session.childProfile.secondLang,
+        forceDone,
+      });
 
-        // Pre-gen TTS for next question (non-fatal). The next dialogue
-        // question is spoken by the bear → dialogue voice
-        // (workorder 2026-04-29-tts-three-voice-roles).
-        if (nextQuestion?.text) {
-          try {
-            const tts = await ttsSynthesize({
-              text: nextQuestion.text,
-              lang: session.childProfile.primaryLang,
-              purpose: 'dialogue',
-            });
-            nextQuestion.ttsUrl = tts.audioUrl;
-          } catch {
-            // swallow; client still has text
+      // 5) merge arcUpdate into session arc state
+      if (llm.arcUpdate && typeof llm.arcUpdate === 'object') {
+        for (const step of DIALOGUE_ARC_STEPS) {
+          if (typeof llm.arcUpdate[step] === 'string' && llm.arcUpdate[step].trim()) {
+            session.arc[step] = llm.arcUpdate[step].trim();
           }
         }
+      }
 
-        session.history.push({
-          role: 'assistant',
-          text: nextQuestion?.text || '',
-          round: round + 1,
-        });
-        session.currentRound = round + 1;
-      } else {
-        // Synthesize a dialogue summary for the generate step
-        summary = {
+      // 6) determine final done flag — server-side hard cap wins
+      const done = forceDone || llm.done === true;
+
+      // 7) build nextQuestion + pre-gen TTS (only when not done)
+      let nextQuestion = null;
+      let storyOutline = null;
+
+      if (done) {
+        // Ensure storyOutline exists. If LLM didn't return one (e.g. forceDone
+        // path with retry exhausted), fall back to the default bank outline
+        // built from accumulated history.
+        const ps =
+          (llm.storyOutline && Array.isArray(llm.storyOutline.paragraphs))
+            ? llm.storyOutline.paragraphs
+            : null;
+        storyOutline = (ps && ps.length >= 1)
+          ? { paragraphs: ps.slice(0, 5) }
+          : { paragraphs: [
+              `${session.childProfile.name || 'The hero'} starts a small adventure.`,
+              'A friend joins along the way.',
+              'A gentle bump appears, but they solve it together.',
+              'They walk home smiling under the warm sky.',
+            ] };
+        session.storyOutline = storyOutline;
+        // Backfill summary so /story/generate (existing 12-page LLM) still works.
+        session.summary = {
           mainCharacter:
-            session.history.find((h) => h.round === 1)?.text ||
+            session.arc.character ||
+            session.history.find((h) => h.role === 'user' && h.round === 1)?.text ||
             session.childProfile.name,
-          scene:
-            session.history.find((h) => h.round === 2)?.text ||
-            'a sunny meadow',
-          conflict:
-            session.history.find((h) => h.round === 3)?.text ||
-            'a fun little problem',
+          scene: session.arc.setting || 'a sunny meadow',
+          conflict: session.arc.obstacle || session.arc.goal || 'a fun little problem',
+          outline: storyOutline.paragraphs,
           rounds: session.history.map((h) => ({
             q: h.role === 'assistant' ? h.text : null,
             a: h.role === 'user' ? h.text : null,
           })),
         };
-        session.summary = summary;
+        session.status = 'awaiting-confirm';
+      } else if (llm.nextQuestion?.text) {
+        nextQuestion = {
+          round: round + 1,
+          text: llm.nextQuestion.text,
+          textLearning: llm.nextQuestion.textLearning ?? null,
+          ttsUrl: null,
+        };
+        // Pre-gen TTS for next question (non-fatal). The next dialogue
+        // question is spoken by the bear → dialogue voice
+        // (workorder 2026-04-29-tts-three-voice-roles).
+        try {
+          const tts = await ttsSynthesize({
+            text: nextQuestion.text,
+            lang: session.childProfile.primaryLang,
+            purpose: 'dialogue',
+          });
+          nextQuestion.ttsUrl = tts.audioUrl;
+        } catch {
+          // swallow; client still has text
+        }
+        session.history.push({
+          role: 'assistant',
+          text: nextQuestion.text,
+          round: round + 1,
+        });
+        session.currentRound = round + 1;
       }
 
       await saveDialogue(redis, id, session);
 
+      // 8) shape response — extends v7.1 envelope with v7.2 fields
       const resp = {
         round,
         done,
+        // v7.2 additions:
+        mode: llm.mode || (quality.suggestMode === 'auto' ? 'cheerleader' : quality.suggestMode),
+        lastTurnSummary: typeof llm.lastTurnSummary === 'string' && llm.lastTurnSummary
+          ? llm.lastTurnSummary
+          : null,
+        arcUpdate: llm.arcUpdate || null,
+        // v7.1-compatible:
         nextQuestion,
-        summary,
+        summary: done ? (session.summary || null) : null,
+        // v7.2 storyOutline (TV uses this to drive StoryPreviewScreen):
+        storyOutline,
         safetyLevel: safety.level,
         safetyReplacement: safety.replacement,
+        _provider: llm._provider || null,
       };
       if (recognizedText) resp.recognizedText = recognizedText;
       return resp;
+    },
+  );
+
+  // ------------------------------------------------------------------
+  // 7.3b POST /api/story/dialogue/:id/confirm  (v7.2 — story preview accept)
+  //
+  // Called by TV's StoryPreviewScreen after the child presses Enter on the
+  // 3-5 paragraph outline. Triggers the same generation pipeline as
+  // /api/story/generate. We do NOT inline /generate's body to avoid quota
+  // double-charge — instead the route does its own lightweight enqueue
+  // here so the client gets a single round-trip back to GeneratingScreen.
+  // ------------------------------------------------------------------
+  fastify.post(
+    '/api/story/dialogue/:id/confirm',
+    { onRequest: [fastify.authenticateDevice] },
+    async (request, reply) => {
+      const { id } = request.params;
+      const session = await loadDialogue(redis, id);
+      if (!session) {
+        throw new BizError(ErrorCodes.STORY_NOT_FOUND, {
+          details: { kind: 'dialogue', id },
+        });
+      }
+      if (session.deviceId !== request.auth.sub) {
+        throw new BizError(ErrorCodes.STORY_NOT_FOUND);
+      }
+      if (!session.storyOutline) {
+        throw new BizError(ErrorCodes.PARAM_INVALID, {
+          details: { reason: 'dialogue not finished — no storyOutline yet' },
+        });
+      }
+
+      const device = await prisma.device.findUnique({
+        where: { id: request.auth.sub },
+        include: { parent: { include: { subscription: true } } },
+      });
+      if (!device) throw new BizError(ErrorCodes.DEVICE_NOT_FOUND);
+
+      const subscribed = device.parent?.subscription?.status === 'active';
+      const plan = device.parent?.subscription?.plan;
+      const priority = plan === 'yearly' ? 'high' : 'normal';
+
+      if (!subscribed && device.storiesLeft <= 0) {
+        throw new BizError(ErrorCodes.QUOTA_EXHAUSTED, {
+          details: { storiesLeft: 0 },
+          actions: [{ label: '升级', labelEn: 'Upgrade', url: '/sub' }],
+        });
+      }
+      if (!subscribed) {
+        const dailyCount = parseInt((await redis.get(dailyLimitKey(device.id))) || '0', 10);
+        if (dailyCount >= FREE_DAILY_LIMIT) {
+          throw new BizError(ErrorCodes.DAILY_LIMIT_REACHED, {
+            details: { limit: FREE_DAILY_LIMIT },
+          });
+        }
+        const newCount = dailyCount + 1;
+        await redis.setex(dailyLimitKey(device.id), 86400, String(newCount));
+      }
+
+      const story = await prisma.story.create({
+        data: {
+          childId: session.childId,
+          deviceId: device.deviceId,
+          title: '',
+          status: 'queued',
+          stage: 'queue',
+          pagesGenerated: 0,
+          metadata: {
+            primaryLang: session.childProfile.primaryLang,
+            learningLang: session.childProfile.secondLang || 'none',
+            provider: 'mixed',
+          },
+        },
+      });
+
+      const queueDepth = fastify.storyQueue?.enqueue({
+        storyId: story.id,
+        deviceId: device.id,
+        subscribed,
+        priority,
+        childProfile: session.childProfile,
+        dialogueSummary: session.summary || {
+          mainCharacter: session.childProfile.name,
+          scene: 'a sunny meadow',
+          conflict: 'a fun little problem',
+          outline: session.storyOutline.paragraphs,
+          rounds: session.history.map((h) => ({
+            q: h.role === 'assistant' ? h.text : null,
+            a: h.role === 'user' ? h.text : null,
+          })),
+        },
+      }) ?? 1;
+
+      session.status = 'confirmed';
+      session.confirmedStoryId = story.id;
+      await saveDialogue(redis, id, session);
+
+      reply.code(202);
+      return {
+        storyId: story.id,
+        status: 'queued',
+        queuePosition: queueDepth,
+        estimatedDurationSec: 75,
+        priority,
+      };
     },
   );
 

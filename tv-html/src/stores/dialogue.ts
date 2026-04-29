@@ -1,27 +1,37 @@
 /**
- * Dialogue store — 7-round conversation state machine.
+ * Dialogue store — co-creation state machine (v7.2).
  *
- * Server contract: API_CONTRACT.md §7.2 / §7.3
+ * Server contract: API_CONTRACT.md §7.2 / §7.3 / §7.3b
  *   - round is 1-based (per DialogueTurnRequest.round)
- *   - roundCount is 5 (age 3-4) or 7 (age 5-8)
- *   - dialogue/turn returns { done, nextQuestion, summary, safetyLevel, safetyReplacement }
- *   - safetyLevel='blocked' → ERR.CONTENT_SAFETY_BLOCKED
- *   - safetyLevel='warn'  → server returns safetyReplacement (bear softly redirects)
- *   - server runs ASR internally when audioBase64 supplied (Q2 protocol decision)
+ *   - roundCount is 5 (age 3-4) or 7 (age 5-8) — hard cap, not a target
+ *   - /dialogue/turn returns the v7.2 envelope:
+ *       { done, nextQuestion, summary, safetyLevel, safetyReplacement,
+ *         mode, lastTurnSummary, arcUpdate, storyOutline, recognizedText }
+ *   - When `done=true`, `storyOutline.paragraphs` (3-5 short strings) is the
+ *     content shown on StoryPreviewScreen. The child's Enter then calls
+ *     /dialogue/:id/confirm to start generation.
+ *   - safetyLevel='blocked' → ERR.CONTENT_SAFETY_BLOCKED (route throws)
+ *   - safetyLevel='warn'    → server returns safetyReplacement (bear redirect)
+ *   - server runs ASR internally when audioBase64 supplied (patch v3)
  *
- * Local UI phases (mirror PRD §4.3 step ② state diagram):
+ * Local UI phases (mirror PRD §4.3 step ②):
  *   bear-speaking    : TTS playing the bear's prompt
  *   waiting-for-child: prompt finished, waiting for voice key
  *   recording        : child holding voice key
  *   uploading        : ASR + LLM in flight
  *   bear-thinking    : server processing, waiting for next prompt
- *   finished         : done=true, ready to generate story
+ *   finished         : done=true → DialogueScreen kicks navigation to story-preview
  *
  * From round >= 4 the OK key triggers skipRemaining=true (early end).
  */
 
 import { defineStore } from 'pinia';
-import type { DialogueQuestion, DialogueSummary } from '@/services/api';
+import type {
+  DialogueQuestion,
+  DialogueSummary,
+  DialogueStoryOutline,
+  DialogueArcStep,
+} from '@/services/api';
 
 export type DialoguePhase =
   | 'idle'
@@ -47,6 +57,14 @@ export interface DialogueState {
   /** True from round 4+ — OK key triggers skipRemaining */
   canEarlyEnd: boolean;
   errorMessage: string | null;
+  /** v7.2 — short ribbon text shown above the bear ("you said: …"). */
+  lastTurnSummary: string | null;
+  /** v7.2 — adaptive mode the LLM picked for this turn (informational). */
+  mode: 'cheerleader' | 'storyteller' | null;
+  /** v7.2 — accumulated arc state, merged from server arcUpdate per turn. */
+  arc: Partial<Record<DialogueArcStep, string>>;
+  /** v7.2 — set when done=true; drives StoryPreviewScreen. */
+  storyOutline: DialogueStoryOutline | null;
 }
 
 export const useDialogueStore = defineStore('dialogue', {
@@ -60,6 +78,10 @@ export const useDialogueStore = defineStore('dialogue', {
     summary: null,
     canEarlyEnd: false,
     errorMessage: null,
+    lastTurnSummary: null,
+    mode: null,
+    arc: {},
+    storyOutline: null,
   }),
 
   getters: {
@@ -82,6 +104,10 @@ export const useDialogueStore = defineStore('dialogue', {
       this.summary = null;
       this.canEarlyEnd = false;
       this.errorMessage = null;
+      this.lastTurnSummary = null;
+      this.mode = null;
+      this.arc = {};
+      this.storyOutline = null;
     },
 
     setPhase(phase: DialoguePhase): void {
@@ -101,18 +127,40 @@ export const useDialogueStore = defineStore('dialogue', {
       this.safetyReplacement = null;
       this.canEarlyEnd = false;
       this.phase = 'bear-speaking';
+      this.lastTurnSummary = null;
+      this.mode = null;
+      this.arc = {};
+      this.storyOutline = null;
     },
 
-    /** Apply /dialogue/turn response. */
+    /** Apply /dialogue/turn response (v7.2). */
     applyTurn(payload: {
       done: boolean;
       nextQuestion: (DialogueQuestion & { round: number }) | null;
       summary: DialogueSummary | null;
       safetyLevel: 'ok' | 'warn' | 'blocked';
       safetyReplacement?: string | null;
+      mode?: 'cheerleader' | 'storyteller' | null;
+      lastTurnSummary?: string | null;
+      arcUpdate?: Partial<Record<DialogueArcStep, string>> | null;
+      storyOutline?: DialogueStoryOutline | null;
     }): void {
+      // Always merge arc update (defensive: even on done=true the server may
+      // have set the final beat).
+      if (payload.arcUpdate && typeof payload.arcUpdate === 'object') {
+        this.arc = { ...this.arc, ...payload.arcUpdate };
+      }
+      if (payload.mode === 'cheerleader' || payload.mode === 'storyteller') {
+        this.mode = payload.mode;
+      }
+      if (typeof payload.lastTurnSummary === 'string' && payload.lastTurnSummary.trim()) {
+        // Cap to 30 visible chars (per workorder §1.3).
+        const s = payload.lastTurnSummary.trim();
+        this.lastTurnSummary = s.length > 30 ? s.slice(0, 30) + '…' : s;
+      }
       if (payload.done) {
         this.summary = payload.summary;
+        this.storyOutline = payload.storyOutline ?? null;
         this.phase = 'finished';
         return;
       }
@@ -131,7 +179,14 @@ export const useDialogueStore = defineStore('dialogue', {
         // PRD §4.3: from round 4 onwards, OK key allows early end.
         this.canEarlyEnd = this.round >= 4;
         this.phase = 'bear-speaking';
+        return;
       }
+      // Server contract violation: done=false + nextQuestion=null. Drop back
+      // to waiting-for-child so the kid can try again; the screen will show
+      // its "didn't hear you" hint.
+      console.warn('[dialogue] server returned done=false + nextQuestion=null — treating as malformed turn');
+      this.phase = 'waiting-for-child';
+      this.errorMessage = 'malformed_turn';
     },
 
     setError(message: string): void {
