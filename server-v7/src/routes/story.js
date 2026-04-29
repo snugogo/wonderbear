@@ -195,11 +195,17 @@ export default async function storyRoutes(fastify) {
       };
       await saveDialogue(redis, dialogueId, session);
 
-      // Serve pre-warmed TTS; fall back to live synthesis if slot is empty
+      // Serve pre-warmed TTS; fall back to live synthesis if slot is empty.
+      // Opener is the bear's first dialogue line → dialogue voice
+      // (workorder 2026-04-29-tts-three-voice-roles).
       let ttsUrl = getOpenerTtsUrl(opener.lang, opener.index);
       if (!ttsUrl) {
         try {
-          const tts = await ttsSynthesize({ text: opener.text, lang: primary });
+          const tts = await ttsSynthesize({
+            text: opener.text,
+            lang: primary,
+            purpose: 'dialogue',
+          });
           ttsUrl = tts.audioUrl;
         } catch {
           ttsUrl = null;
@@ -336,12 +342,15 @@ export default async function storyRoutes(fastify) {
               });
         nextQuestion = { round: round + 1, ...candidate, ttsUrl: null };
 
-        // Pre-gen TTS for next question (non-fatal)
+        // Pre-gen TTS for next question (non-fatal). The next dialogue
+        // question is spoken by the bear → dialogue voice
+        // (workorder 2026-04-29-tts-three-voice-roles).
         if (nextQuestion?.text) {
           try {
             const tts = await ttsSynthesize({
               text: nextQuestion.text,
               lang: session.childProfile.primaryLang,
+              purpose: 'dialogue',
             });
             nextQuestion.ttsUrl = tts.audioUrl;
           } catch {

@@ -1,12 +1,16 @@
 // ============================================================================
 // services/tts.js — dual-provider TTS (DashScope CosyVoice + ElevenLabs)
 //
-// Workorder: 2026-04-29-asr-tts-dual-provider §2.1, §3.3, §3.4
+// Workorders:
+//   - 2026-04-29-asr-tts-dual-provider     §2.1, §3.3, §3.4 (provider chain)
+//   - 2026-04-29-cosyvoice-websocket       (WebSocket for cosyvoice-v2)
+//   - 2026-04-29-tts-three-voice-roles     (3 purposes: narration/dialogue/vocab,
+//                                           each with its own model + voice)
 //
-// Public API (UNCHANGED — callers in src/routes/story.js and others do NOT
-// need to change):
-//   - synthesize({ text, lang, voiceId, speed, storyId, pageNum })
+// Public API:
+//   - synthesize({ text, lang, voiceId, speed, storyId, pageNum, purpose })
 //       → { audioUrl, durationMs, cached, provider?, latencyMs? }
+//       purpose ∈ { 'narration' (default) | 'dialogue' | 'vocab' }
 //   - isMockMode()
 //   - _clearCache()
 //
@@ -70,6 +74,49 @@ function defaultDashScopeVoiceId(lang) {
   return env.DASHSCOPE_TTS_VOICE_ZH; // safe fallback
 }
 
+// ----------------------------------------------------------------------------
+// Per-purpose voice + model resolver — workorder 2026-04-29-tts-three-voice-roles
+//
+// Three purposes, each with its own model + per-language voice:
+//   - narration : 12-page story narration   (cosyvoice-v2 + longxiaoxia_v2)
+//   - dialogue  : 小熊 dialogue / Q&A        (cosyvoice-v3-flash + longhuhu_v3)
+//   - vocab     : single-word vocab readout  (cosyvoice-v2 + longxiaoxia_v2)
+//
+// Reads from process.env directly (NOT env.js) so that new fields don't
+// require an env.js change (red line: don't touch src/config/env.js). New
+// field names take precedence; missing → fall back to legacy fields:
+//   - DASHSCOPE_TTS_VOICE_ZH / EN / VOCAB
+//   - DASHSCOPE_TTS_MODEL
+// ----------------------------------------------------------------------------
+const VALID_PURPOSES = new Set(['narration', 'dialogue', 'vocab']);
+
+function resolvePurposeConfig(purpose, lang) {
+  const p = VALID_PURPOSES.has(purpose) ? purpose : 'narration';
+  const upPurpose = p.toUpperCase();
+  const upLang = (lang === 'en' ? 'EN' : 'ZH'); // any non-en treated as zh
+
+  // ---- model ----
+  const newModel = process.env[`DASHSCOPE_TTS_MODEL_${upPurpose}`];
+  const legacyModel = env.DASHSCOPE_TTS_MODEL;
+  const model = newModel || legacyModel || 'cosyvoice-v2';
+
+  // ---- voice ----
+  // New per-purpose, per-lang field takes precedence.
+  const newVoice = process.env[`DASHSCOPE_TTS_VOICE_${upPurpose}_${upLang}`];
+
+  // Legacy fallback — vocab had its own legacy field; narration/dialogue
+  // share the lang-specific legacy fields.
+  let legacyVoice;
+  if (p === 'vocab') {
+    legacyVoice = env.DASHSCOPE_TTS_VOICE_VOCAB || defaultDashScopeVoiceId(lang);
+  } else {
+    legacyVoice = defaultDashScopeVoiceId(lang);
+  }
+  const voice = newVoice || legacyVoice || 'longxiaoxia_v2';
+
+  return { model, voice, purpose: p };
+}
+
 function cacheKey({ text, voiceId, lang, speed, chainKey }) {
   return createHash('sha256')
     .update(`${text}|${voiceId || ''}|${lang}|${speed}|${chainKey}`)
@@ -93,6 +140,7 @@ export async function synthesize({
   speed = 1.0,
   storyId = null,
   pageNum = null,
+  purpose = 'narration',
 }) {
   if (typeof text !== 'string' || text.length === 0) {
     throw new Error('tts.synthesize: text is empty');
@@ -110,16 +158,28 @@ export async function synthesize({
   const order = [primary, ...chain.filter((n) => n !== primary)];
   const chainKey = order.join('>');
 
+  // Resolve per-purpose model + voice for DashScope. ElevenLabs keeps its
+  // existing voice mapping (purpose-agnostic).
+  const dashscopeCfg = resolvePurposeConfig(purpose, lang);
+
   // Cache key uses the *resolved* voiceId for the primary provider so that
   // calls with no explicit voiceId share cache entries deterministically.
   const effVoiceForKey =
     voiceId ||
     (primary === 'dashscope'
-      ? defaultDashScopeVoiceId(lang)
+      ? dashscopeCfg.voice
       : defaultElevenLabsVoiceId(lang)) ||
     'voice_default';
 
-  const key = cacheKey({ text, voiceId: effVoiceForKey, lang, speed, chainKey });
+  // Include purpose+model in cache key so narration/dialogue/vocab don't
+  // collide on the same text.
+  const key = cacheKey({
+    text,
+    voiceId: effVoiceForKey,
+    lang,
+    speed,
+    chainKey: `${chainKey}|${dashscopeCfg.purpose}|${dashscopeCfg.model}`,
+  });
   if (cache.has(key)) {
     return { ...cache.get(key), cached: true };
   }
@@ -141,8 +201,21 @@ export async function synthesize({
     return {
       name,
       timeout: timeoutMs,
-      fn: (args, signal) =>
-        fn({ ...args, voiceId: voiceId || resolveVoiceId(name, lang) }, signal),
+      fn: (args, signal) => {
+        // Per-provider voice + (DashScope-only) model resolution.
+        const providerArgs = {
+          ...args,
+          voiceId:
+            voiceId ||
+            (name === 'dashscope'
+              ? dashscopeCfg.voice
+              : resolveVoiceId(name, lang)),
+        };
+        if (name === 'dashscope') {
+          providerArgs.model = dashscopeCfg.model;
+        }
+        return fn(providerArgs, signal);
+      },
     };
   });
 
@@ -248,14 +321,18 @@ function clampRate(speed) {
 }
 
 async function dashscopeTts(args, signal) {
-  const { text, lang, voiceId, speed } = args;
+  const { text, lang, voiceId, speed, model: argsModel } = args;
   if (!env.DASHSCOPE_API_KEY) {
     throw new ProviderError('DASHSCOPE_API_KEY not configured', {
       status: 401,
       provider: 'dashscope',
     });
   }
-  const model = env.DASHSCOPE_TTS_MODEL || 'cosyvoice-v2';
+  // Per-purpose model selection (workorder 2026-04-29-tts-three-voice-roles):
+  // synthesize() resolves the correct model via resolvePurposeConfig and
+  // passes it down here. Keep legacy DASHSCOPE_TTS_MODEL as final fallback
+  // so direct callers (tests, REPL) still work.
+  const model = argsModel || env.DASHSCOPE_TTS_MODEL || 'cosyvoice-v2';
   const voice = voiceId || defaultDashScopeVoiceId(lang) || 'longhuhu_v3';
   const taskId = randomUUID().replace(/-/g, '');
 
@@ -602,6 +679,7 @@ export const __test__ = {
   elevenlabsTts,
   defaultElevenLabsVoiceId,
   defaultDashScopeVoiceId,
+  resolvePurposeConfig,
   bufferToDataUrl,
   estimateMp3DurationMs,
 };
