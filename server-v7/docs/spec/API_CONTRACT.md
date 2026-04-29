@@ -988,40 +988,94 @@ interface StartDialogueResponse {
 
 ### 7.3 `POST /api/story/dialogue/:id/turn`
 
-推进一轮对话。
+推进一轮对话。**v7.2 起 (2026-04-29) 走 co-creation 协议** —— 见 `PROMPT_SPEC_v7_2.md`。
 
 **鉴权**:deviceToken
 
-**Request**:
+**Request** (与 patch v3 一致, 字段不变):
 ```ts
 interface DialogueTurnRequest {
   round: number;                        // 当前是第几轮,1-based
-  userInput: string;                    // ASR 转写结果
+  userInput?: string;                   // 文本输入 (与 audioBase64 二选一)
+  audioBase64?: string;                 // 音频 base64 (server 跑 ASR)
+  audioMimeType?: string;               // audioBase64 提供时必传
   skipRemaining?: boolean;              // true 则提前结束(4 轮后允许)
+  locale?: Locale;                      // 用于本地化兜底
 }
 ```
 
-**Response 200**:
+**Response 200** (v7.2 扩展):
 ```ts
 interface DialogueTurnResponse {
-  done: boolean;                         // true 表示对话已结束(到轮次上限或 skipRemaining)
-  nextQuestion: {
+  done: boolean;                         // true = 对话结束 (LLM 主动 done OR 硬上限 OR empty 死循环 OR skipRemaining)
+  nextQuestion: {                        // done=false 时必非空 (server 兜底保证)
     round: number;
     text: string;
     textLearning?: string | null;
     ttsUrl?: string | null;
-  } | null;                              // done=true 时为 null
-  summary?: {
+  } | null;
+  summary: {                             // done=true 时返回, 兼容 7.4 generate 输入
     mainCharacter: string;
     scene: string;
     conflict: string;
-  } | null;                              // done=true 时返回 LLM 总结的故事要素
-  safetyLevel: 'ok' | 'warn' | 'blocked'; // 内容安全三级
-  safetyReplacement?: string | null;     // 如 level=warn,给出小熊转话题的话术
+    outline?: string[];                  // v7.2: 与 storyOutline.paragraphs 同
+  } | null;
+  safetyLevel: 'ok' | 'warn' | 'blocked';
+  safetyReplacement?: string | null;
+  recognizedText?: string;               // patch v3: server-side ASR 结果回显
+
+  // -------- v7.2 新增字段 ----------
+  mode?: 'cheerleader' | 'storyteller' | null;  // server-judge 自适应模式
+  lastTurnSummary?: string | null;       // ≤30 字, "child added X about Y"
+  arcUpdate?: {                          // 本轮孩子贡献了哪一步骨架
+    setting?: string;
+    character?: string;
+    goal?: string;
+    obstacle?: string;
+    climax?: string;
+    resolution?: string;
+  } | null;
+  storyOutline?: {                       // done=true 时驱动 TV StoryPreviewScreen
+    paragraphs: string[];                // 3-5 段, ≤60 字 / 段
+  } | null;
+  _provider?: string | null;             // 'gemini-v7_2' | 'default-bank' | 'mock'
 }
 ```
 
+**business rules** (v7.2):
+- `roundCount` 是硬上限 (3-4 岁 = 5, 5-8 岁 = 7), 不是目标; LLM 可主动 `done=true` 提前结束
+- 当连续 3 轮 user reply `vocabulary='empty'` 时, server 强制 `done=true` 防止死循环
+- LLM Gemini retry 2 次仍失败则走 default-bank fallback, 永不返回空 `nextQuestion`
+- `done=true` 时 server 必返回 `storyOutline.paragraphs` (LLM 没产或缺失走默认 outline 兜底)
+
 **可能错误**:`30006`(blocked 时)、`30011`(ASR 文本为空或乱码)、`30012`(round > 7)
+
+### 7.3b `POST /api/story/dialogue/:id/confirm` (v7.2 新增)
+
+小孩在 TV `StoryPreviewScreen` 按 OK 确认 outline → 触发故事生成 pipeline。
+等价于 `/api/story/generate` 但从 dialogue session 直接读取 outline + childId, TV 客户端只发一次 round-trip。
+
+**鉴权**:deviceToken
+
+**Request**:`{}` (空 body, dialogueId 在 path)
+
+**Response 202** (与 7.4 同形, TV 直接复用 GenerateStoryResponse 类型):
+```ts
+interface DialogueConfirmResponse {
+  storyId: string;
+  status: 'queued';
+  queuePosition?: number;
+  estimatedDurationSec: number;
+  priority: 'normal' | 'high';
+}
+```
+
+**business rules**:
+- 仅当 dialogue session `storyOutline` 已生成 (即 7.3 返回 `done=true`) 才接受;否则 90002 PARAM_INVALID
+- 走与 7.4 相同的额度 / 日限 / Bull 队列逻辑
+- 创建 Story row 时 metadata 标记 `provider: 'mixed'`, dialogueSummary 包含 outline.paragraphs 给后续 12 页 LLM
+
+**可能错误**:`30001`(dialogue 未结束)、`30004`、`30005`、`30009`
 
 ### 7.4 `POST /api/story/generate`
 

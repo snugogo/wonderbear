@@ -1,9 +1,15 @@
 // ============================================================================
 // services/llm.js — LLM calls for dialogue + story expansion
 //
-// Two entry points:
+// Three entry points:
 //   - generateDialogueTurn({ systemPrompt, history, userInput, round, roundCount })
-//       → { text, textLearning, done }
+//       → { nextQuestion, done }   (v7.1 — backward compat)
+//   - generateDialogueTurnV2({ systemPrompt, history, userInput, round, roundCount,
+//                              primaryLang, learningLang })
+//       → { mode, lastTurnSummary, nextQuestion, arcUpdate, done, storyOutline,
+//           safetyLevel, safetyReplacement, _provider }
+//       The v7.2 co-creation contract (PROMPT_SPEC_v7_2 §3). Includes built-in
+//       retry + default-bank fallback so the route never has to handle null.
 //   - generateStoryJson({ systemPrompt, dialogueSummary, childProfile })
 //       → full 12-page story JSON (see PROMPT_SPEC_v7_1 §2.1)
 //
@@ -144,6 +150,398 @@ async function liveDialogueTurn({ systemPrompt, history = [], userInput, round, 
     done: round >= roundCount,
   };
 }
+
+// ---------------------------------------------------------------------------
+// v7.2 co-creation dialogue turn (PROMPT_SPEC_v7_2 §3)
+// ---------------------------------------------------------------------------
+
+const DEFAULT_DIALOGUE_BANK = {
+  zh: [
+    '主角想要去哪里玩呢?',
+    '主角的好朋友长什么样?',
+    '他们想要找什么宝贝?',
+    '路上会遇到什么小困难?',
+    '他们要怎么把困难变成惊喜?',
+    '故事最后他们一起做什么?',
+    '我们给这个故事起个温暖的名字吧。',
+  ],
+  en: [
+    'Where would the hero love to go?',
+    'What does the hero\'s best friend look like?',
+    'What treasure are they hoping to find?',
+    'What gentle bump shows up along the way?',
+    'How do they turn that bump into a surprise?',
+    'What do they all do together at the end?',
+    'Let\'s pick a warm name for this story.',
+  ],
+  pl: [
+    'Dokąd bohater chce się wybrać?',
+    'Jak wygląda najlepszy przyjaciel bohatera?',
+    'Jakiego skarbu szukają?',
+    'Jaka mała przeszkoda się pojawi?',
+    'Jak zamienią ją w niespodziankę?',
+    'Co zrobią razem na końcu?',
+    'Wymyślmy ciepłą nazwę dla tej historii.',
+  ],
+  ro: [
+    'Unde ar vrea să meargă eroul?',
+    'Cum arată cel mai bun prieten al eroului?',
+    'Ce comoară speră să găsească?',
+    'Ce mică piedică apare pe drum?',
+    'Cum o transformă într-o surpriză?',
+    'Ce fac împreună la final?',
+    'Să găsim un nume cald pentru această poveste.',
+  ],
+};
+
+/**
+ * Default-bank fallback for v7.2. Returns a guaranteed-non-null payload that
+ * matches the v7.2 contract so the route layer can pretend the LLM
+ * succeeded. Used by liveDialogueTurnV2 after both Gemini attempts fail.
+ *
+ * @param {object} args
+ * @param {number} args.round            current 1-based round
+ * @param {string} args.primaryLang      'en'|'zh'|'pl'|'ro'
+ * @param {boolean} [args.forceDone]     if true, return done=true + storyOutline
+ * @returns {object} v7.2 turn payload
+ */
+export function defaultDialogueTurnV2({
+  round,
+  primaryLang = 'en',
+  forceDone = false,
+}) {
+  const bank = DEFAULT_DIALOGUE_BANK[primaryLang] || DEFAULT_DIALOGUE_BANK.en;
+  const idx = Math.max(0, Math.min((round || 1) - 1, bank.length - 1));
+
+  if (forceDone) {
+    return {
+      mode: 'storyteller',
+      lastTurnSummary: null,
+      nextQuestion: null,
+      arcUpdate: null,
+      done: true,
+      storyOutline: {
+        paragraphs: defaultStoryOutline(primaryLang),
+      },
+      safetyLevel: 'ok',
+      safetyReplacement: null,
+      _provider: 'default-bank-finished',
+    };
+  }
+
+  return {
+    mode: 'storyteller',
+    lastTurnSummary: null,
+    nextQuestion: {
+      text: bank[idx] || bank[0],
+      textLearning: null,
+    },
+    arcUpdate: null,
+    done: false,
+    storyOutline: null,
+    safetyLevel: 'ok',
+    safetyReplacement: null,
+    _provider: 'default-bank',
+  };
+}
+
+function defaultStoryOutline(primaryLang) {
+  const banks = {
+    zh: [
+      '一个温暖的早晨,小主角准备出门冒险。',
+      '路上他遇见了一个新朋友,两个人决定一起走。',
+      '他们碰到了一个小麻烦,但用聪明的办法解决了。',
+      '太阳落山,他们一起带着笑回到家里。',
+    ],
+    en: [
+      'On a warm morning the little hero gets ready for a small adventure.',
+      'On the way, a new friend joins and they decide to go together.',
+      'A gentle bump appears, but they solve it with a clever idea.',
+      'When the sun sets, they walk home smiling side by side.',
+    ],
+    pl: [
+      'W ciepły poranek bohater rusza na małą przygodę.',
+      'Po drodze spotyka nowego przyjaciela.',
+      'Pojawia się drobna przeszkoda, ale rozwiązują ją razem.',
+      'O zachodzie słońca wracają do domu z uśmiechem.',
+    ],
+    ro: [
+      'Într-o dimineață caldă, micul erou pornește în aventură.',
+      'Pe drum apare un prieten nou și pleacă împreună.',
+      'O mică piedică apare, dar o rezolvă împreună.',
+      'La apus se întorc acasă zâmbind.',
+    ],
+  };
+  return banks[primaryLang] || banks.en;
+}
+
+/**
+ * v7.2 dialogue turn — co-creation contract.
+ *
+ * @param {object} args
+ * @param {string} args.systemPrompt
+ * @param {Array<{role:string,text:string,round:number}>} [args.history]
+ * @param {string} args.userInput
+ * @param {number} args.round              1-based current round
+ * @param {number} args.roundCount         hard cap (5 or 7)
+ * @param {string} [args.primaryLang]
+ * @param {string} [args.learningLang]
+ * @param {boolean} [args.forceDone]       hard cap reached → request storyOutline
+ * @returns {Promise<object>}              v7.2 turn payload (always non-null)
+ */
+export async function generateDialogueTurnV2(args) {
+  if (isMockMode()) return mockDialogueTurnV2(args);
+  return liveDialogueTurnV2(args);
+}
+
+function mockDialogueTurnV2({
+  round,
+  roundCount,
+  primaryLang = 'en',
+  forceDone = false,
+}) {
+  // Deterministic mock that walks the arc steps, used by smoke tests.
+  const arcByRound = ['character', 'setting', 'goal', 'obstacle', 'climax', 'resolution'];
+  const willFinish = forceDone || round >= roundCount || round >= 4;
+  if (willFinish) {
+    return {
+      mode: 'storyteller',
+      lastTurnSummary: 'mock summary of child input',
+      nextQuestion: null,
+      arcUpdate: { resolution: 'happy ending' },
+      done: true,
+      storyOutline: { paragraphs: defaultStoryOutline(primaryLang) },
+      safetyLevel: 'ok',
+      safetyReplacement: null,
+      _provider: 'mock-finished',
+    };
+  }
+  const bank = DEFAULT_DIALOGUE_BANK[primaryLang] || DEFAULT_DIALOGUE_BANK.en;
+  return {
+    mode: round === 1 ? 'cheerleader' : 'storyteller',
+    lastTurnSummary: 'mock summary',
+    nextQuestion: { text: bank[round - 1] || bank[0], textLearning: null },
+    arcUpdate: { [arcByRound[round - 1] || 'character']: 'mock' },
+    done: false,
+    storyOutline: null,
+    safetyLevel: 'ok',
+    safetyReplacement: null,
+    _provider: 'mock',
+  };
+}
+
+async function callGeminiDialogueV2Once({
+  systemPrompt,
+  history,
+  userInput,
+  round,
+  roundCount,
+}) {
+  const messages = [
+    { role: 'user', parts: [{ text: systemPrompt }] },
+    { role: 'model', parts: [{ text: 'Understood. I am Bear.' }] },
+    ...((history || []).map((h) => ({
+      role: h.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: h.text }],
+    }))),
+    {
+      role: 'user',
+      parts: [
+        {
+          text: `Round ${round}/${roundCount}\nChild just said: ${userInput}\nNow produce the v7.2 JSON.`,
+        },
+      ],
+    },
+  ];
+
+  const resp = await fetch(`${GEMINI_URL}?key=${env.GEMINI_API_KEY}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: messages,
+      generationConfig: {
+        temperature: 0.85,
+        maxOutputTokens: 600,
+        responseMimeType: 'application/json',
+        thinkingConfig: { thinkingBudget: 0 },
+      },
+    }),
+  });
+  if (!resp.ok) {
+    console.warn(`[llm] dialogueV2 Gemini HTTP ${resp.status}`);
+    return null;
+  }
+  let data;
+  try {
+    data = await resp.json();
+  } catch {
+    console.warn('[llm] dialogueV2 Gemini envelope not JSON');
+    return null;
+  }
+  let raw = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';
+  if (typeof raw === 'string') {
+    raw = raw.trim();
+    if (raw.startsWith('```json')) raw = raw.slice(7);
+    else if (raw.startsWith('```')) raw = raw.slice(3);
+    if (raw.endsWith('```')) raw = raw.slice(0, -3);
+    raw = raw.trim();
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    console.warn(`[llm] dialogueV2 Gemini body not JSON: ${String(raw).slice(0, 200)}`);
+    return null;
+  }
+  return parsed;
+}
+
+/**
+ * Normalize whatever the LLM returned into a strict v7.2 payload. Tolerates
+ * v7.1-shape responses (only `nextQuestion`) and missing optional fields.
+ */
+function coerceDialogueV2Payload(parsed, { round, primaryLang, forceDone }) {
+  if (!parsed || typeof parsed !== 'object') return null;
+
+  // Normalize nextQuestion (accept several common field shapes).
+  let nq = null;
+  const nqRaw =
+    parsed.nextQuestion ??
+    (parsed.question ? { text: parsed.question } : null) ??
+    (parsed.next_question ?? null) ??
+    (typeof parsed.text === 'string' ? { text: parsed.text } : null);
+  if (nqRaw && typeof nqRaw.text === 'string' && nqRaw.text.trim()) {
+    nq = {
+      text: nqRaw.text.trim(),
+      textLearning:
+        typeof nqRaw.textLearning === 'string' && nqRaw.textLearning.trim()
+          ? nqRaw.textLearning.trim()
+          : null,
+    };
+  }
+
+  const done = forceDone === true ? true : parsed.done === true;
+
+  let storyOutline = null;
+  if (done) {
+    const ps =
+      parsed?.storyOutline?.paragraphs ??
+      parsed?.outline?.paragraphs ??
+      null;
+    if (Array.isArray(ps) && ps.length >= 1) {
+      const cleaned = ps
+        .map((p) => (typeof p === 'string' ? p.trim() : ''))
+        .filter(Boolean)
+        .slice(0, 5);
+      if (cleaned.length >= 3) {
+        storyOutline = { paragraphs: cleaned };
+      }
+    }
+    if (!storyOutline) {
+      // LLM said done but no usable outline — synthesize from default bank.
+      storyOutline = { paragraphs: defaultStoryOutline(primaryLang) };
+    }
+  }
+
+  if (done && !storyOutline) return null;
+  if (!done && !nq) return null;
+
+  const mode =
+    parsed.mode === 'cheerleader' || parsed.mode === 'storyteller'
+      ? parsed.mode
+      : 'cheerleader';
+
+  let lastTurnSummary =
+    typeof parsed.lastTurnSummary === 'string'
+      ? parsed.lastTurnSummary.trim()
+      : null;
+  if (lastTurnSummary && lastTurnSummary.length > 60) {
+    lastTurnSummary = lastTurnSummary.slice(0, 60);
+  }
+  if (lastTurnSummary === '') lastTurnSummary = null;
+
+  let arcUpdate = null;
+  if (parsed.arcUpdate && typeof parsed.arcUpdate === 'object' && !Array.isArray(parsed.arcUpdate)) {
+    arcUpdate = parsed.arcUpdate;
+  }
+
+  const safetyLevel =
+    parsed.safetyLevel === 'warn' || parsed.safetyLevel === 'blocked'
+      ? parsed.safetyLevel
+      : 'ok';
+  const safetyReplacement =
+    typeof parsed.safetyReplacement === 'string' && parsed.safetyReplacement.trim()
+      ? parsed.safetyReplacement.trim()
+      : null;
+
+  return {
+    mode,
+    lastTurnSummary,
+    nextQuestion: done ? null : nq,
+    arcUpdate,
+    done,
+    storyOutline,
+    safetyLevel,
+    safetyReplacement,
+    _provider: 'gemini-v7_2',
+  };
+}
+
+async function liveDialogueTurnV2({
+  systemPrompt,
+  history = [],
+  userInput,
+  round,
+  roundCount,
+  primaryLang = 'en',
+  learningLang = 'none',
+  forceDone = false,
+}) {
+  let payload = null;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const parsed = await callGeminiDialogueV2Once({
+        systemPrompt,
+        history,
+        userInput,
+        round,
+        roundCount,
+      });
+      payload = coerceDialogueV2Payload(parsed, { round, primaryLang, forceDone });
+    } catch (err) {
+      console.warn(`[llm] dialogueV2 attempt ${attempt} threw:`, err?.message || err);
+      payload = null;
+    }
+    if (payload) break;
+    if (attempt === 1) {
+      console.warn('[llm] dialogueV2 retrying once before falling back to default');
+    }
+  }
+
+  if (!payload) {
+    console.warn(
+      `[llm] dialogueV2 using default-bank fallback for round ${round}/${roundCount} (${primaryLang}) forceDone=${forceDone}`,
+    );
+    payload = defaultDialogueTurnV2({ round, primaryLang, forceDone });
+  }
+
+  // Honor learning lang exposure if missing on next question — non-fatal.
+  if (
+    payload.nextQuestion &&
+    learningLang &&
+    learningLang !== 'none' &&
+    !payload.nextQuestion.textLearning
+  ) {
+    payload.nextQuestion.textLearning = null;
+  }
+  return payload;
+}
+
+// Expose internals for tests.
+export const __test = {
+  coerceDialogueV2Payload,
+  defaultStoryOutline,
+};
 
 // ---------------------------------------------------------------------------
 // Story 12-page expansion

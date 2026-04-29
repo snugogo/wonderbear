@@ -44,6 +44,16 @@ const overrides = {
     playFull: 'Odtwórz całość',
     sequel: 'Stwórz kontynuację',
   },
+  dialogue: {
+    youSaid: 'Powiedziałeś:',
+  },
+  storyPreview: {
+    title: 'Twoja historia nabiera kształtu',
+    subtitle: 'Zobacz, jak Miś ją złożył',
+    confirm: 'Zacznij rysować historię',
+    confirmHint: 'Naciśnij OK, by potwierdzić',
+    fallbackParagraph: 'Miś układa Twoją historię w coś przytulnego.',
+  },
   common: { loading: 'Ładowanie…' },
 };
 

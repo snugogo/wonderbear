@@ -16,6 +16,7 @@ export type ScreenName =
   | 'home'
   | 'create'          // iter12: "来讲故事" — creation hub (story grid + "+" tile)
   | 'dialogue'
+  | 'story-preview'  // v7.2: 3-5 paragraph outline shown after dialogue done=true, before generating
   | 'generating'
   | 'story-cover'
   | 'story-body'

@@ -337,13 +337,25 @@ async function submitTurn(payload: {
       summary: data.summary,
       safetyLevel: data.safetyLevel,
       safetyReplacement: data.safetyReplacement,
+      mode: data.mode ?? null,
+      lastTurnSummary: data.lastTurnSummary ?? null,
+      arcUpdate: data.arcUpdate ?? null,
+      storyOutline: data.storyOutline ?? null,
     });
 
     if (data.done) {
-      // Kick off generation immediately; if the bear has a final TTS line
-      // (server might include one in the last turn), play it in parallel.
+      // v7.2: when the server provides a storyOutline (3-5 paragraphs)
+      // we route through the new StoryPreviewScreen so the kid sees their
+      // story laid out and presses Enter to start generating. If the
+      // outline is missing (legacy server / null path), fall back to the
+      // direct generate→generating navigation as before.
       window.setTimeout(() => {
-        if (mounted) startGenerationAndNavigate();
+        if (!mounted) return;
+        if (data.storyOutline?.paragraphs?.length) {
+          screen.go('story-preview');
+        } else {
+          startGenerationAndNavigate();
+        }
       }, 600);
     } else {
       speakOrAdvance();
@@ -429,9 +441,20 @@ async function onScenePick(s: Scene): Promise<void> {
       summary: data.summary,
       safetyLevel: data.safetyLevel,
       safetyReplacement: data.safetyReplacement,
+      mode: data.mode ?? null,
+      lastTurnSummary: data.lastTurnSummary ?? null,
+      arcUpdate: data.arcUpdate ?? null,
+      storyOutline: data.storyOutline ?? null,
     });
     if (data.done) {
-      window.setTimeout(() => { if (mounted) startGenerationAndNavigate(); }, 600);
+      window.setTimeout(() => {
+        if (!mounted) return;
+        if (data.storyOutline?.paragraphs?.length) {
+          screen.go('story-preview');
+        } else {
+          startGenerationAndNavigate();
+        }
+      }, 600);
     } else {
       speakOrAdvance();
     }
@@ -646,6 +669,20 @@ onBeforeUnmount(() => {
     </header>
 
     <!--
+      v7.2 turn-summary ribbon — shows server's `lastTurnSummary` in a 30-char
+      strip above the bear. Only visible from round 2 onwards (round 1 has
+      no prior turn to summarize). Capped at 30 visible chars by the store.
+    -->
+    <div
+      v-if="dialogue.lastTurnSummary && dialogue.round >= 2"
+      class="turn-summary-ribbon wb-text-shadow-sm"
+      role="status"
+    >
+      <span class="turn-summary-label">{{ t('dialogue.youSaid') }}</span>
+      <span class="turn-summary-text">{{ dialogue.lastTurnSummary }}</span>
+    </div>
+
+    <!--
       3A · Waiting for child to press mic (iter13g-3 redesign)
       Three-column layout per founder: [bear | scene cards | remote].
         - Bear: bear_magic_wand, enlarged, bottom-aligned so it "stands on
@@ -714,13 +751,23 @@ onBeforeUnmount(() => {
       </div>
 
       <!--
-        iter13g-4: merged single-sentence hint pill. Was two lines
-        ("Or pick a theme" caption above grid + "Hold the mic" pill at
-        bottom). Caption was getting eaten by the watercolor highlights.
-        Now it's one sentence on a stronger pill under the scene grid.
+        v7.2 §1.3: round 1 shows the full "hold mic" text so the kid learns
+        the gesture. From round 2 onwards we collapse it to just the remote
+        icon — by then the gesture is muscle memory and the screen real
+        estate is better spent on the conversation.
       -->
-      <div class="hold-hint-pill wb-text-shadow">
-        {{ t('dialogue.holdMicWithScenes') }}
+      <div
+        class="hold-hint-pill wb-text-shadow"
+        :class="{ 'is-compact': dialogue.round >= 2 }"
+      >
+        <img
+          v-if="dialogue.round >= 2"
+          class="hold-hint-icon"
+          :src="asset('ui/ui_remote.webp')"
+          alt=""
+          aria-hidden="true"
+        />
+        <span v-else>{{ t('dialogue.holdMicWithScenes') }}</span>
       </div>
     </main>
 
@@ -908,6 +955,39 @@ onBeforeUnmount(() => {
   font-size: 16px;
   font-family: var(--ff-display);
   letter-spacing: 0.06em;
+}
+
+/*
+ * v7.2 turn-summary ribbon — narrow pill anchored under the topbar showing
+ * the server's `lastTurnSummary` (≤30 chars). Round 1 hides it (no prior
+ * turn). Higher z-index than stage so it sits above bear sprite.
+ */
+.turn-summary-ribbon {
+  position: relative;
+  z-index: 2;
+  align-self: center;
+  margin-top: 8px;
+  padding: 6px 18px;
+  border-radius: 999px;
+  background: rgba(26, 15, 10, 0.55);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 720px;
+  font-family: var(--ff-display);
+  color: var(--c-cream);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.turn-summary-label {
+  opacity: 0.7;
+  font-size: 16px;
+}
+.turn-summary-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ─── Stage (shared) ─── */
@@ -1157,6 +1237,25 @@ onBeforeUnmount(() => {
   background: rgba(26, 15, 10, 0.72);
   backdrop-filter: blur(3px);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+/*
+ * v7.2: round 2+ collapses pill to a remote-icon-only chip. Reduced
+ * padding + transparent background so it reads as "subtle reminder"
+ * rather than "primary CTA".
+ */
+.hold-hint-pill.is-compact {
+  padding: 10px 14px;
+  background: rgba(26, 15, 10, 0.45);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+}
+.hold-hint-pill.is-compact .hold-hint-icon {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
 }
 /* Right-anchored hint stack — remote + mic side-by-side inside TV safe-area. */
 .hint-icons-right {
