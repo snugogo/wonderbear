@@ -16,15 +16,12 @@
 //   - process.env.TTS_TIMEOUT_MS      per-provider timeout (default 15000)
 //
 // Providers:
-//   - dashscope  : Aliyun DashScope CosyVoice / Qwen-TTS (REST
-//                  multimodal-generation/generation, returns audio.url JSON
-//                  → we download the mp3/wav and return a Buffer).
-//                  CosyVoice-v2 voices (longhuhu_v3 etc.) require the
-//                  WebSocket path which is NOT implemented here; the REST
-//                  endpoint accepts the qwen3-tts-flash family + voices like
-//                  Cherry/Ethan/Serena. If env.DASHSCOPE_TTS_MODEL is set to
-//                  cosyvoice-v2 the REST call may 400/InvalidParameter, in
-//                  which case the provider chain falls back to ElevenLabs.
+//   - dashscope  : Aliyun DashScope CosyVoice via WebSocket
+//                  (wss://dashscope.aliyuncs.com/api-ws/v1/inference/).
+//                  Workorder 2026-04-29-cosyvoice-websocket — REST was
+//                  replaced with WebSocket because cosyvoice-v2 voices like
+//                  longhuhu_v3 are documented as WebSocket-only. Returns an
+//                  mp3 Buffer (format=mp3, sample_rate=22050).
 //   - elevenlabs : ElevenLabs text-to-speech with timestamps (existing
 //                  implementation, unchanged behavior — returns mp3 base64).
 //
@@ -33,7 +30,8 @@
 // callers already use, persisting to R2 when storyId+pageNum are supplied.
 // ============================================================================
 
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import WebSocket from 'ws';
 import env from '../config/env.js';
 import { persistAudio } from './mediaStorage.js';
 import { callWithFallback, ProviderError } from '../lib/provider-chain.js';
@@ -211,53 +209,43 @@ function mockSynthesize({ text, key }) {
 }
 
 // ----------------------------------------------------------------------------
-// Provider 1 — DashScope CosyVoice / Qwen-TTS via REST multimodal-generation
+// Provider 1 — DashScope CosyVoice via WebSocket (cosyvoice-v2 + longhuhu_v3)
+//
+// Workorder: 2026-04-29-cosyvoice-websocket
 //
 // Endpoint:
-//   POST {DASHSCOPE_BASE}/api/v1/services/aigc/multimodal-generation/generation
-//   Authorization: Bearer {DASHSCOPE_API_KEY}
-//   Body:
-//     {
-//       "model": "<DASHSCOPE_TTS_MODEL>",
-//       "input": {
-//         "text":  "<text>",
-//         "voice": "<voice id from .env>",
-//         "language_type": "<Chinese|English|...>"
-//       }
-//     }
-//   Response:
-//     { output: { audio: { url, expires_at } }, ... }
+//   wss://dashscope.aliyuncs.com/api-ws/v1/inference/
+//   Header: Authorization: bearer <DASHSCOPE_API_KEY>
+//           X-DashScope-DataInspection: enable
 //
-// The returned URL is a 24h-TTL upstream wav/mp3. We download it into a
-// Buffer so callers don't need to handle URL expiration.
+// Protocol (simplified short-text duplex):
+//   1. open WS
+//   2. send run-task   (JSON, declares model/voice/format)
+//   3. wait for header.event === 'task-started'
+//   4. send continue-task  (JSON, payload.input.text = the actual text)
+//   5. send finish-task    (JSON, payload.input = {})
+//   6. server streams binary mp3 frames + emits text events
+//   7. wait for header.event === 'task-finished'
+//   8. concat binary buffers → return mp3 Buffer
 //
-// IMPORTANT: this REST endpoint backs the qwen3-tts-flash model family and
-// (per Aliyun docs) the cosyvoice-v3-flash family. cosyvoice-v2 voices like
-// `longhuhu_v3` are documented as WebSocket-only. If DASHSCOPE_TTS_MODEL is
-// configured to cosyvoice-v2 + longhuhu_v3 the upstream will respond with an
-// HTTP 400 InvalidParameter; the provider-chain treats 400 as a CLIENT error
-// and the workorder explicitly forbids mock fallback, so the chain will then
-// proceed to ElevenLabs (we override the 400 here to a non-client error so
-// the fallback actually triggers — see explanation below).
+// Errors: header.event === 'task-failed' → ProviderError(non-client).
+// Premature WS close before task-finished → ProviderError(non-client) so
+// the provider chain falls back to ElevenLabs.
+//
+// Timeout: caller (provider-chain) wraps the call with AbortSignal+timeout.
+// We listen on signal.abort to close the WS and reject promptly.
 // ----------------------------------------------------------------------------
 
-const DASHSCOPE_BASE_INTL = 'https://dashscope-intl.aliyuncs.com';
-const DASHSCOPE_BASE_CN = 'https://dashscope.aliyuncs.com';
+const DASHSCOPE_WS_URL =
+  'wss://dashscope.aliyuncs.com/api-ws/v1/inference/';
 
-function dashscopeBase() {
-  // Allow override; default to international endpoint (Singapore region) so
-  // it matches the API key Kristy provisioned.
-  return env.DASHSCOPE_BASE_URL || DASHSCOPE_BASE_INTL;
+function clampRate(speed) {
+  // DashScope cosyvoice rate range is roughly 0.5–2.0; clamp to be safe.
+  if (typeof speed !== 'number' || !Number.isFinite(speed)) return 1;
+  if (speed < 0.5) return 0.5;
+  if (speed > 2) return 2;
+  return speed;
 }
-
-const DASHSCOPE_LANG_TYPE = {
-  zh: 'Chinese',
-  en: 'English',
-  pl: 'Polish',
-  ro: 'Romanian',
-  es: 'Spanish',
-  fr: 'French',
-};
 
 async function dashscopeTts(args, signal) {
   const { text, lang, voiceId, speed } = args;
@@ -269,80 +257,268 @@ async function dashscopeTts(args, signal) {
   }
   const model = env.DASHSCOPE_TTS_MODEL || 'cosyvoice-v2';
   const voice = voiceId || defaultDashScopeVoiceId(lang) || 'longhuhu_v3';
+  const taskId = randomUUID().replace(/-/g, '');
 
-  const body = {
-    model,
-    input: {
-      text,
-      voice,
-      language_type: DASHSCOPE_LANG_TYPE[lang] || 'Chinese',
-    },
-  };
-  // Speed control is an instruction-only feature in qwen-tts-instruct; for
-  // generic models it's ignored. We pass it through `parameters` for
-  // forward-compat — DashScope ignores unknown fields.
-  if (speed && Math.abs(speed - 1.0) > 0.01) {
-    body.parameters = { speech_rate: speed };
-  }
+  const audioBytes = await new Promise((resolve, reject) => {
+    const audioChunks = [];
+    let settled = false;
+    let abortListener = null;
+    let started = false;
 
-  const url = `${dashscopeBase()}/api/v1/services/aigc/multimodal-generation/generation`;
-  const resp = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${env.DASHSCOPE_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-    signal,
-  });
-  if (!resp.ok) {
-    const txt = await resp.text().catch(() => '');
-    // Mark 400 as NON-client-error here so the provider chain still
-    // falls back to ElevenLabs. The default ProviderError treatment of 400
-    // assumes "you sent garbage and the next provider will reject it too";
-    // in the cosyvoice-v2-via-REST scenario the next provider (ElevenLabs)
-    // genuinely *is* a different upstream and may succeed.
-    throw new ProviderError(
-      `DashScope TTS HTTP ${resp.status}: ${txt.slice(0, 200)}`,
-      { status: resp.status, provider: 'dashscope', isClientError: false },
-    );
-  }
-  const data = await resp.json();
-  const audioUrl = data?.output?.audio?.url;
-  if (!audioUrl) {
-    throw new ProviderError(
-      `DashScope TTS returned no audio.url: ${JSON.stringify(data).slice(0, 200)}`,
-      { status: 502, provider: 'dashscope' },
-    );
-  }
-  // Some payloads also return base64 inline. Prefer base64 to avoid an
-  // extra round-trip.
-  const inlineB64 = data?.output?.audio?.data;
-  let audioBytes;
-  let mimeType = 'audio/wav'; // multimodal-generation defaults to wav
-  if (typeof inlineB64 === 'string' && inlineB64.length > 0) {
-    audioBytes = Buffer.from(inlineB64, 'base64');
-  } else {
-    const dlResp = await fetch(audioUrl, { signal });
-    if (!dlResp.ok) {
-      throw new ProviderError(
-        `DashScope TTS audio download HTTP ${dlResp.status}`,
-        { status: dlResp.status, provider: 'dashscope' },
-      );
-    }
-    const ct = dlResp.headers.get('content-type') || '';
-    if (/wav/i.test(ct)) mimeType = 'audio/wav';
-    else if (/mpeg|mp3/i.test(ct)) mimeType = 'audio/mpeg';
-    audioBytes = Buffer.from(await dlResp.arrayBuffer());
-  }
-  if (!audioBytes || audioBytes.length === 0) {
-    throw new ProviderError('DashScope TTS audio is empty', {
-      status: 502,
-      provider: 'dashscope',
+    const ws = new WebSocket(DASHSCOPE_WS_URL, {
+      headers: {
+        Authorization: `bearer ${env.DASHSCOPE_API_KEY}`,
+        'X-DashScope-DataInspection': 'enable',
+      },
     });
-  }
+
+    function cleanup() {
+      try {
+        ws.removeAllListeners();
+      } catch (_) {
+        /* ignore */
+      }
+      try {
+        if (
+          ws.readyState === WebSocket.OPEN ||
+          ws.readyState === WebSocket.CONNECTING
+        ) {
+          ws.close();
+        }
+      } catch (_) {
+        /* ignore */
+      }
+      if (signal && abortListener) {
+        try {
+          signal.removeEventListener('abort', abortListener);
+        } catch (_) {
+          /* ignore */
+        }
+      }
+    }
+
+    function fail(err) {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(err);
+    }
+
+    function succeed(buf) {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(buf);
+    }
+
+    if (signal) {
+      if (signal.aborted) {
+        fail(
+          new ProviderError('aborted by caller', {
+            status: 408,
+            provider: 'dashscope',
+          }),
+        );
+        return;
+      }
+      abortListener = () => {
+        fail(
+          new ProviderError('aborted by caller (timeout)', {
+            status: 408,
+            provider: 'dashscope',
+          }),
+        );
+      };
+      signal.addEventListener('abort', abortListener, { once: true });
+    }
+
+    ws.on('open', () => {
+      const runTask = {
+        header: {
+          action: 'run-task',
+          task_id: taskId,
+          streaming: 'duplex',
+        },
+        payload: {
+          task_group: 'audio',
+          task: 'tts',
+          function: 'SpeechSynthesizer',
+          model,
+          parameters: {
+            text_type: 'PlainText',
+            voice,
+            format: 'mp3',
+            sample_rate: 22050,
+            volume: 50,
+            rate: clampRate(speed),
+            pitch: 1,
+          },
+          input: {},
+        },
+      };
+      try {
+        ws.send(JSON.stringify(runTask), (err) => {
+          if (err) {
+            fail(
+              new ProviderError(
+                `DashScope WS run-task send failed: ${err.message}`,
+                { status: 502, provider: 'dashscope', cause: err },
+              ),
+            );
+          }
+        });
+      } catch (err) {
+        fail(
+          new ProviderError(`DashScope WS send threw: ${err.message}`, {
+            status: 502,
+            provider: 'dashscope',
+            cause: err,
+          }),
+        );
+      }
+    });
+
+    ws.on('message', (data, isBinary) => {
+      if (settled) return;
+      if (isBinary) {
+        // Binary audio chunk
+        audioChunks.push(Buffer.isBuffer(data) ? data : Buffer.from(data));
+        return;
+      }
+      // Text control event
+      let msg;
+      try {
+        const raw = Buffer.isBuffer(data) ? data.toString('utf8') : String(data);
+        msg = JSON.parse(raw);
+      } catch (_) {
+        // Some servers send binary as ArrayBuffer when isBinary mis-detected;
+        // treat unparseable text as audio bytes (defensive).
+        if (Buffer.isBuffer(data)) audioChunks.push(data);
+        return;
+      }
+      const event = msg?.header?.event;
+      if (event === 'task-started') {
+        started = true;
+        // Send the text in continue-task, then immediately finish-task
+        // (short-text mode, all text fits in one frame).
+        const continueTask = {
+          header: {
+            action: 'continue-task',
+            task_id: taskId,
+            streaming: 'duplex',
+          },
+          payload: { input: { text } },
+        };
+        const finishTask = {
+          header: {
+            action: 'finish-task',
+            task_id: taskId,
+            streaming: 'duplex',
+          },
+          payload: { input: {} },
+        };
+        try {
+          ws.send(JSON.stringify(continueTask), (err) => {
+            if (err) {
+              fail(
+                new ProviderError(
+                  `DashScope WS continue-task send failed: ${err.message}`,
+                  { status: 502, provider: 'dashscope', cause: err },
+                ),
+              );
+              return;
+            }
+            ws.send(JSON.stringify(finishTask), (err2) => {
+              if (err2) {
+                fail(
+                  new ProviderError(
+                    `DashScope WS finish-task send failed: ${err2.message}`,
+                    { status: 502, provider: 'dashscope', cause: err2 },
+                  ),
+                );
+              }
+            });
+          });
+        } catch (err) {
+          fail(
+            new ProviderError(`DashScope WS send threw: ${err.message}`, {
+              status: 502,
+              provider: 'dashscope',
+              cause: err,
+            }),
+          );
+        }
+      } else if (event === 'task-finished') {
+        const buf = Buffer.concat(audioChunks);
+        if (buf.length === 0) {
+          fail(
+            new ProviderError(
+              'DashScope TTS task-finished but no audio bytes received',
+              { status: 502, provider: 'dashscope' },
+            ),
+          );
+        } else {
+          succeed(buf);
+        }
+      } else if (event === 'task-failed') {
+        const errCode = msg?.header?.error_code || '';
+        const errMsg =
+          msg?.header?.error_message ||
+          JSON.stringify(msg).slice(0, 200);
+        // Auth / permission style errors map to 401/403 → fallback to
+        // ElevenLabs. Everything else → 502 (also fallback). We never set
+        // isClientError here because the workorder requires fallback to
+        // ElevenLabs in all live failure scenarios except aborts.
+        const status = /auth|permission|denied|invalidapikey|unauthorized/i.test(
+          `${errCode} ${errMsg}`,
+        )
+          ? 401
+          : 502;
+        fail(
+          new ProviderError(
+            `DashScope TTS task-failed code=${errCode || 'n/a'} msg="${errMsg}"`,
+            { status, provider: 'dashscope', isClientError: false },
+          ),
+        );
+      }
+      // Other events (e.g. 'result-generated' metadata) are ignored.
+    });
+
+    ws.on('error', (err) => {
+      fail(
+        new ProviderError(`DashScope WS error: ${err.message}`, {
+          status: 502,
+          provider: 'dashscope',
+          cause: err,
+        }),
+      );
+    });
+
+    ws.on('close', (code, reason) => {
+      if (settled) return;
+      const reasonStr = reason
+        ? Buffer.isBuffer(reason)
+          ? reason.toString('utf8')
+          : String(reason)
+        : '';
+      // We only get here if the close happened before a task-finished /
+      // task-failed event (those branches call succeed/fail synchronously,
+      // which sets settled=true and triggers cleanup → close → no-op here).
+      const phase = started ? 'after task-started' : 'before task-started';
+      fail(
+        new ProviderError(
+          `DashScope WS closed prematurely ${phase} code=${code} reason="${reasonStr.slice(
+            0,
+            200,
+          )}"`,
+          { status: 502, provider: 'dashscope', isClientError: false },
+        ),
+      );
+    });
+  });
+
   const durationMs = estimateMp3DurationMs(audioBytes.length);
-  return { audioBytes, durationMs, mimeType };
+  return { audioBytes, durationMs, mimeType: 'audio/mpeg' };
 }
 
 // ----------------------------------------------------------------------------
