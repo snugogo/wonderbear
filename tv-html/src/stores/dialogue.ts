@@ -65,14 +65,6 @@ export interface DialogueState {
   arc: Partial<Record<DialogueArcStep, string>>;
   /** v7.2 — set when done=true; drives StoryPreviewScreen. */
   storyOutline: DialogueStoryOutline | null;
-  /**
-   * WO-3.8 (反馈 1) — Last bear reply text, retained across the next round so
-   * the child sees what bear just said while THEY are speaking. Cleared on
-   * applyStart (round 1 has no prior bear reply) and reset(). Captured inside
-   * applyTurn from `currentQuestion.text` BEFORE the new question replaces
-   * it. Displayed as a dim context bubble on the 3B (recording) view.
-   */
-  lastBearReply: string | null;
 }
 
 export const useDialogueStore = defineStore('dialogue', {
@@ -90,7 +82,6 @@ export const useDialogueStore = defineStore('dialogue', {
     mode: null,
     arc: {},
     storyOutline: null,
-    lastBearReply: null,
   }),
 
   getters: {
@@ -117,7 +108,6 @@ export const useDialogueStore = defineStore('dialogue', {
       this.mode = null;
       this.arc = {};
       this.storyOutline = null;
-      this.lastBearReply = null;
     },
 
     setPhase(phase: DialoguePhase): void {
@@ -141,8 +131,6 @@ export const useDialogueStore = defineStore('dialogue', {
       this.mode = null;
       this.arc = {};
       this.storyOutline = null;
-      // WO-3.8 (反馈 1): round 1 has no prior bear reply to retain.
-      this.lastBearReply = null;
     },
 
     /** Apply /dialogue/turn response (v7.2). */
@@ -157,14 +145,9 @@ export const useDialogueStore = defineStore('dialogue', {
       arcUpdate?: Partial<Record<DialogueArcStep, string>> | null;
       storyOutline?: DialogueStoryOutline | null;
     }): void {
-      // WO-3.8 (反馈 1): capture the bear reply that's about to be replaced so
-      // the next render of the recording view can show it as context. Only
-      // capture when there's a real (non-empty) prior text — first turn after
-      // applyStart has the opener question, which counts as the prior reply.
-      const priorBearText = this.currentQuestion?.text?.trim() || null;
-      if (priorBearText) {
-        this.lastBearReply = priorBearText;
-      }
+      // WO-3.11: prior-bear-reply capture removed — the recording view now
+      // shows currentQuestion.text directly (which is what we want kids to
+      // see while answering, not the previous turn's bear text).
       // Always merge arc update (defensive: even on done=true the server may
       // have set the final beat).
       if (payload.arcUpdate && typeof payload.arcUpdate === 'object') {

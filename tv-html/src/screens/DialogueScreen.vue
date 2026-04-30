@@ -753,8 +753,9 @@ onBeforeUnmount(() => {
       3A · Waiting for child to press mic.
       WO-3.6: 4-grid theme cards (Forest/Ocean/Space/AtHome) removed —
       产品决策:对话是自由编故事,主题卡会让用户误解为"必须选主题".
-      Layout simplified to bear (centered) + remote icon + hint pill.
-      Mic button (bottom-right, see .mic-button below) gives PC / 平板
+      Layout simplified to bear (centered) + tappable mic icon + hint
+      pill. WO-3.10: the right-column mic icon (was a passive remote
+      icon) is now a button-wrapped clickable mic that gives PC / 平板
       a UI fallback for the GP15 hardware key.
     -->
     <main v-if="uiState === '3A'" class="stage stage-3a">
@@ -764,10 +765,6 @@ onBeforeUnmount(() => {
           :src="asset('bear/bear_magic_wand.webp')"
           alt=""
         >
-      </div>
-
-      <div class="col-3a col-remote-3a">
-        <img class="remote-3a" :src="asset('ui/ui_remote.webp')" alt="" />
       </div>
 
       <!--
@@ -789,6 +786,7 @@ onBeforeUnmount(() => {
         />
         <span v-else>{{ t('dialogue.holdMicHint') }}</span>
       </div>
+
     </main>
 
     <!--
@@ -800,17 +798,17 @@ onBeforeUnmount(() => {
     -->
     <main v-else-if="uiState === '3B'" class="stage stage-3b">
       <!--
-        WO-3.8 (反馈 1): context bubble — keeps the last bear reply visible
-        while the child is speaking so they don't lose what bear just said.
-        Hidden on round 1 (lastBearReply === null after applyStart). Dim
-        opacity + small text so it doesn't compete with the listening bear.
+        WO-3.11: show the CURRENT bear question (not prior reply) so the
+        child can glance up and re-read what they're answering if they
+        forget mid-sentence. Replaces WO-3.8's lastBearReply (wrong
+        semantics).
       -->
       <div
-        v-if="dialogue.lastBearReply"
+        v-if="dialogue.currentQuestion?.text"
         class="prev-reply-bubble wb-text-shadow-sm"
         role="status"
       >
-        {{ dialogue.lastBearReply }}
+        {{ dialogue.currentQuestion.text }}
       </div>
       <div class="bear-wrap bear-wrap-3b">
         <img
@@ -827,17 +825,6 @@ onBeforeUnmount(() => {
       <div class="hint-icons-right">
         <img class="hint-img" :src="asset('ui/ui_remote.webp')" alt="" />
       </div>
-      <!--
-        iter13g-12: mic pulled out of the right-side hint stack and
-        promoted to a center-stage, enlarged icon — the mic is the focal
-        "kid is talking right now" cue in 3B.
-      -->
-      <img
-        class="mic-center-3b mic-blink"
-        :src="asset(micActive ? 'ui/ui_mic_active.webp' : 'ui/ui_mic.webp')"
-        alt=""
-        aria-hidden="true"
-      />
     </main>
 
     <!-- ============ 3C · Bear responding + TTS ============ -->
@@ -932,16 +919,16 @@ onBeforeUnmount(() => {
     </Transition>
 
     <!--
-      WO-3.6: on-screen mic button (tablet / PC fallback).
-      Emits the same voice-key-down / voice-key-up bridge events as the
-      GP15 hardware key so the dialogue state machine has a single
-      ingress path. Six pointer/touch handlers cover the "drag finger
-      off the button" case and prevent the recording getting stuck.
+      WO-3.13: stage-agnostic global mic button. Lives at the screen root,
+      fixed position, only visible in 3A (waiting) and 3B (listening).
+      This decouples the mic from stage <main> blocks so it never moves
+      across stage transitions.
     -->
     <button
+      v-if="uiState === '3A' || uiState === '3B'"
       type="button"
-      class="mic-button"
-      :class="{ pressed: micPressed }"
+      class="mic-floating"
+      :class="{ pressed: micPressed, listening: uiState === '3B' && micActive }"
       :aria-label="t('dialogue.micButton.aria')"
       @mousedown="onMicDown"
       @mouseup="onMicUp"
@@ -950,8 +937,25 @@ onBeforeUnmount(() => {
       @touchend.prevent="onMicUp"
       @touchcancel.prevent="onMicUp"
     >
-      {{ micPressed ? t('dialogue.micButton.recording') : t('dialogue.micButton.idle') }}
+      <img
+        :src="asset(uiState === '3B' && micActive ? 'ui/ui_mic_active.webp' : 'ui/ui_mic.webp')"
+        alt=""
+        aria-hidden="true"
+      />
     </button>
+
+    <!--
+      WO-3.13: stage-agnostic global remote icon (bottom-right).
+      Teaching cue for kids using GP15 hardware key. Always visible in 3A
+      and 3B as a passive hint.
+    -->
+    <img
+      v-if="uiState === '3A' || uiState === '3B'"
+      class="remote-floating"
+      :src="asset('ui/ui_remote.webp')"
+      alt=""
+      aria-hidden="true"
+    />
 
     <div ref="okCaptureEl" class="ok-capture" tabindex="-1" aria-hidden="true" />
   </div>
@@ -1107,31 +1111,6 @@ onBeforeUnmount(() => {
   margin-bottom: 4px;
 }
 /*
- * iter13g-12 · 3B center-stage mic.
- *   Pulled out of the right-side hint stack into a centered overlay,
- *   scaled ~1.8× (140 → 260 px) so the kid sees a big breathing mic
- *   icon while holding the voice key. Breathing animation still reuses
- *   @mic-breath (scale 1 → 1.12).
- */
-/*
- * Center via calc() instead of translate(-50%,-50%) because the
- * @mic-breath animation applies its own `transform: scale(...)` which
- * would override a translate-based centering. With calc() offsets, the
- * scale can run cleanly.
- */
-.mic-center-3b {
-  position: absolute;
-  left: calc(50% - 130px);
-  top: calc(50% - 130px);
-  z-index: 2;
-  width: 260px;
-  height: 260px;
-  object-fit: contain;
-  filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.45));
-  transform-origin: center;
-}
-
-/*
  * iter13g-3 3A layout — three columns + bottom pill.
  *   [ bear 28% ][ scenes 1fr ][ remote 18% ]
  *   Bear bottom-aligned so it "stands" on the cushion in the watercolor.
@@ -1190,19 +1169,9 @@ onBeforeUnmount(() => {
 }
 /* WO-3.6: .col-scenes-3a / .scenes-grid / .scene-card / .scene-title CSS
  * removed along with the 4-grid theme cards. Bear + remote columns now
- * share the 3A stage with the bottom hint pill. */
-.col-remote-3a {
-  flex: 0 0 200px;
-  height: 100%;
-  justify-content: center;
-}
-.remote-3a {
-  width: 100%;
-  max-width: 200px;
-  max-height: 480px;
-  object-fit: contain;
-  filter: drop-shadow(0 12px 22px rgba(0, 0, 0, 0.45));
-}
+ * share the 3A stage with the bottom hint pill.
+ * WO-3.13: .col-remote-3a + .remote-3a removed — remote is now a global
+ * stage-agnostic floating icon (.remote-floating) at the screen root. */
 .stage-text-block {
   display: flex;
   flex-direction: column;
@@ -1293,14 +1262,6 @@ onBeforeUnmount(() => {
 .hint-remote-3a {
   right: 60px;
 }
-.mic-blink {
-  animation: mic-breath 0.8s ease-in-out infinite alternate;
-}
-@keyframes mic-breath {
-  0%   { transform: scale(1); }
-  100% { transform: scale(1.12); }
-}
-
 /* ─── 3C · responding (split layout) ─── */
 .stage-3c {
   flex-direction: row;
@@ -1538,22 +1499,22 @@ onBeforeUnmount(() => {
  */
 .prev-reply-bubble {
   position: absolute;
-  top: 96px;
+  top: 20%;
   left: 50%;
   transform: translateX(-50%);
   z-index: 2;
-  max-width: 760px;
-  padding: 8px 22px;
-  border-radius: 18px;
-  background: rgba(26, 15, 10, 0.5);
+  max-width: 80%;
+  padding: 14px 32px;
+  border-radius: 24px;
+  background: rgba(26, 15, 10, 0.6);
   color: var(--c-cream);
   font-family: var(--ff-display);
-  font-size: 16px;
+  font-size: 32px;
   font-weight: 500;
   line-height: 1.4;
   letter-spacing: 0.02em;
   text-align: center;
-  opacity: 0.7;
+  opacity: 0.95;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -1590,43 +1551,57 @@ onBeforeUnmount(() => {
 }
 
 /*
- * WO-3.6: on-screen mic button (tablet / PC fallback).
- * Floating bottom-right amber circle, fires the same voice-key-down /
- * voice-key-up bridge events as the GP15 hardware key. Lives above
- * everything so it's reachable in all dialogue states; no remote-focus
- * (kids on touch / mouse won't have a remote to focus it).
+ * WO-3.13: stage-agnostic floating mic button. Fixed at screen-bottom
+ * 65% vertically, horizontally centered. Shared by stage 3A (waiting,
+ * static) and 3B (listening, alternates icon).
  */
-.mic-button {
+.mic-floating {
   position: fixed;
-  right: 32px;
-  bottom: 32px;
-  width: 96px;
-  height: 96px;
-  border-radius: 50%;
-  background: var(--c-amber);
-  color: var(--c-cream);
-  font-family: var(--ff-display);
-  font-size: 14px;
-  font-weight: 700;
+  left: 50%;
+  top: 80%;
+  transform: translate(-50%, -50%);
+  z-index: 100;
+  width: 220px;
+  height: 220px;
   border: 0;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  background: transparent;
+  padding: 0;
+  margin: 0;
   cursor: pointer;
-  z-index: 9999;
   user-select: none;
   -webkit-user-select: none;
   touch-action: none;
-  text-align: center;
-  padding: 6px;
-  transition: transform var(--t-fast) var(--ease-out),
-              background var(--t-fast) var(--ease-out);
+  -webkit-tap-highlight-color: transparent;
 }
-.mic-button.pressed {
-  background: var(--c-amber-deep, #d97706);
+.mic-floating img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.45));
+  transition: transform 80ms;
+}
+.mic-floating.pressed img {
   transform: scale(0.92);
 }
-.mic-button:focus {
-  outline: none;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45),
-              0 0 0 4px var(--c-focus-soft);
+.mic-floating:focus { outline: none; }
+.mic-floating:focus-visible {
+  outline: 2px solid var(--c-amber, #d97706);
+  outline-offset: 4px;
+  border-radius: 12px;
+}
+
+/*
+ * WO-3.13: stage-agnostic floating remote icon. Fixed at bottom-right,
+ * passive teaching cue for GP15 hardware key users.
+ */
+.remote-floating {
+  position: fixed;
+  right: 32px;
+  bottom: 32px;
+  z-index: 99;
+  width: 160px;
+  height: auto;
+  pointer-events: none;
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.3));
 }
 </style>
