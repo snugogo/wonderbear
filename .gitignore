@@ -5,3 +5,6 @@ coordination/HALT.signal
 coordination/format-violations/
 coordination/responses/
 coordination/droid-runs/
+
+# WO 工单备份锚点（不入库）
+**/*.backup-*

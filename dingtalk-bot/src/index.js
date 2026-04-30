@@ -370,7 +370,7 @@ client.registerCallbackListener(TOPIC_ROBOT, async (res) => {
     }
 
     // === v0.9.2: \u4e2d\u6587\u547d\u4ee4\u8def\u7531 ===
-    const routed = commandRouter.route(effectiveContent);
+    const routed = commandRouter.route(effectiveContent, sessionWebhook, senderStaffId, reply);
     if (routed.handled) {
       await reply(sessionWebhook, routed.reply, senderStaffId);
       return { status: EventAck.SUCCESS, message: 'OK' };
@@ -443,6 +443,11 @@ client.registerCallbackListener(TOPIC_ROBOT, async (res) => {
         await reply(sessionWebhook, '用法: /sync 我刚才在外面做了什么(我会自动整理成进度条目)', senderStaffId);
         return { status: EventAck.SUCCESS, message: 'OK' };
       }
+
+      // 立即 ack
+      reply(sessionWebhook, '📥 已收到，正在整理进度...', senderStaffId)
+        .catch(e => console.error('[ACK-SYNC] failed:', e.message));
+
       const syncPrompt = `Kristy 让你同步一条外部进度。她说:\n\n${text}\n\n请整理成 STATUS.md 标准格式,直接在回复里输出 [STATUS_UPDATE] 块,source 标记为"Kristy 手动同步",不要其他多余内容。`;
       runClaude(syncPrompt, 'sonnet', async (err, output) => {
         if (err) { await reply(sessionWebhook, `❌ 整理失败: ${err.message}`, senderStaffId); return; }
@@ -464,6 +469,10 @@ client.registerCallbackListener(TOPIC_ROBOT, async (res) => {
     }
 
     if (content === '/status-refresh') {
+      // 立即 ack（scanFactoryReports 偶尔慢）
+      reply(sessionWebhook, '📥 已收到，正在扫描 done/ 目录...', senderStaffId)
+        .catch(e => console.error('[ACK-REFRESH] failed:', e.message));
+
       const reports = statusHelper.scanFactoryReports(10);
       if (reports.length === 0) {
         await reply(sessionWebhook, '🔍 coordination/done/ 没有未消化的 Factory 报告', senderStaffId);
@@ -533,6 +542,11 @@ client.registerCallbackListener(TOPIC_ROBOT, async (res) => {
         await reply(sessionWebhook, '用法: /learn 教训内容', senderStaffId);
         return { status: EventAck.SUCCESS, message: 'OK' };
       }
+
+      // 立即 ack
+      reply(sessionWebhook, '📥 已收到，正在整理教训...', senderStaffId)
+        .catch(e => console.error('[ACK-LEARN] failed:', e.message));
+
       const learnPrompt = `Kristy 让你记录一条教训。她说的是:\n\n${text}\n\n请把它整理成 LESSONS.md 的标准格式,直接在回复里输出 [LESSON_CANDIDATE] 块,不要其他多余内容。`;
       runClaude(learnPrompt, 'sonnet', async (err, output) => {
         if (err) { await reply(sessionWebhook, `❌ 整理失败: ${err.message}`, senderStaffId); return; }

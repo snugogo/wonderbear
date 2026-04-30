@@ -10,6 +10,17 @@ const DONE_DIR = '/opt/wonderbear/coordination/done';
 const DISPATCH_LOG = '/tmp/wonderbear-dispatched.json';
 const DROID_CLI = '/root/.local/bin/droid';
 
+// 检查工单是否已完成（done/ 下有 report.md）
+// 返回 { done: true, reportName: '...' } 或 { done: false }
+function checkAlreadyDone(workorderId) {
+  const reportName = workorderId + '-report.md';
+  const reportPath = path.join(DONE_DIR, reportName);
+  if (fs.existsSync(reportPath)) {
+    return { done: true, reportName };
+  }
+  return { done: false };
+}
+
 // 读已派单记录
 function loadDispatched() {
   try {
@@ -179,4 +190,5 @@ module.exports = {
   listRunning,
   listWorkorders,
   loadDispatched,
+  checkAlreadyDone,
 };

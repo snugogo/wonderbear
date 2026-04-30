@@ -19,9 +19,23 @@ function safeExec(cmd, timeoutMs) {
 }
 
 // === 派 [工单ID] ===
-function handleDispatch(content) {
+function handleDispatch(content, sessionWebhook, atUserId, replyFn) {
   const r = factoryDispatch.resolveWorkorderId(content);
   if (!r.ok) return r.reason;
+
+  // done 状态前置检查 — 已完成的工单不发 ack，直接拒绝
+  // (修复 WO-DT-1.1 的 ack/done 矛盾)
+  const doneCheck = factoryDispatch.checkAlreadyDone(r.id);
+  if (doneCheck.done) {
+    return '❌ 工单已完成: ' + doneCheck.reportName + '\n如需重派请先归档老报告。';
+  }
+
+  // 立即 ack，让 Kristy 看到反馈（不 await，fire-and-forget，失败不影响派单）
+  if (replyFn && sessionWebhook) {
+    replyFn(sessionWebhook, '📥 已收到，正在派 Factory: ' + r.id, atUserId)
+      .catch(e => console.error('[ACK-DISPATCH] failed:', e.message));
+  }
+
   const d = factoryDispatch.dispatch(r.id);
   if (!d.ok) return '❌ ' + d.reason;
   return d.message;
@@ -151,12 +165,12 @@ function handleHelp() {
 }
 
 // === 总入口:返回 {handled: bool, reply: string} ===
-function route(content) {
+function route(content, sessionWebhook, atUserId, replyFn) {
   if (!content) return { handled: false };
   const c = content.trim();
 
   if (/^派单?\s/.test(c) || c === '派' || c === '派单') {
-    return { handled: true, reply: handleDispatch(c) };
+    return { handled: true, reply: handleDispatch(c, sessionWebhook, atUserId, replyFn) };
   }
   if (c === '进度' || c === '状态') {
     return { handled: true, reply: handleProgress() };
