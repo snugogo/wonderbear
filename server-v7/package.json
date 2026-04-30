@@ -31,11 +31,13 @@
     "dotenv": "^16.4.5",
     "fastify": "^4.28.1",
     "fastify-plugin": "^4.5.1",
+    "franc-min": "^6.2.0",
     "ioredis": "^5.4.1",
     "nanoid": "^5.0.7",
     "pino-pretty": "^11.2.2",
     "resend": "^4.0.0",
     "sharp": "^0.34.5",
+    "string-similarity": "^4.0.4",
     "stripe": "^17.3.1",
     "ws": "^8.20.0"
   },

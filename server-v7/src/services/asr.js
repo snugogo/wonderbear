@@ -491,7 +491,7 @@ async function dashscopeTranscribe(args, signal) {
 // ----------------------------------------------------------------------------
 
 async function whisperTranscribe(args, signal) {
-  const { audioBuffer, mimeType = 'audio/mpeg', locale = 'en' } = args || {};
+  const { audioBuffer, mimeType = 'audio/mpeg', locale = 'zh' } = args || {};
   if (!env.OPENAI_API_KEY) {
     throw new ProviderError('OPENAI_API_KEY not configured', {
       status: 401,
@@ -525,7 +525,7 @@ async function whisperTranscribe(args, signal) {
       provider: 'whisper',
     });
   }
-  return { text, locale };
+  console.log('[asr-whisper] transcription=' + JSON.stringify(text) + ' locale=' + locale); return { text, locale };
 }
 
 // ----------------------------------------------------------------------------

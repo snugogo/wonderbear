@@ -93,6 +93,22 @@ const env = {
   // misc
   IMAGE_STYLE_SUFFIX: process.env.IMAGE_STYLE_SUFFIX || '',
   IMAGE_PAGE1_COMPOSITION: process.env.IMAGE_PAGE1_COMPOSITION || '',
+
+  // prompt version routing — workorder 2026-04-30-v2lite-w2-prompt-version-routing
+  // 'v1' = Track B legacy path (default, prod current behavior)
+  // 'v2-lite' / 'v2-full' = orchestrator path (W3 will switch via env)
+  PROMPT_VERSION: (() => {
+    const v = process.env.PROMPT_VERSION || 'v1';
+    const allowed = ['v1', 'v2-lite', 'v2-full'];
+    if (!allowed.includes(v)) {
+      console.warn(
+        `[env] Unknown PROMPT_VERSION="${v}", falling back to "v1". ` +
+          `Allowed: ${allowed.join(', ')}`,
+      );
+      return 'v1';
+    }
+    return v;
+  })(),
 };
 
 // --------------------------------------------------------------------------

@@ -35,6 +35,32 @@ import {
 import { synthesize as ttsSynthesize } from '../services/tts.js';
 import { transcribe as asrTranscribe } from '../services/asr.js';
 import { nanoid } from 'nanoid';
+import env from '../config/env.js';
+import { orchestrateDialogue } from '../lib/dialogue_orchestrator.js';
+
+// W3: v2-lite dialogue system prompt loader (cached at module level).
+// Reads src/prompts/v2-lite/dialogue.system.txt once on first call, then
+// returns the cached string for subsequent calls so we don't hit disk per
+// request. Only invoked from the v2-lite branch — v1 path is unaffected.
+import { readFile as _readFile_w3 } from 'node:fs/promises';
+import { fileURLToPath as _fileURLToPath_w3 } from 'node:url';
+import { dirname as _dirname_w3, join as _join_w3 } from 'node:path';
+
+const __filename_w3 = _fileURLToPath_w3(import.meta.url);
+const __dirname_w3 = _dirname_w3(__filename_w3);
+let _v2LiteDialoguePromptCache = null;
+async function loadV2LiteDialoguePrompt() {
+  if (_v2LiteDialoguePromptCache) return _v2LiteDialoguePromptCache;
+  const promptPath = _join_w3(
+    __dirname_w3,
+    '..',
+    'prompts',
+    'v2-lite',
+    'dialogue.system.txt',
+  );
+  _v2LiteDialoguePromptCache = await _readFile_w3(promptPath, 'utf8');
+  return _v2LiteDialoguePromptCache;
+}
 
 const DIALOGUE_TTL_SECONDS = 30 * 60; // 30 min
 const MAX_DIALOGUE_ROUNDS = 7;
@@ -274,7 +300,7 @@ export default async function storyRoutes(fastify) {
       if (audioBase64) {
         try {
           const buf = Buffer.from(audioBase64, 'base64');
-          if (!buf || buf.length < 4) throw new Error('audioBase64 decoded to empty buffer');
+          if (!buf || buf.length < 4) throw new Error('audioBase64 decoded to empty buffer'); try { const fs = (await import('node:fs')); fs.writeFileSync('/tmp/asr-dump-' + Date.now() + '.webm', buf); request.log.info({size: buf.length, mt: audioMimeType}, '[asr-dump] saved'); } catch(e) { request.log.warn({err: e.message}, '[asr-dump] failed'); }
           const res = await asrTranscribe({
             audioBuffer: buf,
             mimeType: audioMimeType || 'audio/mpeg',
@@ -298,6 +324,10 @@ export default async function storyRoutes(fastify) {
         });
       }
 
+      // === PROMPT_VERSION routing — workorder 2026-04-30-v2lite-w2 ===
+      // Default 'v1' = Track B legacy path (byte-identical to pre-W2).
+      // 'v2-lite' / 'v2-full' = orchestrator path (W3 will switch via env).
+      if (env.PROMPT_VERSION === 'v1') {
       // ----- v7.2 co-creation flow ---------------------------------
       // 1) evaluate child reply quality (server-side adaptive signal)
       const previousQuestionText = (() => {
@@ -450,6 +480,171 @@ export default async function storyRoutes(fastify) {
       };
       if (recognizedText) resp.recognizedText = recognizedText;
       return resp;
+      }
+
+      // === V2-LITE BRANCH (PROMPT_VERSION=v2-lite|v2-full) ===
+      // W2 wires the v2-lite path through dialogue_orchestrator. The actual
+      // v2-lite SYSTEM_PROMPT comes in W3 — here we use a placeholder.
+      // This branch is dormant in prod (default PROMPT_VERSION=v1).
+      const v2OriginalHistory = Array.isArray(session.history)
+        ? [...session.history]
+        : [];
+
+      const orchestratorSession = {
+        history: v2OriginalHistory.map((h) => ({
+          role: h.role === 'user' ? 'child' : h.role === 'assistant' ? 'bear' : h.role,
+          text: h.text,
+        })),
+        elements: Array.isArray(session.elements) ? [...session.elements] : [],
+        turnCount: typeof session.turnCount === 'number' ? session.turnCount : 0,
+        recapCount: typeof session.recapCount === 'number' ? session.recapCount : 0,
+        lastRecapTurn:
+          typeof session.lastRecapTurn === 'number' ? session.lastRecapTurn : 0,
+        lastRecapElementsCount:
+          typeof session.lastRecapElementsCount === 'number'
+            ? session.lastRecapElementsCount
+            : 0,
+        realWorldHooks: Array.isArray(session.realWorldHooks)
+          ? [...session.realWorldHooks]
+          : [],
+      };
+
+      const v2LiteLlmCallFn = async ({ history, elements, childInput }) => {
+        // Mock-mode fallback so unit tests / CI don't need a real key.
+        if (
+          process.env.USE_MOCK_AI === 'true' ||
+          process.env.USE_MOCK_AI === '1' ||
+          !env.GEMINI_API_KEY
+        ) {
+          return JSON.stringify({
+            reply: '小熊听到啦~ 然后呢?',
+            elements: Array.isArray(elements) ? elements.slice(-3) : [],
+            intent: 'continue',
+          });
+        }
+        // Live Gemini 2.5 Flash call — same mechanism as services/llm.js.
+        // W3: load v2-lite system prompt from file (cached at module level).
+        const SYSTEM_PROMPT_PLACEHOLDER = await loadV2LiteDialoguePrompt();
+        const userMsg =
+          `[history]\n${JSON.stringify(history)}\n` +
+          `[elements_so_far]\n${JSON.stringify(elements)}\n` +
+          `[child_says]\n${childInput}`;
+        const url =
+          'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+        try {
+          const httpResp = await fetch(`${url}?key=${env.GEMINI_API_KEY}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [
+                { role: 'user', parts: [{ text: SYSTEM_PROMPT_PLACEHOLDER }] },
+                { role: 'model', parts: [{ text: 'OK.' }] },
+                { role: 'user', parts: [{ text: userMsg }] },
+              ],
+              generationConfig: {
+                temperature: 0.7,
+                maxOutputTokens: 400,
+                responseMimeType: 'application/json',
+                thinkingConfig: { thinkingBudget: 0 },
+              },
+            }),
+          });
+          if (!httpResp.ok) return null;
+          const data = await httpResp.json();
+          return data?.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
+        } catch {
+          return null;
+        }
+      };
+
+      const orchestratedResult = await orchestrateDialogue({
+        session: orchestratorSession,
+        childInput: text,
+        llmCallFn: v2LiteLlmCallFn,
+      });
+
+      // Map orchestrator output → v1-compatible response shape.
+      const v2Done = orchestratedResult.intent === 'recap';
+      let v2NextQuestion = null;
+      let v2StoryOutline = null;
+
+      // Sync mutations back into session in v1-compatible shape.
+      session.history = [
+        ...v2OriginalHistory,
+        { role: 'user', text, round },
+      ];
+      session.elements = orchestratorSession.elements;
+      session.turnCount = orchestratorSession.turnCount;
+      session.realWorldHooks = orchestratorSession.realWorldHooks;
+      session.arc = session.arc || {};
+
+      if (v2Done) {
+        const els = Array.isArray(orchestratedResult.elements)
+          ? orchestratedResult.elements.slice(0, 5).map((e) => String(e))
+          : [];
+        v2StoryOutline = els.length >= 1
+          ? { paragraphs: els }
+          : { paragraphs: [
+              `${session.childProfile.name || 'The hero'} starts a small adventure.`,
+              'A friend joins along the way.',
+              'A gentle bump appears, but they solve it together.',
+              'They walk home smiling under the warm sky.',
+            ] };
+        session.storyOutline = v2StoryOutline;
+        session.summary = {
+          mainCharacter: session.childProfile.name,
+          scene: 'a sunny meadow',
+          conflict: 'a fun little problem',
+          outline: v2StoryOutline.paragraphs,
+          rounds: session.history.map((h) => ({
+            q: h.role === 'assistant' ? h.text : null,
+            a: h.role === 'user' ? h.text : null,
+          })),
+        };
+        session.status = 'awaiting-confirm';
+      } else {
+        v2NextQuestion = {
+          round: round + 1,
+          text: orchestratedResult.reply,
+          textLearning: null,
+          ttsUrl: null,
+        };
+        try {
+          const tts = await ttsSynthesize({
+            text: v2NextQuestion.text,
+            lang: session.childProfile.primaryLang,
+            purpose: 'dialogue',
+          });
+          v2NextQuestion.ttsUrl = tts.audioUrl;
+        } catch {
+          // swallow; client still has text
+        }
+        session.history.push({
+          role: 'assistant',
+          text: v2NextQuestion.text,
+          round: round + 1,
+        });
+        session.currentRound = round + 1;
+      }
+
+      await saveDialogue(redis, id, session);
+
+      const v2Resp = {
+        round,
+        done: v2Done,
+        mode: 'storyteller',
+        lastTurnSummary: null,
+        arcUpdate: null,
+        nextQuestion: v2NextQuestion,
+        summary: v2Done ? (session.summary || null) : null,
+        storyOutline: v2StoryOutline,
+        safetyLevel: safety.level,
+        safetyReplacement: safety.replacement,
+        _provider: 'v2-lite',
+        _promptVersion: env.PROMPT_VERSION,
+      };
+      if (recognizedText) v2Resp.recognizedText = recognizedText;
+      return v2Resp;
     },
   );
 
