@@ -64,7 +64,6 @@ export default {
     starting: "Bear's ready, here we go!",
     holdMicHint: 'Hold the mic key to talk, release when done',
     readyPainter: 'Ready for painting',
-    holdMicWithScenes: 'Hold the mic to talk, or pick a theme for the bear to tell',
     /* v7.2: turn summary ribbon — short "You said: …" line. */
     youSaid: 'You said:',
     retry: 'Redo',
@@ -72,14 +71,12 @@ export default {
     confirm: 'Confirm',
     magic: 'Magic',
     micLocked: 'Got it, sweetie!',
-    orPickScene: 'Or pick a theme',
-    scenes: {
-      forest: { title: 'Forest',  hint: 'I want to explore the forest!' },
-      ocean:  { title: 'Ocean',   hint: 'I want to see a big whale!' },
-      space:  { title: 'Space',   hint: 'I want to fly a rocket to space!' },
-      home:   { title: 'At Home', hint: 'I want a cozy home story!' },
+    /* WO-3.6: on-screen mic button (tablets / PC browsers trigger voice-key-down via UI). */
+    micButton: {
+      idle: 'Hold to talk',
+      recording: 'Listening...',
+      aria: 'Hold to record voice',
     },
-    sceneSelected: 'OK, {title}!',
     demoQuestion: 'What kind of story do you want to hear today?',
     demoReply: 'I want a story about a brave little bear adventuring in the forest!',
   },

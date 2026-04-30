@@ -43,6 +43,7 @@ import { useScreenStore } from '@/stores/screen';
 import { useBgmStore } from '@/stores/bgm';
 import { useI18n } from 'vue-i18n';
 import { bridge } from '@/services/bridge';
+import { emit as bridgeEmit } from '@/services/bridge/pushBus';
 import { useFocusable, setFocus } from '@/services/focus';
 import { api, ApiError } from '@/services/api';
 import type { Locale } from '@/utils/errorCodes';
@@ -492,88 +493,30 @@ function handleTurnError(err: ApiError): void {
   }
 }
 
-/*
- * iter13g-3: scene shortcut cards for 3A. Each card injects a pre-canned
- * first-round reply into the dialogue flow (does NOT skip rounds). In
- * dev/gallery mode we just flash a soft hint since there's no backend.
- */
-interface Scene {
-  id: 'forest' | 'ocean' | 'space' | 'home';
-  image: string;
-}
-const scenes: Scene[] = [
-  { id: 'forest', image: asset('story/story_generic_forest.webp') },
-  { id: 'ocean',  image: asset('story/story_generic_ocean.webp') },
-  // Space card uses bg_bedtime (night sky) so it reads distinct from the
-  // 3A page background (story_generic_sky) — two different skies.
-  { id: 'space',  image: asset('bg/bg_bedtime.webp') },
-  { id: 'home',   image: asset('bg/bg_home_cozy.webp') },
-];
-// One ref per scene so useFocusable can register at mount (the composable
-// expects a Vue Ref, not a getter function).
-const sceneForestRef = ref<HTMLElement | null>(null);
-const sceneOceanRef = ref<HTMLElement | null>(null);
-const sceneSpaceRef = ref<HTMLElement | null>(null);
-const sceneHomeRef = ref<HTMLElement | null>(null);
 // iter13j-2: 3C "Ready for painting" CTA
 const readyBtnRef = ref<HTMLElement | null>(null);
 
-async function onScenePick(s: Scene): Promise<void> {
-  const title = t(`dialogue.scenes.${s.id}.title`);
-  const hint = t(`dialogue.scenes.${s.id}.hint`);
-  setSoftHint(t('dialogue.sceneSelected', { title }), 1800);
+/*
+ * WO-3.6: UI mic button state. Hooks into the same bridge events as the
+ * GP15 hardware key (voice-key-down / voice-key-up) so the dialogue
+ * state machine has a single ingress path. The hardware listener wired
+ * in onMounted (`bridge.on('voice-key-down', onVoiceKeyDown)`) handles
+ * both sources; this button simply emits the events on press / release.
+ */
+const micPressed = ref(false);
 
-  // 2026-04-27 dev/gallery: previously this bailed early, leaving scene
-  // cards completely unresponsive in dev — kids/reviewers pressed OK on
-  // a card and nothing happened. Now route through the same mock-turn
-  // path as the OK-capture, so picking a scene drives a full
-  // 3B → 3C → 3A round just like pressing the mic.
-  if (demoPhase || isDevBrowser) {
-    void onOkKey();
-    return;
-  }
+function onMicDown(): void {
+  if (!mounted) return;
+  if (micPressed.value) return;
+  micPressed.value = true;
+  bridgeEmit('voice-key-down');
+}
 
-  // Real flow: submit the scene's canned reply as the first turn, then
-  // the existing server-side flow picks up from round 2 naturally.
-  if (!dialogue.dialogueId || inFlight) return;
-  inFlight = true;
-  dialogue.setPhase('uploading');
-  try {
-    const { data } = await api.dialogueTurn(dialogue.dialogueId, {
-      round: dialogue.round,
-      userInput: hint,
-      skipRemaining: false,
-      locale: locale.value as Locale,
-    });
-    dialogue.applyTurn({
-      done: data.done,
-      nextQuestion: data.nextQuestion,
-      summary: data.summary,
-      safetyLevel: data.safetyLevel,
-      safetyReplacement: data.safetyReplacement,
-      mode: data.mode ?? null,
-      lastTurnSummary: data.lastTurnSummary ?? null,
-      arcUpdate: data.arcUpdate ?? null,
-      storyOutline: data.storyOutline ?? null,
-    });
-    if (data.done) {
-      window.setTimeout(() => {
-        if (!mounted) return;
-        if (data.storyOutline?.paragraphs?.length) {
-          screen.go('story-preview');
-        } else {
-          startGenerationAndNavigate();
-        }
-      }, 600);
-    } else {
-      speakOrAdvance();
-    }
-  } catch (e) {
-    if (e instanceof ApiError) handleTurnError(e);
-    else screen.goError(ERR.INTERNAL_ERROR);
-  } finally {
-    inFlight = false;
-  }
+function onMicUp(): void {
+  if (!mounted) return;
+  if (!micPressed.value) return;
+  micPressed.value = false;
+  bridgeEmit('voice-key-up');
 }
 
 /*
@@ -585,43 +528,13 @@ async function onScenePick(s: Scene): Promise<void> {
  * can still trigger the early-end path when `dialogue.canEarlyEnd` is true.
  */
 
-/*
- * Scene card focusables — 2×2 grid: forest / ocean (top row),
- * space / home (bottom row). Auto-focus the forest card so a single OK
- * press on initial entry picks a sensible default. Geometric fallback
- * handles cross-cell edges we don't spell out.
- */
-const sceneNeighborMap: Record<Scene['id'], { left?: string; right?: string; up?: string; down?: string }> = {
-  forest: { right: 'dialogue-scene-ocean', down: 'dialogue-scene-space' },
-  ocean:  { left: 'dialogue-scene-forest', down: 'dialogue-scene-home' },
-  space:  { up: 'dialogue-scene-forest', right: 'dialogue-scene-home' },
-  home:   { up: 'dialogue-scene-ocean', left: 'dialogue-scene-space' },
-};
-useFocusable(sceneForestRef, {
-  id: 'dialogue-scene-forest',
-  autoFocus: true,
-  neighbors: sceneNeighborMap.forest,
-  onEnter: () => { void onScenePick(scenes[0]); },
-});
-useFocusable(sceneOceanRef, {
-  id: 'dialogue-scene-ocean',
-  neighbors: sceneNeighborMap.ocean,
-  onEnter: () => { void onScenePick(scenes[1]); },
-});
-useFocusable(sceneSpaceRef, {
-  id: 'dialogue-scene-space',
-  neighbors: sceneNeighborMap.space,
-  onEnter: () => { void onScenePick(scenes[2]); },
-});
-useFocusable(sceneHomeRef, {
-  id: 'dialogue-scene-home',
-  neighbors: sceneNeighborMap.home,
-  onEnter: () => { void onScenePick(scenes[3]); },
-});
-
-// Legacy OK-capture kept for the early-end shortcut so existing flow works.
+// WO-3.6: scene-card focusables removed (theme cards deprecated). The
+// dialogue is now fully voice-driven — child holds mic (GP15 key or UI
+// button) to start the first turn. OK-capture below remains for the
+// early-end shortcut.
 useFocusable(okCaptureEl, {
   id: 'dialogue-ok-capture',
+  autoFocus: true,
   onEnter: () => { onOkKey(); },
 });
 
@@ -837,18 +750,12 @@ onBeforeUnmount(() => {
     </div>
 
     <!--
-      3A · Waiting for child to press mic (iter13g-3 redesign)
-      Three-column layout per founder: [bear | scene cards | remote].
-        - Bear: bear_magic_wand, enlarged, bottom-aligned so it "stands on
-          the cushion" in the bg_chat watercolor.
-        - Scenes: 2×2 grid of 4 shortcut cards (forest/ocean/space/home).
-          These are remote-focusable; OK on a card primes the child's
-          first reply and advances into the 7-round dialogue flow — it
-          does NOT skip straight to generation, so personalization value
-          is preserved.
-        - Remote: enlarged, same vertical center as bear, right-hand side.
-        - Hint pill at the bottom repeats the voice-first CTA so the kid
-          knows the mic is still the primary path.
+      3A · Waiting for child to press mic.
+      WO-3.6: 4-grid theme cards (Forest/Ocean/Space/AtHome) removed —
+      产品决策:对话是自由编故事,主题卡会让用户误解为"必须选主题".
+      Layout simplified to bear (centered) + remote icon + hint pill.
+      Mic button (bottom-right, see .mic-button below) gives PC / 平板
+      a UI fallback for the GP15 hardware key.
     -->
     <main v-if="uiState === '3A'" class="stage stage-3a">
       <div class="col-3a col-bear-3a">
@@ -857,47 +764,6 @@ onBeforeUnmount(() => {
           :src="asset('bear/bear_magic_wand.webp')"
           alt=""
         >
-      </div>
-
-      <div class="col-3a col-scenes-3a">
-        <div class="scenes-grid">
-          <button
-            ref="sceneForestRef"
-            type="button"
-            class="scene-card"
-            :style="{ backgroundImage: `url(${scenes[0].image})` }"
-            @click="onScenePick(scenes[0])"
-          >
-            <div class="scene-title wb-text-shadow">{{ t('dialogue.scenes.forest.title') }}</div>
-          </button>
-          <button
-            ref="sceneOceanRef"
-            type="button"
-            class="scene-card"
-            :style="{ backgroundImage: `url(${scenes[1].image})` }"
-            @click="onScenePick(scenes[1])"
-          >
-            <div class="scene-title wb-text-shadow">{{ t('dialogue.scenes.ocean.title') }}</div>
-          </button>
-          <button
-            ref="sceneSpaceRef"
-            type="button"
-            class="scene-card"
-            :style="{ backgroundImage: `url(${scenes[2].image})` }"
-            @click="onScenePick(scenes[2])"
-          >
-            <div class="scene-title wb-text-shadow">{{ t('dialogue.scenes.space.title') }}</div>
-          </button>
-          <button
-            ref="sceneHomeRef"
-            type="button"
-            class="scene-card"
-            :style="{ backgroundImage: `url(${scenes[3].image})` }"
-            @click="onScenePick(scenes[3])"
-          >
-            <div class="scene-title wb-text-shadow">{{ t('dialogue.scenes.home.title') }}</div>
-          </button>
-        </div>
       </div>
 
       <div class="col-3a col-remote-3a">
@@ -921,7 +787,7 @@ onBeforeUnmount(() => {
           alt=""
           aria-hidden="true"
         />
-        <span v-else>{{ t('dialogue.holdMicWithScenes') }}</span>
+        <span v-else>{{ t('dialogue.holdMicHint') }}</span>
       </div>
     </main>
 
@@ -1051,6 +917,28 @@ onBeforeUnmount(() => {
         {{ softHint }}
       </div>
     </Transition>
+
+    <!--
+      WO-3.6: on-screen mic button (tablet / PC fallback).
+      Emits the same voice-key-down / voice-key-up bridge events as the
+      GP15 hardware key so the dialogue state machine has a single
+      ingress path. Six pointer/touch handlers cover the "drag finger
+      off the button" case and prevent the recording getting stuck.
+    -->
+    <button
+      type="button"
+      class="mic-button"
+      :class="{ pressed: micPressed }"
+      :aria-label="t('dialogue.micButton.aria')"
+      @mousedown="onMicDown"
+      @mouseup="onMicUp"
+      @mouseleave="onMicUp"
+      @touchstart.prevent="onMicDown"
+      @touchend.prevent="onMicUp"
+      @touchcancel.prevent="onMicUp"
+    >
+      {{ micPressed ? t('dialogue.micButton.recording') : t('dialogue.micButton.idle') }}
+    </button>
 
     <div ref="okCaptureEl" class="ok-capture" tabindex="-1" aria-hidden="true" />
   </div>
@@ -1287,63 +1175,9 @@ onBeforeUnmount(() => {
   0%, 100% { transform: translateY(0); }
   50%      { transform: translateY(-18px); }
 }
-.col-scenes-3a {
-  flex: 1 1 auto;
-  justify-content: center;
-  gap: 12px;
-  max-width: 720px;
-  transform: translateY(-30px);
-}
-.scenes-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-auto-rows: 170px;
-  gap: 14px;
-  width: 100%;
-}
-.scene-card {
-  position: relative;
-  border-radius: 18px;
-  border: 2px solid rgba(255, 200, 87, 0.35);
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  cursor: pointer;
-  overflow: hidden;
-  opacity: 0.78;
-  transition: transform var(--t-fast) var(--ease-out),
-              border-color var(--t-fast) var(--ease-out),
-              box-shadow var(--t-fast) var(--ease-out),
-              opacity var(--t-fast) var(--ease-out);
-}
-.scene-card::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(0,0,0,0) 45%, rgba(0,0,0,0.55) 100%);
-}
-.scene-title {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 10px;
-  z-index: 1;
-  color: var(--c-cream);
-  font-family: var(--ff-display);
-  font-size: 20px;
-  font-weight: 700;
-  text-align: center;
-  letter-spacing: 0.02em;
-}
-.scene-card.is-focused,
-.scene-card[data-focused='true'] {
-  transform: scale(1.05);
-  opacity: 1;
-  border-color: var(--c-amber);
-  box-shadow:
-    0 0 0 3px rgba(245, 158, 11, 0.6),
-    0 0 24px 6px var(--c-focus-soft);
-}
+/* WO-3.6: .col-scenes-3a / .scenes-grid / .scene-card / .scene-title CSS
+ * removed along with the 4-grid theme cards. Bear + remote columns now
+ * share the 3A stage with the bottom hint pill. */
 .col-remote-3a {
   flex: 0 0 200px;
   height: 100%;
@@ -1709,5 +1543,46 @@ onBeforeUnmount(() => {
   width: 1px; height: 1px;
   opacity: 0;
   pointer-events: none;
+}
+
+/*
+ * WO-3.6: on-screen mic button (tablet / PC fallback).
+ * Floating bottom-right amber circle, fires the same voice-key-down /
+ * voice-key-up bridge events as the GP15 hardware key. Lives above
+ * everything so it's reachable in all dialogue states; no remote-focus
+ * (kids on touch / mouse won't have a remote to focus it).
+ */
+.mic-button {
+  position: fixed;
+  right: 32px;
+  bottom: 32px;
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background: var(--c-amber);
+  color: var(--c-cream);
+  font-family: var(--ff-display);
+  font-size: 14px;
+  font-weight: 700;
+  border: 0;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+  z-index: 9999;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  text-align: center;
+  padding: 6px;
+  transition: transform var(--t-fast) var(--ease-out),
+              background var(--t-fast) var(--ease-out);
+}
+.mic-button.pressed {
+  background: var(--c-amber-deep, #d97706);
+  transform: scale(0.92);
+}
+.mic-button:focus {
+  outline: none;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45),
+              0 0 0 4px var(--c-focus-soft);
 }
 </style>

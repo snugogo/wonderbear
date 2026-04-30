@@ -71,7 +71,6 @@ export default {
     starting: '熊熊准备好啦,马上开始~',
     holdMicHint: '按住遥控器话筒说话,说完放开',
     readyPainter: '可以开画啦',
-    holdMicWithScenes: '按住遥控器话筒说话,或者挑一个主题让熊熊讲',
     /* v7.2: turn summary ribbon — "你刚说: …" 30 字以内. */
     youSaid: '你刚说:',
     retry: '改一改',
@@ -79,14 +78,12 @@ export default {
     confirm: '确认',
     magic: '魔法',
     micLocked: '熊熊已经收到啦~',
-    orPickScene: '也可以选一个主题',
-    scenes: {
-      forest: { title: '森林冒险', hint: '我想去森林里探险!' },
-      ocean:  { title: '海底世界', hint: '我想去海底看大鲸鱼!' },
-      space:  { title: '太空遨游', hint: '我想坐火箭上太空!' },
-      home:   { title: '家里故事', hint: '我想听一个家里的故事!' },
+    /* WO-3.6: 屏幕话筒按钮(平板 / PC 浏览器走 UI 按钮触发 voice-key-down). */
+    micButton: {
+      idle: '按住说话',
+      recording: '正在听...',
+      aria: '按住说话录音',
     },
-    sceneSelected: '好的, {title} ~',
     demoQuestion: '今天想听一个关于什么的故事呀?',
     demoReply: '我想听一只勇敢的小熊去森林冒险的故事!',
   },
