@@ -1,7 +1,7 @@
 require('dotenv').config({ path: __dirname + '//../.env' });
 const { DWClient, TOPIC_ROBOT, EventAck } = require('dingtalk-stream-sdk-nodejs');
 const axios = require('axios');
-const { spawn } = require('child_process');
+const { spawn, exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const { promisify } = require('util');
@@ -274,6 +274,57 @@ function runClaude(prompt, model, onDone) {
 
 // === v0.9.2 done-watcher: 后台轮询 coordination/done/, 推送新报告 ===
 let cachedWebhook = null;
+
+// === WO-DT-1.3 (v2): 检测到新报告 → 自动跑 verify.sh → 推钉钉 ===
+// child_process.exec 异步 + 120s timeout + 1MB maxBuffer + 截尾 30 行/1500 字符
+// 多行消息必须用数组 join('\n'),禁止把多行 markdown 嵌入字符串字面量
+function triggerAutoVerify(reportFilename) {
+  if (!cachedWebhook) {
+    console.log('[AUTO-VERIFY] no cachedWebhook yet, skip', reportFilename);
+    return;
+  }
+  const m = reportFilename.match(/^(WO-[\w.\-]+)-report\.md$/i);
+  if (!m) {
+    console.log('[AUTO-VERIFY] filename not WO-*-report.md, skip:', reportFilename);
+    return;
+  }
+  const woId = m[1];
+  const verifyPath = '/opt/wonderbear/workorders/' + woId + '-verify.sh';
+  if (!fs.existsSync(verifyPath)) {
+    const noVerifyMsg = 'wonderbear: \uD83D\uDCC4 ' + woId + ' \u62a5\u544a\u5c31\u7eea\uff08\u65e0 verify.sh\uff0c\u8df3\u8fc7\u81ea\u52a8\u9a8c\u8bc1\uff09';
+    reply(cachedWebhook, noVerifyMsg, ALLOWED_USER_IDS[0])
+      .catch(e => console.error('[AUTO-VERIFY] no-verify push failed:', e.message));
+    return;
+  }
+  const startMsg = 'wonderbear: \uD83D\uDD0D ' + woId + ' \u81ea\u52a8\u8dd1 verify.sh ...';
+  reply(cachedWebhook, startMsg, ALLOWED_USER_IDS[0])
+    .catch(e => console.error('[AUTO-VERIFY] start push failed:', e.message));
+  exec('bash ' + verifyPath, { timeout: 120000, maxBuffer: 1024 * 1024 }, (err, stdout, stderr) => {
+    const exitCode = err ? (err.code || 1) : 0;
+    const rawOut = (stdout || '') + (stderr ? '\n' + stderr : '');
+    const tailLines = rawOut.split('\n').slice(-30).join('\n');
+    const truncated = tailLines.length > 1500 ? tailLines.slice(-1500) : tailLines;
+    let icon, summary, nextStep;
+    if (err && err.killed) {
+      icon = '\u23F1\uFE0F';
+      summary = woId + ' verify \u8d85\u65f6\uff08>120s\uff09';
+      nextStep = '\u5efa\u8bae: \u628a\u4ee5\u4e0a\u8d34 Claude \u5224\u65ad';
+    } else if (exitCode === 0) {
+      icon = '\u2705';
+      summary = woId + ' verify \u5168\u8fc7';
+      nextStep = '\u4e0b\u4e00\u6b65: \u6d4f\u89c8\u5668\u5b9e\u6d4b';
+    } else {
+      icon = '\u274C';
+      summary = woId + ' verify \u5931\u8d25 (exit=' + exitCode + ')';
+      nextStep = '\u5efa\u8bae: \u628a\u4ee5\u4e0a\u8d34 Claude \u5224\u65ad';
+    }
+    // 多行消息: 用数组 join('\n'),不许把多行 markdown 嵌入字符串字面量
+    const msgLines = ['wonderbear: ' + icon + ' ' + summary, '', '```', truncated, '```', '', nextStep];
+    reply(cachedWebhook, msgLines.join('\n'), ALLOWED_USER_IDS[0])
+      .catch(e => console.error('[AUTO-VERIFY] result push failed:', e.message));
+  });
+}
+
 doneWatcher.start((filename, summary, matched) => {
   if (!cachedWebhook) {
     console.log('[DONE-WATCHER] no cachedWebhook yet, skip push for', filename);
@@ -283,7 +334,15 @@ doneWatcher.start((filename, summary, matched) => {
     ('\u2705 Factory \u5b8c\u6210: ' + matched.workorderId + ' (PID=' + matched.pid + ')\n\n') :
     ('\u2705 \u65b0\u62a5\u544a: ' + filename + '\n\n');
   const body = head + summary;
-  reply(cachedWebhook, body, ALLOWED_USER_IDS[0]).catch(e => console.error('[DONE-WATCHER] push failed:', e.message));
+  reply(cachedWebhook, body, ALLOWED_USER_IDS[0])
+    .catch(e => console.error('[DONE-WATCHER] push failed:', e.message));
+
+  // WO-DT-1.3 (v2): 报告就绪后自动跑 verify.sh → 推钉钉
+  try {
+    triggerAutoVerify(filename);
+  } catch (e) {
+    console.error('[AUTO-VERIFY] triggerAutoVerify threw:', e.message);
+  }
 });
 
 client.registerCallbackListener(TOPIC_ROBOT, async (res) => {

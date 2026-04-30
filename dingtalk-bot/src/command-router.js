@@ -79,7 +79,8 @@ function handleProgress() {
 
   // 待消化报告
   try {
-    const cnt = safeExec("ls /opt/wonderbear/coordination/done/*.md 2>/dev/null | wc -l", 2000);
+    // 字符串打散避免 watcher 定位脚本误中（WO-DT-1.3 §2.1）
+    const cnt = safeExec("ls /opt/wonderbear/coordination/" + "done/*.md 2>/dev/null | wc -l", 2000);
     lines.push('');
     lines.push('Done 报告: ' + cnt + ' 个');
   } catch (e) { /* ignore */ }
