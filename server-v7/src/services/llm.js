@@ -696,13 +696,26 @@ export const __test = {
  * @returns {Promise<{ title:string, titleEn:string, characterDescription:string, pages: StoryPage[] }>}
  */
 export async function generateStoryJson(args) {
-  if (isMockMode()) return mockStoryJson(args);
-  return liveStoryJson(args);
+  // WO-3.8: childName variabilization + brand-anchor fallback. Protagonist
+  // name follows the chain: req childProfile.name (parent system) → 'Dora'
+  // (Kristy's brand anchor, memory #1). Earlier paths leaked moon-themed
+  // / generic Little-One fallbacks which broke product identity on first
+  // run. Inject the resolved childName into childProfile so every
+  // downstream code path (mock + live + retry feedback) sees Dora when no
+  // real child is bound.
+  const childName = args?.childProfile?.name || 'Dora';
+  const safeArgs = {
+    ...args,
+    childProfile: { ...(args?.childProfile || {}), name: childName },
+  };
+  if (isMockMode()) return mockStoryJson(safeArgs);
+  return liveStoryJson(safeArgs);
 }
 
 function mockStoryJson({ dialogueSummary, childProfile }) {
   const child = childProfile || {};
-  const name = child.name || 'Little One';
+  // WO-3.8: brand-anchor fallback (was 'Little One').
+  const name = child.name || 'Dora';
   const age = child.age || 5;
   const primary = child.primaryLang || 'en';
   const learning = child.secondLang || 'none';

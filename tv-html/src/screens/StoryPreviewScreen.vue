@@ -245,6 +245,18 @@ onBeforeUnmount(() => {
   border-radius: 24px;
   box-shadow: var(--shadow-card);
   overflow-y: auto;
+  /*
+   * WO-3.8 (反馈 4): hide the mouse-style scrollbar but keep scroll
+   * functionality (D-pad / wheel still scrolls). Three-vendor coverage:
+   *   - scrollbar-width  → Firefox
+   *   - -ms-overflow-style → legacy IE/Edge
+   *   - ::-webkit-scrollbar → Chrome / Safari / Edge Chromium
+   */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.outline-card::-webkit-scrollbar {
+  display: none;
 }
 .paragraph-list {
   list-style: none;

@@ -1,0 +1,27 @@
+## CRITICAL OUTPUT REQUIREMENT — APPENDED ADDENDUM (WO-3.7)
+
+The system prompt above describes creative goals. THIS section is the
+non-negotiable output schema. Violating it WILL cause the story to be rejected.
+
+Return STRICTLY a valid JSON object matching this schema:
+
+{
+  "title": "string",
+  "titleEn": "string",
+  "characterDescription": "string",
+  "pages": [  // EXACTLY 12 elements — not 11, not 13, exactly 12
+    { "pageNum": 1,  "text": {...}, "imagePrompt": "...", "emotion": "...", "beat": "..." },
+    ... // through pageNum 12
+    { "pageNum": 12, "text": {...}, "imagePrompt": "...", "emotion": "...", "beat": "..." }
+  ]
+}
+
+VALIDATION RULES (MUST be followed):
+1. `pages` array length MUST equal 12. Not 11. Not 13. EXACTLY 12 elements.
+2. `pageNum` values MUST be 1, 2, 3, ..., 12 in strict ascending order. No gaps. No duplicates.
+3. Wanting to combine two short scenes into one page? Instead expand into two with distinct visuals.
+4. Wanting to skip a transition? Instead create a transition page with visual continuity.
+5. Wanting to add a 13th epilogue? Instead fold that beat into page 12.
+
+Before returning, COUNT the elements in `pages`. If count != 12, regenerate from page 1.
+Do not truncate. Do not pad. Restructure the arc so 12 pages cover it cleanly.

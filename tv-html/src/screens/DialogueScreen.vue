@@ -799,6 +799,19 @@ onBeforeUnmount(() => {
       either — releasing the mic auto-sends, there's nothing to confirm.
     -->
     <main v-else-if="uiState === '3B'" class="stage stage-3b">
+      <!--
+        WO-3.8 (反馈 1): context bubble — keeps the last bear reply visible
+        while the child is speaking so they don't lose what bear just said.
+        Hidden on round 1 (lastBearReply === null after applyStart). Dim
+        opacity + small text so it doesn't compete with the listening bear.
+      -->
+      <div
+        v-if="dialogue.lastBearReply"
+        class="prev-reply-bubble wb-text-shadow-sm"
+        role="status"
+      >
+        {{ dialogue.lastBearReply }}
+      </div>
       <div class="bear-wrap bear-wrap-3b">
         <img
           class="bear"
@@ -1515,6 +1528,37 @@ onBeforeUnmount(() => {
   font-size: 18px;
   padding: 8px 18px;
   border-radius: 999px;
+}
+
+/*
+ * WO-3.8 (反馈 1) · prev-reply-bubble — dim context strip showing the bear's
+ * previous reply while the child is speaking on 3B. Anchored top-center
+ * just under the topbar / turn-summary ribbon, capped at 2 lines via
+ * line-clamp so a long bear reply doesn't push the bear off-screen.
+ */
+.prev-reply-bubble {
+  position: absolute;
+  top: 96px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  max-width: 760px;
+  padding: 8px 22px;
+  border-radius: 18px;
+  background: rgba(26, 15, 10, 0.5);
+  color: var(--c-cream);
+  font-family: var(--ff-display);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+  text-align: center;
+  opacity: 0.7;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  pointer-events: none;
 }
 
 /* ─── Soft hint (shared) ─── */
