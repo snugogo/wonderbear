@@ -84,6 +84,13 @@ const env = {
     process.env.R2_BUCKET_NAME || process.env.R2_BUCKET || 'wonderbear-assets',
   R2_ENDPOINT: process.env.R2_ENDPOINT,
   R2_PUBLIC_URL: process.env.R2_PUBLIC_URL,
+  // Aliyun OSS — used by DashScope ASR (WO-1 §3.3).
+  OSS_REGION: process.env.OSS_REGION,
+  OSS_BUCKET: process.env.OSS_BUCKET,
+  OSS_ENDPOINT_ACCELERATE: process.env.OSS_ENDPOINT_ACCELERATE || 'oss-accelerate.aliyuncs.com',
+  OSS_ENDPOINT_STANDARD: process.env.OSS_ENDPOINT_STANDARD || 'oss-cn-hangzhou.aliyuncs.com',
+  OSS_ACCESS_KEY_ID: process.env.OSS_ACCESS_KEY_ID,
+  OSS_ACCESS_KEY_SECRET: process.env.OSS_ACCESS_KEY_SECRET,
   STORAGE_TYPE: process.env.STORAGE_TYPE || 'local',
   LOCAL_STORAGE_PATH: process.env.LOCAL_STORAGE_PATH || './storage',
 

@@ -301,10 +301,35 @@ export default async function storyRoutes(fastify) {
         try {
           const buf = Buffer.from(audioBase64, 'base64');
           if (!buf || buf.length < 4) throw new Error('audioBase64 decoded to empty buffer'); try { const fs = (await import('node:fs')); fs.writeFileSync('/tmp/asr-dump-' + Date.now() + '.webm', buf); request.log.info({size: buf.length, mt: audioMimeType}, '[asr-dump] saved'); } catch(e) { request.log.warn({err: e.message}, '[asr-dump] failed'); }
+          // WO-1 §3.1 root-cause locale fix: session.childProfile.primaryLang
+          // can go stale (Redis 30-min cache outlives a parent profile edit,
+          // or the client sent a stale targetLang on /dialogue/start). Re-read
+          // child.primaryLang from DB on every turn; fall back to session,
+          // then env.ASR_LANGUAGE_DEFAULT.
+          let asrLocale = session.childProfile?.primaryLang;
+          try {
+            const childFresh = await prisma.child.findUnique({
+              where: { id: session.childId },
+              select: { primaryLang: true },
+            });
+            if (childFresh?.primaryLang) {
+              asrLocale = childFresh.primaryLang;
+              if (asrLocale !== session.childProfile?.primaryLang) {
+                request.log.warn(
+                  { dialogueId: id, sessionLang: session.childProfile?.primaryLang, dbLang: asrLocale },
+                  '[asr] session childProfile lang stale; using fresh DB lang',
+                );
+                session.childProfile.primaryLang = asrLocale;
+              }
+            }
+          } catch (dbErr) {
+            request.log.warn({ err: dbErr.message }, '[asr] fresh child lookup failed; using session lang');
+          }
+          if (!asrLocale) asrLocale = (env.ASR_LANGUAGE_DEFAULT || 'zh').slice(0, 2);
           const res = await asrTranscribe({
             audioBuffer: buf,
             mimeType: audioMimeType || 'audio/mpeg',
-            locale: session.childProfile.primaryLang,
+            locale: asrLocale,
           });
           text = res.text;
           recognizedText = res.text;

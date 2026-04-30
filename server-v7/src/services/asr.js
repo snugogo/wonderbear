@@ -24,6 +24,7 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import OSS from 'ali-oss';
 import env from '../config/env.js';
 import { callWithFallback, ProviderError } from '../lib/provider-chain.js';
 
@@ -215,7 +216,8 @@ async function googleTranscribe(args, signal) {
   const config = {
     encoding,
     languageCode: langCode,
-    model: 'latest_long',
+    // WO-1 §3.2: 'latest_short' fits press-to-talk kids' speech (1–10s clips).
+    model: 'latest_short',
     enableAutomaticPunctuation: true,
   };
   if (rate) config.sampleRateHertz = rate;
@@ -260,15 +262,15 @@ async function googleTranscribe(args, signal) {
 // ----------------------------------------------------------------------------
 // Provider 2 — DashScope paraformer-v2 (Aliyun) async REST
 //
-// Flow:
-//   1. Upload audio buffer to R2 (we already have R2 client wired up).
-//   2. POST /api/v1/services/audio/asr/transcription with X-DashScope-Async
-//      header + R2 public URL.
-//   3. Poll /api/v1/tasks/{task_id} every ~700ms until status is SUCCEEDED
-//      or FAILED.
+// Flow (post-WO-1):
+//   1. Upload audio buffer to Aliyun OSS via the ACCELERATE endpoint.
+//   2. POST /api/v1/services/audio/asr/transcription with the STANDARD-
+//      endpoint OSS URL, plus headers:
+//        X-DashScope-Async: enable
+//        X-DashScope-OssResourceResolve: enable   ← required, else 403
+//   3. Poll /api/v1/tasks/{task_id} every ~700ms until SUCCEEDED or FAILED.
 //   4. Fetch transcription_url JSON, extract `.transcripts[0].text`.
-//   5. Best-effort: delete the temp R2 object (non-fatal if it stays a few
-//      hours; we use a TTL-friendly key prefix).
+//   5. Best-effort: delete the OSS object (bucket lifecycle reaps anyway).
 // ----------------------------------------------------------------------------
 
 const DASHSCOPE_BASE = 'https://dashscope.aliyuncs.com';
@@ -346,6 +348,82 @@ async function deleteR2ObjectBestEffort(key) {
   }
 }
 
+// ----------------------------------------------------------------------------
+// Aliyun OSS — WO-1 §3.3. Replaces R2 for DashScope (CN backend 403s on R2).
+// Upload via ACCELERATE endpoint; hand DashScope the STANDARD-endpoint URL
+// + header `X-DashScope-OssResourceResolve: enable` (else 403).
+// ----------------------------------------------------------------------------
+
+let _ossClient = null;
+function getOssClient() {
+  if (_ossClient) return _ossClient;
+  if (
+    !env.OSS_REGION ||
+    !env.OSS_ACCESS_KEY_ID ||
+    !env.OSS_ACCESS_KEY_SECRET ||
+    !env.OSS_BUCKET ||
+    !env.OSS_ENDPOINT_ACCELERATE ||
+    !env.OSS_ENDPOINT_STANDARD
+  ) {
+    throw new Error(
+      'DashScope ASR requires OSS_* env vars (REGION/BUCKET/ACCESS_KEY/ENDPOINT_*) — missing',
+    );
+  }
+  _ossClient = new OSS({
+    region: env.OSS_REGION,
+    accessKeyId: env.OSS_ACCESS_KEY_ID,
+    accessKeySecret: env.OSS_ACCESS_KEY_SECRET,
+    bucket: env.OSS_BUCKET,
+    endpoint: env.OSS_ENDPOINT_ACCELERATE, // SDK upload path uses ACCELERATE
+    secure: true,
+  });
+  return _ossClient;
+}
+
+async function uploadAudioToOSS(audioBuffer, mimeType) {
+  const ext = extFromMime(mimeType);
+  const date = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const id = crypto.randomBytes(8).toString('hex');
+  const key = `asr/${date}/${Date.now()}_${id}.${ext}`;
+
+  // One retry for transient network issues. DashScope is the primary use
+  // case for this code path → we cannot afford to fail on a flaky packet.
+  let attempt = 0;
+  let lastErr = null;
+  while (attempt < 2) {
+    try {
+      await getOssClient().put(key, audioBuffer, {
+        mime: mimeType || 'application/octet-stream',
+      });
+      // CRITICAL: return URL must use STANDARD endpoint (DashScope's backend
+      // can't resolve the ACCELERATE one). See workorder §3.3.3.
+      const url = `https://${env.OSS_BUCKET}.${env.OSS_ENDPOINT_STANDARD}/${key}`;
+      console.log(`[asr-dashscope] uploaded to OSS: ${key}, url=${url}`);
+      return { url, key };
+    } catch (err) {
+      attempt++;
+      lastErr = err;
+      if (attempt < 2) {
+        console.warn(
+          `[asr-dashscope] OSS upload retry ${attempt}: ${err?.message || err}`,
+        );
+        await new Promise((r) => setTimeout(r, 200));
+      }
+    }
+  }
+  throw new Error(
+    `[asr-dashscope] OSS upload failed after retries: ${lastErr?.message || lastErr}`,
+  );
+}
+
+async function deleteOssObjectBestEffort(key) {
+  try {
+    await getOssClient().delete(key);
+  } catch (_) {
+    /* non-fatal — bucket lifecycle policy will reap leftover keys */
+  }
+}
+
 async function dashscopeTranscribe(args, signal) {
   const { audioBuffer, mimeType, locale } = args || {};
   if (!audioBuffer || audioBuffer.length === 0) {
@@ -358,12 +436,12 @@ async function dashscopeTranscribe(args, signal) {
     });
   }
 
-  // 1. Upload to R2
+  // 1. Upload to Aliyun OSS (WO-1 §3.3 — replaces R2).
   let uploaded;
   try {
-    uploaded = await uploadAudioToR2(audioBuffer, mimeType);
+    uploaded = await uploadAudioToOSS(audioBuffer, mimeType);
   } catch (e) {
-    throw new ProviderError(`R2 upload failed: ${e.message}`, {
+    throw new ProviderError(`OSS upload failed: ${e.message}`, {
       status: 502,
       provider: 'dashscope',
       cause: e,
@@ -371,8 +449,8 @@ async function dashscopeTranscribe(args, signal) {
   }
 
   try {
-    // 2. Submit task
-    const lang = DASHSCOPE_LANG_MAP[locale] || 'zh';
+    // 2. Submit task — honour caller locale (WO-1: do not hard-code zh).
+    const lang = DASHSCOPE_LANG_MAP[locale] || DASHSCOPE_LANG_MAP[env.ASR_LANGUAGE_DEFAULT] || 'zh';
     const submitResp = await fetch(
       `${DASHSCOPE_BASE}/api/v1/services/audio/asr/transcription`,
       {
@@ -381,6 +459,8 @@ async function dashscopeTranscribe(args, signal) {
           Authorization: `Bearer ${env.DASHSCOPE_API_KEY}`,
           'Content-Type': 'application/json',
           'X-DashScope-Async': 'enable',
+          // WO-1 §3.3.4 — required, else DashScope 403s on the OSS fetch.
+          'X-DashScope-OssResourceResolve': 'enable',
         },
         body: JSON.stringify({
           model: env.DASHSCOPE_ASR_MODEL || 'paraformer-v2',
@@ -479,7 +559,8 @@ async function dashscopeTranscribe(args, signal) {
     }
     return { text, locale: locale || 'zh' };
   } finally {
-    deleteR2ObjectBestEffort(uploaded.key);
+    // WO-1: best-effort cleanup; bucket lifecycle (1d) reaps anyway.
+    deleteOssObjectBestEffort(uploaded.key);
   }
 }
 
