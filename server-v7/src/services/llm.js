@@ -24,9 +24,24 @@
 // ============================================================================
 
 import env from '../config/env.js';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 
 const GEMINI_URL =
   'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+
+// WO-3.7: v2-lite story prompt addendum (cached). Appended to the JS systemPrompt
+// before each Gemini call to harden the 12-page constraint.
+let _v2LiteStoryAddendumCache = null;
+function loadV2LiteStoryAddendum() {
+  if (_v2LiteStoryAddendumCache !== null) return _v2LiteStoryAddendumCache;
+  try {
+    const dir = dirname(fileURLToPath(import.meta.url));
+    _v2LiteStoryAddendumCache = readFileSync(join(dir, '..', 'prompts', 'v2-lite', 'story.system.txt'), 'utf8');
+  } catch { _v2LiteStoryAddendumCache = ''; }
+  return _v2LiteStoryAddendumCache;
+}
 
 export function isMockMode() {
   if (process.env.USE_MOCK_AI === 'true' || process.env.USE_MOCK_AI === '1') return true;
@@ -761,11 +776,46 @@ function mockStoryJson({ dialogueSummary, childProfile }) {
   };
 }
 
+// WO-3.7: 1-retry wrapper around callGeminiStory (~33% sample failure when
+// Gemini returns != 12 pages). Retry only on page-count mismatch — net/HTTP
+// errors flow through to the OpenAI fallback unchanged.
+function buildStoryPromptWithFeedback(basePrompt, lastResult) {
+  const n = lastResult?.pages?.length ?? 'unknown';
+  return `${basePrompt}\n\n⚠️ RETRY FEEDBACK: previous attempt returned ${n} pages. This story MUST contain EXACTLY 12 pages — not ${n}, not more. Generate pages 1-12 in order, each a distinct scene. pages.length === 12 is a HARD CONSTRAINT; count before returning.`;
+}
+async function generateStoryWithRetry({ systemPrompt, dialogueSummary, childProfile }) {
+  const MAX_ATTEMPTS = 2;
+  const addendum = loadV2LiteStoryAddendum();
+  const base = addendum ? `${systemPrompt}\n\n${addendum}` : systemPrompt;
+  let lastError = null, lastResult = null;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const isRetry = attempt > 1;
+    const effective = isRetry ? buildStoryPromptWithFeedback(base, lastResult) : base;
+    console.warn(`[storyGen] attempt=${attempt}/${MAX_ATTEMPTS}${isRetry ? ' (retry with feedback)' : ''}`);
+    try {
+      const parsed = await callGeminiStory({ systemPrompt: effective, dialogueSummary, childProfile });
+      if (isRetry) console.warn(`[storyGen.metric] retrySucceeded=true firstPageCount=${lastResult?.pages?.length ?? 'unknown'} retryAttempt=${attempt}`);
+      else console.warn(`[storyGen.metric] firstAttemptSucceeded=true`);
+      return parsed;
+    } catch (err) {
+      lastError = err;
+      const msg = String(err?.message || '');
+      if (!/returned \d+ pages, expected 12/.test(msg)) throw err; // non page-count → bubble
+      const m = msg.match(/returned (\d+) pages/);
+      lastResult = { pages: { length: m ? Number(m[1]) : 0 } };
+      console.warn(`[storyGen] attempt=${attempt} bad page count (${lastResult.pages.length}), will retry`);
+    }
+  }
+  console.error(`[storyGen.metric] retryFailed=true totalAttempts=${MAX_ATTEMPTS}`);
+  throw lastError;
+}
+
 async function liveStoryJson({ systemPrompt, dialogueSummary, childProfile }) {
-  // Try Gemini first, fallback to OpenAI on 429/5xx/timeout
+  // Try Gemini first (WO-3.7 retry wrapper handles 12-page mismatches),
+  // fallback to OpenAI on 429/5xx/timeout / non-retryable Gemini errors.
   let geminiError = null;
   try {
-    return await callGeminiStory({ systemPrompt, dialogueSummary, childProfile });
+    return await generateStoryWithRetry({ systemPrompt, dialogueSummary, childProfile });
   } catch (err) {
     geminiError = err;
     const msg = String(err?.message || '');
@@ -825,11 +875,11 @@ async function callGeminiStory({ systemPrompt, dialogueSummary, childProfile }) 
   });
   if (!resp.ok) throw new Error(`Gemini story HTTP ${resp.status}`);
   const data = await resp.json();
-  // Check for truncation or safety filter
+  // Check for incomplete generation or safety filter (covers MAX_TOKENS, SAFETY, RECITATION)
   const finishReason = data?.candidates?.[0]?.finishReason;
   if (finishReason && finishReason !== 'STOP') {
     console.error('[llm] Gemini finish reason:', finishReason);
-    throw new Error(`Gemini story truncated: finishReason=${finishReason}`);
+    throw new Error(`Gemini story incomplete: finishReason=${finishReason}`);
   }
   let raw = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';
   // Strip markdown code fences if present (Gemini 2.5 sometimes wraps JSON)
