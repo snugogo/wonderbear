@@ -48,6 +48,7 @@ const env = {
   ASR_FALLBACK_CHAIN: process.env.ASR_FALLBACK_CHAIN || 'dashscope',
   ASR_TIMEOUT_MS: parseInt(process.env.ASR_TIMEOUT_MS || '8000', 10),
   ASR_LANGUAGE_DEFAULT: process.env.ASR_LANGUAGE_DEFAULT || 'zh',
+  ASR_DUMP_ENABLED: process.env.ASR_DUMP_ENABLED || 'false',
   TTS_PRIMARY: process.env.TTS_PRIMARY || 'dashscope',
   TTS_FALLBACK_CHAIN: process.env.TTS_FALLBACK_CHAIN || 'elevenlabs',
   TTS_TIMEOUT_MS: parseInt(process.env.TTS_TIMEOUT_MS || '15000', 10),
@@ -91,8 +92,6 @@ const env = {
   OSS_ENDPOINT_STANDARD: process.env.OSS_ENDPOINT_STANDARD || 'oss-cn-hangzhou.aliyuncs.com',
   OSS_ACCESS_KEY_ID: process.env.OSS_ACCESS_KEY_ID,
   OSS_ACCESS_KEY_SECRET: process.env.OSS_ACCESS_KEY_SECRET,
-  STORAGE_TYPE: process.env.STORAGE_TYPE || 'local',
-  LOCAL_STORAGE_PATH: process.env.LOCAL_STORAGE_PATH || './storage',
 
   // debug
   DEBUG_GALLERY_PASSWORD: process.env.DEBUG_GALLERY_PASSWORD,

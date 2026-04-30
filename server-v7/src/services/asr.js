@@ -606,7 +606,7 @@ async function whisperTranscribe(args, signal) {
       provider: 'whisper',
     });
   }
-  console.log('[asr-whisper] transcription=' + JSON.stringify(text) + ' locale=' + locale); return { text, locale };
+  return { text, locale };
 }
 
 // ----------------------------------------------------------------------------

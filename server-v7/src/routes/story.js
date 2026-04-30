@@ -300,7 +300,16 @@ export default async function storyRoutes(fastify) {
       if (audioBase64) {
         try {
           const buf = Buffer.from(audioBase64, 'base64');
-          if (!buf || buf.length < 4) throw new Error('audioBase64 decoded to empty buffer'); try { const fs = (await import('node:fs')); fs.writeFileSync('/tmp/asr-dump-' + Date.now() + '.webm', buf); request.log.info({size: buf.length, mt: audioMimeType}, '[asr-dump] saved'); } catch(e) { request.log.warn({err: e.message}, '[asr-dump] failed'); }
+          if (!buf || buf.length < 4) throw new Error('audioBase64 decoded to empty buffer');
+          if (env.ASR_DUMP_ENABLED === 'true') {
+            try {
+              const fs = (await import('node:fs'));
+              fs.writeFileSync('/tmp/asr-dump-' + Date.now() + '.webm', buf);
+              request.log.info({size: buf.length, mt: audioMimeType}, '[asr-dump] saved');
+            } catch(e) {
+              request.log.warn({err: e.message}, '[asr-dump] failed');
+            }
+          }
           // WO-1 §3.1 root-cause locale fix: session.childProfile.primaryLang
           // can go stale (Redis 30-min cache outlives a parent profile edit,
           // or the client sent a stale targetLang on /dialogue/start). Re-read
