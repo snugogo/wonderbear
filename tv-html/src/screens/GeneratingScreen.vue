@@ -47,7 +47,7 @@ const { t } = useI18n();
  * that manually in the morning — droid does not run /story/generate.
  */
 const POLL_INTERVAL_MS = 1500;
-const TIMEOUT_MS = 120_000;
+const TIMEOUT_MS = 600_000;  // WO-3.1-mini: was 120_000, real gen takes 5-6min
 
 let pollTimer: number | null = null;
 let timeoutTimer: number | null = null;
