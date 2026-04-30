@@ -13,7 +13,7 @@ import { useChildStore } from '@/stores/child';
 import { api } from '@/services/api';
 
 /**
- * Seed a demo child ("Luna", age 5, en/zh) into the child store so the
+ * Seed a demo child ("Dora", age 5, en/zh) into the child store so the
  * HomeScreen greeting and avatar are non-empty even when the server call
  * (/api/device/active-child) would 401 in browser dev mode.
  * Only called when the URL has ?autobind=1 (browser demo mode).
@@ -25,7 +25,7 @@ function applyDemoChildIfRequested(): void {
     const luna = {
       id: 'demo-luna',
       parentId: 'demo-parent',
-      name: 'Luna',
+      name: 'Dora',
       age: 5,
       gender: 'female' as const,
       avatar: 'avatar_bear_classic',
@@ -54,7 +54,7 @@ export function createMockBridge(): BridgeApi {
   //   ?code=XXXX     -> override mock activationCode (otherwise DEVTEST)
   //   ?autobind=1    -> skip ActivationScreen: fire 'activation-status-change'
   //                     after boot so the app jumps straight to HomeScreen.
-  //                     Also seeds a demo child "Luna" into the child store.
+  //                     Also seeds a demo child "Dora" into the child store.
   const urlParams =
     typeof location !== 'undefined'
       ? new URLSearchParams(location.search)
@@ -77,7 +77,7 @@ export function createMockBridge(): BridgeApi {
   setTimeout(() => emit('ready'), 0);
 
   // Auto-bind: one-tap demo entry. Fires after the app has had time to mount
-  // and subscribe to 'activation-status-change'. Paired with a mock Luna that
+  // and subscribe to 'activation-status-change'. Paired with a mock Dora that
   // gets injected into the child store (see applyDemoChildIfRequested below).
   if (autobind) {
     // Wait long enough for main.ts to finish bootstrap + ActivationScreen
@@ -88,7 +88,7 @@ export function createMockBridge(): BridgeApi {
       // Suppress the global auth-error handler that main.ts installs, which
       // would otherwise kick us back to ActivationScreen the instant
       // HomeScreen's child.refreshActive() hits 401 (no real device token in
-      // browser dev mode). We've seeded Luna locally, so auth errors are
+      // browser dev mode). We've seeded Dora locally, so auth errors are
       // harmless in demo mode.
       api.onAuthError(() => {});
       applyDemoChildIfRequested();

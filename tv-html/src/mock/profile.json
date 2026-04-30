@@ -18,14 +18,14 @@
       "watch_seconds": 5400
     },
     "by_id": {
-      "child-luna": { "stories_created": 12, "learn_seconds": 8100, "watch_seconds": 5400 },
+      "child-dora": { "stories_created": 12, "learn_seconds": 8100, "watch_seconds": 5400 },
       "child-tom":  { "stories_created":  7, "learn_seconds": 4200, "watch_seconds": 3000 },
       "child-mia":  { "stories_created":  3, "learn_seconds": 1500, "watch_seconds":  900 }
     }
   },
 
   "kids_demo": [
-    { "id": "child-luna", "name": "Luna", "age": 5, "avatar": "avatar_bear_classic", "active": true  },
+    { "id": "child-dora", "name": "Dora", "age": 5, "avatar": "avatar_bear_classic", "active": true  },
     { "id": "child-tom",  "name": "Tom",  "age": 7, "avatar": "avatar_dog",          "active": false },
     { "id": "child-mia",  "name": "Mia",  "age": 4, "avatar": "avatar_rabbit",       "active": false }
   ]

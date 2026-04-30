@@ -384,7 +384,7 @@ async function submitTurn(payload: {
       // button to actually launch GeneratingScreen — gives reviewers
       // a beat to see the bear's wrap-up + the launch CTA.
       dialogue.summary = {
-        mainCharacter: 'Luna',
+        mainCharacter: 'Dora',
         scene: 'glowing forest',
         conflict: 'lost the golden key',
       };
@@ -636,7 +636,7 @@ onMounted(() => {
       // button focused). Pressing OK on the button kicks off
       // GeneratingScreen with its progress bar + walking bear.
       dialogue.summary = {
-        mainCharacter: 'Luna',
+        mainCharacter: 'Dora',
         scene: 'glowing forest',
         conflict: 'lost the golden key',
       };

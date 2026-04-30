@@ -76,7 +76,7 @@ export function buildDemoStory(
     pages: buildDemoStoryPages(12),
     dialogue: {
       summary: {
-        mainCharacter: 'Luna',
+        mainCharacter: 'Dora',
         scene: 'glowing forest',
         conflict: 'lost the golden key',
       },
