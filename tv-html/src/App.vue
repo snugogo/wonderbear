@@ -31,6 +31,9 @@ import CreateInviteScreen from '@/screens/CreateInviteScreen.vue';
 import OfflineScreen from '@/screens/OfflineScreen.vue';
 import ErrorScreen from '@/screens/ErrorScreen.vue';
 
+// WO-3.16 Part C — 全局返回按钮(鼠标 / 触屏专用,遥控器用 ESC)。
+import GlobalBackButton from '@/components/GlobalBackButton.vue';
+
 // Tree-shake DevConsole from production bundle
 const DevConsole = import.meta.env.DEV
   ? defineAsyncComponent(() => import('@/components/DevConsole.vue'))
@@ -62,6 +65,22 @@ const screenMap: Record<ScreenName, unknown> = {
 };
 
 const CurrentScreen = computed(() => screenMap[screen.current]);
+
+/*
+ * WO-3.16 Part C — 决定哪些屏幕显示返回按钮。
+ *   排除清单(根入口 / 错误处理 / 系统状态屏):
+ *     - boot       (初始化 splash,无可返回目标)
+ *     - activation (设备激活根入口)
+ *     - home       (产品根导航)
+ *     - offline    (网络断开屏,已有自动恢复路径)
+ *     - error      (错误屏自带 retry / back focusable)
+ *   其他屏幕(create / dialogue / library / story-* 等)统一显示按钮,
+ *   触屏 / 鼠标用户点击 → screen.back();遥控器仍走原 ESC 通道。
+ */
+const showGlobalBackButton = computed<boolean>(() => {
+  const excluded: ScreenName[] = ['boot', 'activation', 'home', 'offline', 'error'];
+  return !excluded.includes(screen.current);
+});
 
 const isDev = import.meta.env.DEV;
 const showDev = isDev || (typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('dev'));
@@ -209,6 +228,9 @@ onBeforeUnmount(() => {
     </Transition>
 
     <component v-if="showDev && DevConsole" :is="DevConsole" />
+
+    <!-- WO-3.16 Part C: 全局返回按钮(鼠标 / 触屏专用,遥控器用 ESC)。 -->
+    <GlobalBackButton v-if="showGlobalBackButton" />
 
     <!--
       2026-04-27 dev-only status badge (top-left).

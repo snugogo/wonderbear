@@ -94,6 +94,14 @@ interface RequestOptions {
   idempotent?: boolean;
   skipAuth?: boolean;
   timeoutMs?: number;
+  /**
+   * WO-3.16 Part A — caller-supplied AbortSignal so the dialogue screen
+   * can cancel an in-flight /dialogue/turn when the child interrupts
+   * (presses mic mid-thinking). Aborted requests surface as DOMException
+   * "AbortError" — DialogueScreen swallows that branch silently so the
+   * user-initiated interrupt does NOT bubble into ErrorScreen.
+   */
+  signal?: AbortSignal;
 }
 
 // =============================================================================
@@ -570,6 +578,23 @@ class ApiClient {
 
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), opts.timeoutMs ?? 15000);
+    // WO-3.16 Part A — bridge caller-supplied signal into our internal
+    // controller so a cancellation either via timeout or via caller still
+    // surfaces a single AbortError on `fetch`. Re-throw AbortError as-is
+    // (do NOT remap to NETWORK_OFFLINE) so DialogueScreen can detect a
+    // user-initiated cancel and stay silent.
+    let unhookExternalAbort: (() => void) | null = null;
+    if (opts.signal) {
+      if (opts.signal.aborted) {
+        ac.abort();
+      } else {
+        const onAbort = (): void => { ac.abort(); };
+        opts.signal.addEventListener('abort', onAbort);
+        unhookExternalAbort = (): void => {
+          opts.signal?.removeEventListener('abort', onAbort);
+        };
+      }
+    }
 
     let resp: Response;
     try {
@@ -579,8 +604,14 @@ class ApiClient {
         body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
         signal: ac.signal,
       });
-    } catch {
+    } catch (err) {
       clearTimeout(timer);
+      unhookExternalAbort?.();
+      // WO-3.16 Part A — re-throw AbortError verbatim so the caller can
+      // distinguish user cancel from real network failure.
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        throw err;
+      }
       throw new ApiError(
         NETWORK_OFFLINE,
         getErrorInfo(NETWORK_OFFLINE, this.locale).message,
@@ -588,6 +619,7 @@ class ApiClient {
       );
     }
     clearTimeout(timer);
+    unhookExternalAbort?.();
 
     if (resp.status === 401) {
       const info = getErrorInfo(ERR.TOKEN_EXPIRED, this.locale);
@@ -675,9 +707,22 @@ class ApiClient {
   dialogueStart(req: StartDialogueReq) {
     return this.post<StartDialogueResp>('/story/dialogue/start', req);
   }
-  /** §7.3 — advance one round. Pass either userInput (text) or audioBase64 (raw recording). */
-  dialogueTurn(dialogueId: string, req: DialogueTurnReq) {
-    return this.post<DialogueTurnResp>(`/story/dialogue/${dialogueId}/turn`, req);
+  /**
+   * §7.3 — advance one round. Pass either userInput (text) or audioBase64 (raw recording).
+   *
+   * WO-3.16 Part A — accepts an optional `{ signal }` so DialogueScreen
+   * can cancel an in-flight turn when the child interrupts mid-thinking.
+   * The signal threads through to fetch via RequestOptions.signal; aborts
+   * propagate as DOMException 'AbortError' for the caller to swallow.
+   */
+  dialogueTurn(
+    dialogueId: string,
+    req: DialogueTurnReq,
+    opts?: { signal?: AbortSignal },
+  ) {
+    return this.post<DialogueTurnResp>(`/story/dialogue/${dialogueId}/turn`, req, {
+      signal: opts?.signal,
+    });
   }
   /** §7.4 — kick off async generation, returns 202 */
   storyGenerate(req: GenerateStoryReq) {

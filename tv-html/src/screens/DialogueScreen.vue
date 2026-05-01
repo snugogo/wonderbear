@@ -69,6 +69,23 @@ let unsubTtsEnd: (() => void) | null = null;
 let inFlight = false;
 let mounted = true;
 
+/*
+ * WO-3.16 Part A — controller for the in-flight /dialogue/turn fetch.
+ * Created in submitTurn(), aborted from onVoiceKeyDown when the child
+ * presses the mic during 'uploading' / 'bear-thinking'. AbortError
+ * propagates back through submitTurn's catch as a silent no-op.
+ */
+let currentTurnAbortController: AbortController | null = null;
+
+/*
+ * WO-3.16 Part B — 200ms long-press debounce so a stray finger tap on
+ * touch screens (iPhone Safari / iPad) doesn't fire a 0.1s noise
+ * recording. Hardware GP15 mic key has its own debounce; for browsers
+ * the JS-side guard below is the safety net.
+ */
+const PRESS_DOWN_DEBOUNCE_MS = 200;
+let pressDownTimer: number | null = null;
+
 /**
  * 2026-04-24: dev-only `?demoPhase=3A|3B|3C` query param — when present,
  * skips the server call and pins the screen to a specific visual state
@@ -274,11 +291,76 @@ async function startDialogue(): Promise<void> {
   }
 }
 
+/*
+ * WO-3.16 Part A + B —
+ *   Part A: route every voice-key-down to a phase-aware handler so the
+ *           mic stays "alive" in bear-speaking / uploading /
+ *           bear-thinking (interrupt) instead of being silently dropped.
+ *   Part B: defer the actual recording start by 200ms so a stray short
+ *           tap on a touch screen does not produce a 0.1s noise upload.
+ */
 function onVoiceKeyDown(): void {
   if (!mounted) return;
-  if (dialogue.phase !== 'waiting-for-child') return;
-  if (inFlight) return;
 
+  switch (dialogue.phase) {
+    case 'waiting-for-child':
+      // WO-3.16 Part A — normal start path. Hand off to debounce.
+      schedulePressDownAfterDebounce();
+      break;
+
+    case 'bear-speaking':
+      // WO-3.16 Part A — long-press during TTS = "interrupt the bear".
+      // Stop TTS immediately, flip phase so the debounce can record.
+      bridge.stopTts();
+      dialogue.setPhase('waiting-for-child');
+      schedulePressDownAfterDebounce();
+      break;
+
+    case 'uploading':
+    case 'bear-thinking':
+      // WO-3.16 Part A — child wants to insert a thought while the
+      // server is still processing the prior turn. Cancel the in-flight
+      // request, drop inFlight, and fall through to the debounce path.
+      currentTurnAbortController?.abort();
+      currentTurnAbortController = null;
+      inFlight = false;
+      dialogue.setPhase('waiting-for-child');
+      schedulePressDownAfterDebounce();
+      break;
+
+    case 'recording':
+    case 'idle':
+    case 'finished':
+      // Already recording, or in a terminal/initialising state — ignore.
+      return;
+  }
+}
+
+/*
+ * WO-3.16 Part B — schedule the real bridge.startVoiceRecord call after
+ * PRESS_DOWN_DEBOUNCE_MS. If the user releases (onVoiceKeyUp) before
+ * the timer fires, we treat it as a stray tap and clear the timer.
+ */
+function schedulePressDownAfterDebounce(): void {
+  if (pressDownTimer != null) {
+    window.clearTimeout(pressDownTimer);
+  }
+  pressDownTimer = window.setTimeout(() => {
+    pressDownTimer = null;
+    if (!mounted) return;
+    // Race guard — phase may have shifted during the 200ms wait.
+    if (dialogue.phase !== 'waiting-for-child') return;
+    actuallyStartRecord();
+  }, PRESS_DOWN_DEBOUNCE_MS);
+}
+
+/*
+ * WO-3.16 Part B — actual call into bridge.startVoiceRecord, lifted
+ * out of the old onVoiceKeyDown so the debounce path is the single
+ * entry point that flips phase to 'recording'.
+ */
+function actuallyStartRecord(): void {
+  if (inFlight) return;
   try {
     const ret = bridge.startVoiceRecord('dialogue');
     if (ret && typeof (ret as Promise<void>).then === 'function') {
@@ -297,6 +379,16 @@ function onVoiceKeyDown(): void {
 
 async function onVoiceKeyUp(): Promise<void> {
   if (!mounted) return;
+
+  // WO-3.16 Part B — short-press detection. If the debounce timer is
+  // still pending, the press was <200ms — treat as accidental tap and
+  // do NOT start a recording.
+  if (pressDownTimer != null) {
+    window.clearTimeout(pressDownTimer);
+    pressDownTimer = null;
+    return;
+  }
+
   if (dialogue.phase !== 'recording') return;
   if (inFlight) return;
 
@@ -417,6 +509,10 @@ async function submitTurn(payload: {
   // ~$0.02 (Whisper ASR + Gemini LLM); 7 turns ≈ $0.14. Acceptable for
   // a real run, but the night shift droid only validates 1 turn via
   // /tmp/p1.mp3 fallback (workorder §4.4) — never the full ceremony.
+  // WO-3.16 Part A — open an AbortController so a follow-up
+  // voice-key-down can cancel this fetch in flight.
+  currentTurnAbortController = new AbortController();
+  const turnSignal = currentTurnAbortController.signal;
   try {
     // Per patch v3: audioMimeType is REQUIRED when audioBase64 is present.
     // Browser mock bridge produces audio/webm (MediaRecorder default on Chromium).
@@ -432,7 +528,7 @@ async function submitTurn(payload: {
       audioMimeType,
       skipRemaining: payload.skipRemaining,
       locale: locale.value as Locale,
-    });
+    }, { signal: turnSignal });
 
     dialogue.applyTurn({
       done: data.done,
@@ -464,11 +560,24 @@ async function submitTurn(payload: {
       speakOrAdvance();
     }
   } catch (e) {
+    // WO-3.16 Part A — user-initiated abort surfaces as DOMException
+    // 'AbortError'. Treat it as silent: the new onVoiceKeyDown path has
+    // already moved phase → waiting-for-child and reset inFlight, so we
+    // just bail without showing an error.
+    if (e instanceof DOMException && e.name === 'AbortError') {
+      return;
+    }
     if (!(e instanceof ApiError)) {
       screen.goError(ERR.INTERNAL_ERROR);
       return;
     }
     handleTurnError(e);
+  } finally {
+    // WO-3.16 Part A — release the controller. Guarded against the
+    // case where a newer turn already overwrote it.
+    if (currentTurnAbortController?.signal === turnSignal) {
+      currentTurnAbortController = null;
+    }
   }
 }
 
@@ -684,6 +793,16 @@ onBeforeUnmount(() => {
     window.clearTimeout(softHintTimer);
     softHintTimer = null;
   }
+  // WO-3.16 Part B — drop any pending press-down debounce timer so it
+  // can't fire after the screen unmounts.
+  if (pressDownTimer != null) {
+    window.clearTimeout(pressDownTimer);
+    pressDownTimer = null;
+  }
+  // WO-3.16 Part A — abort any in-flight turn so the response cannot
+  // try to mutate the store after the screen is gone.
+  currentTurnAbortController?.abort();
+  currentTurnAbortController = null;
   stopMicAlternation();
   stopReactLoop();
   bridge.stopTts();
