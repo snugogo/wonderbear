@@ -47,6 +47,9 @@ const overrides = {
   dialogue: {
     youSaid: 'Powiedziałeś:',
   },
+  story: {
+    createdBy: 'Stworzone przez {name}',
+  },
   storyPreview: {
     title: 'Twoja historia nabiera kształtu',
     subtitle: 'Zobacz, jak Miś ją złożył',

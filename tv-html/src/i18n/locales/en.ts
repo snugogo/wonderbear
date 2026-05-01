@@ -126,6 +126,7 @@ export default {
     backToLibrary: 'Back to library',
     ready: 'Your story is ready!',
     startWatching: 'Press OK to start',
+    createdBy: 'Created by {name}',
     endLearn: 'Enter Learn',
     endSequel: 'Create Sequel',
     ctrlPrev: 'Previous',

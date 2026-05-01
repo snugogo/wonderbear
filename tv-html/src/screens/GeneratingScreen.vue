@@ -185,7 +185,11 @@ async function loadAndNavigate(storyId: string): Promise<void> {
     const { data } = await api.storyDetail(storyId);
     storyStore.loadStory(data.story);
     clearAllTimers();
-    screen.go('story-cover');
+    // WO-3.12: mark first-time entry so StoryCoverScreen renders the
+    // celebration overlay (confetti / stars / cheering bear) and TTS-
+    // announces the author. Replays from Library/Favorites/Create/
+    // Leaderboard navigate without firstTime, so they skip both.
+    screen.go('story-cover', { firstTime: true });
   } catch (e) {
     const code = e instanceof ApiError ? e.code : ERR.STORY_NOT_READY;
     screen.goError(code);

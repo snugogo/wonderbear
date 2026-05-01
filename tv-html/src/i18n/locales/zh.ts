@@ -141,6 +141,7 @@ export default {
     backToLibrary: '回小书屋',
     ready: '故事画好啦!',
     startWatching: '按 OK 开始看',
+    createdBy: '由 {name} 创作',
     endLearn: '进入识字',
     endSequel: '编个续集',
     ctrlPrev: '上一页',

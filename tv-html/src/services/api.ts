@@ -373,6 +373,12 @@ export interface StoryPage {
 export interface Story {
   id: string;
   childId: string;
+  /**
+   * WO-3.12 — author display. Backend joins Child via Prisma include and
+   * surfaces just the name (no PII beyond name). Optional because older
+   * mock-mode payloads may omit it; UI must tolerate null.
+   */
+  childName?: string | null;
   title: string;
   titleLearning?: string | null;
   coverUrl: string;
@@ -451,6 +457,33 @@ export interface PlayStatReq {
   pageNum?: number;
   timestamp: string;
   durationMs?: number;
+}
+
+// =============================================================================
+// TTS (per §8)
+// =============================================================================
+
+/** §8.1 — request body for /api/tts/synthesize. */
+export interface TtsSynthesizeReq {
+  text: string;
+  lang?: Locale;
+  /** Optional override; server picks per-purpose default when omitted. */
+  voiceId?: string;
+  speed?: number;
+  /**
+   * WO-3.12: 'dialogue' is the bear-voice purpose used by StoryCoverScreen
+   * for the "Created by …" announcement. Server route currently destructures
+   * { text, lang, voiceId, speed } only — extra fields are ignored harmlessly,
+   * leaving room for a follow-up workorder to forward purpose end-to-end.
+   */
+  purpose?: 'narration' | 'dialogue' | 'vocab';
+}
+
+/** §8.1 — response body. */
+export interface TtsSynthesizeResp {
+  audioUrl: string;
+  durationMs: number;
+  cached: boolean;
 }
 
 // =============================================================================
@@ -682,6 +715,12 @@ class ApiClient {
   /** §7.10 — play telemetry, fire-and-forget */
   storyPlayStat(storyId: string, req: PlayStatReq) {
     return this.post<null>(`/story/${storyId}/play-stat`, req);
+  }
+
+  // §8 TTS
+  /** §8.1 — synthesize a short utterance. WO-3.12 author announcement. */
+  ttsSynthesize(req: TtsSynthesizeReq) {
+    return this.post<TtsSynthesizeResp>('/tts/synthesize', req);
   }
 
   // §11 OEM

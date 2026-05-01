@@ -21,7 +21,7 @@ import { useI18n } from 'vue-i18n';
 import { bridge } from '@/services/bridge';
 import { useFocusable } from '@/services/focus';
 import { api, ApiError } from '@/services/api';
-import { ERR } from '@/utils/errorCodes';
+import { ERR, type Locale } from '@/utils/errorCodes';
 import { asset } from '@/utils/assets';
 
 const AUTO_ADVANCE_MS = 5000;
@@ -29,7 +29,7 @@ const AUTO_ADVANCE_MS = 5000;
 const storyStore = useStoryStore();
 const screen = useScreenStore();
 const bgm = useBgmStore();
-const { t } = useI18n();
+const { t, locale } = useI18n();
 
 // iter8 gallery-safe: when loaded via ?dev=1 deep-link without a real story,
 // don't bail — show the "ready" ceremony with a placeholder title.
@@ -46,6 +46,30 @@ const coverUrl = computed<string>(() => storyStore.active?.coverUrl ?? '');
 const title = computed<string>(() =>
   storyStore.active?.title ?? 'The Brave Little Bear',
 );
+
+/*
+ * WO-3.12: celebration overlay (confetti + stars + cheering bear) and the
+ * TTS author-announcement only run on first-time entry — i.e. right after
+ * GeneratingScreen completes. Replays from Library/Favorites/Create/
+ * Leaderboard arrive WITHOUT { firstTime: true } in screen.payload.
+ *
+ * The cover background and "ready / title / start hint" ceremony block
+ * still render every entry — only the celebratory layer is gated.
+ */
+const firstTime = computed<boolean>(() => {
+  const p = (screen.payload ?? {}) as Record<string, unknown>;
+  return p.firstTime === true;
+});
+
+/*
+ * WO-3.12: "Created by {name}" line shows on EVERY entry (matters most for
+ * cross-author scenarios e.g. another kid's story on the leaderboard).
+ * Backend serializer surfaces childName via Prisma include on /api/story/:id.
+ */
+const authorName = computed<string | null>(() => {
+  const name = storyStore.active?.childName;
+  return typeof name === 'string' && name.trim().length > 0 ? name : null;
+});
 
 function clearTimers(): void {
   if (advanceTimer != null) {
@@ -102,6 +126,39 @@ async function ensureActiveStory(): Promise<boolean> {
   }
 }
 
+/*
+ * WO-3.12: TTS-announce "Created by {name}" on first-time entry only.
+ *
+ * Fire-and-forget: the synthesize request runs in parallel with the
+ * AUTO_ADVANCE_MS auto-advance timer; if the network call is slow, the
+ * narration on StoryBodyScreen will simply start before the bear voice
+ * finishes — bridge.playTts on body screen calls bridge.stopTts() in
+ * its own playCurrentPage path, so audio doesn't double up.
+ *
+ * Replays (no firstTime payload) skip TTS entirely, matching the kid-
+ * friendly principle that the celebration is a once-per-story reward,
+ * not a chrome you sit through every replay.
+ */
+async function announceAuthorIfFirstTime(): Promise<void> {
+  if (!firstTime.value) return;
+  const name = authorName.value;
+  if (!name) return;
+  if (isDevBrowser) return; // no backend in gallery / dev=1 mode
+  try {
+    const text = t('story.createdBy', { name });
+    const { data } = await api.ttsSynthesize({
+      text,
+      lang: locale.value as Locale,
+      purpose: 'dialogue', // bear voice (longhuhu_v3 when env wired)
+    });
+    if (mounted && data.audioUrl) {
+      bridge.playTts(data.audioUrl);
+    }
+  } catch (e) {
+    bridge.log('story-cover', { event: 'author_tts_failed', err: String(e) });
+  }
+}
+
 onMounted(() => {
   void (async () => {
     const ok = await ensureActiveStory();
@@ -111,6 +168,9 @@ onMounted(() => {
 
     // Trigger CSS fade-in next frame
     window.requestAnimationFrame(() => { visible.value = true; });
+
+    // WO-3.12: kick off author TTS in parallel; do NOT await.
+    void announceAuthorIfFirstTime();
 
     advanceTimer = window.setTimeout(() => {
       if (mounted) advance();
@@ -135,18 +195,24 @@ onBeforeUnmount(() => {
     >
 
     <!-- Layer 2: decorative confetti drifting up — celebratory cue that
-         the story just finished generating. Uses deco_confetti (transparent). -->
-    <img class="deco-confetti left" :src="asset('deco/deco_confetti.webp')" alt="" />
-    <img class="deco-confetti right" :src="asset('deco/deco_confetti.webp')" alt="" />
-    <img class="deco-stars" :src="asset('deco/deco_stars.webp')" alt="" />
+         the story just finished generating. Uses deco_confetti (transparent).
+         WO-3.12: gated on firstTime so replays from Library/Favorites/
+         Create/Leaderboard skip the celebration. -->
+    <img v-if="firstTime" class="deco-confetti left" :src="asset('deco/deco_confetti.webp')" alt="" />
+    <img v-if="firstTime" class="deco-confetti right" :src="asset('deco/deco_confetti.webp')" alt="" />
+    <img v-if="firstTime" class="deco-stars" :src="asset('deco/deco_stars.webp')" alt="" />
 
-    <!-- Layer 3: cheering bear — center-ish, bobs gently. -->
-    <img class="bear" :src="asset('bear/bear_cheer.webp')" alt="" />
+    <!-- Layer 3: cheering bear — center-ish, bobs gently. WO-3.12 first-time only. -->
+    <img v-if="firstTime" class="bear" :src="asset('bear/bear_cheer.webp')" alt="" />
 
     <!-- Layer 4: "ready" ceremony text block. -->
     <div class="ceremony">
       <div class="ready-line wb-text-shadow">{{ t('story.ready') }}</div>
       <h1 class="title wb-text-shadow">{{ title }}</h1>
+      <!-- WO-3.12: author line shows on every entry (first-time + replay). -->
+      <div v-if="authorName" class="author-line wb-text-shadow-sm">
+        {{ t('story.createdBy', { name: authorName }) }}
+      </div>
       <div class="start-hint wb-text-shadow-sm">{{ t('story.startWatching') }}</div>
     </div>
 
@@ -258,6 +324,15 @@ onBeforeUnmount(() => {
   letter-spacing: 0.03em;
   line-height: 1.2;
   margin: 0;
+}
+.author-line {
+  font-family: var(--ff-display);
+  color: var(--c-cream);
+  font-size: 22px;
+  font-weight: 500;
+  opacity: 0.85;
+  margin-top: 4px;
+  text-align: center;
 }
 .start-hint {
   font-family: var(--ff-display);

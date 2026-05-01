@@ -124,6 +124,11 @@ function storyToDetail(story, viewerType = 'parent') {
   const out = {
     id: story.id,
     childId: story.childId,
+    // WO-3.12: surface author name for the StoryCoverScreen "Created by …"
+    // line + first-time TTS announcement. Sourced via Prisma include on the
+    // GET /api/story/:id handler below; null for legacy rows missing the
+    // join target so the UI can fall back gracefully.
+    childName: story.child?.name ?? null,
     title: story.title,
     titleLearning: story.titleLearning ?? null,
     coverUrl: story.coverUrl ?? '',
@@ -938,7 +943,12 @@ export default async function storyRoutes(fastify) {
   fastify.get('/api/story/:id', async (request) => {
     await verifyDualAuth(request, prisma);
     const { id } = request.params;
-    const story = await prisma.story.findUnique({ where: { id } });
+    // WO-3.12: include child name for "Created by …" author display.
+    // Other findUnique sites in this file are intentionally untouched.
+    const story = await prisma.story.findUnique({
+      where: { id },
+      include: { child: { select: { name: true } } },
+    });
     if (!story) throw new BizError(ErrorCodes.STORY_NOT_FOUND);
     if (story.status !== 'completed') {
       throw new BizError(ErrorCodes.STORY_NOT_READY, {
