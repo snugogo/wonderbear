@@ -1,0 +1,32 @@
+# /opt/wonderbear/coordination/.gitignore
+# 创建于 WO-3.17
+#
+# 入库策略(B2):
+#   ✅ 入库:done/*-report.md, workorders/, GROUND-TRUTH.md, 顶层 *-report.md
+#   ❌ 不入库:状态机文件、进程产物、droid 日志、自动化协调器运行时数据
+
+# ===== 状态机文件(钉钉 bot done-watcher 用)=====
+*.processed
+*.processing
+*.failed
+*.v1-failed
+
+# ===== 自动化协调器运行时数据(WO-3.17 引入)=====
+markers/
+auto-coordinator-logs/
+
+# ===== Droid 运行日志(spawn-droid.sh 产物)=====
+droid-runs/
+
+# ===== Goals / 临时草稿(短期协调用,不构成历史档案)=====
+goals/
+
+# ===== 系统临时 =====
+*.swp
+*.tmp
+.DS_Store
+
+# ===== 备份文件(同 Part D,杜绝再产生)=====
+*.backup
+*.backup-*
+*.bak

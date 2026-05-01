@@ -1,155 +1,64 @@
 #!/usr/bin/env bash
-# verify-template.sh — Standard verify.sh template (post WO-3.15)
+# /opt/wonderbear/workorders/verify-template.sh — v3 (post WO-3.17)
 #
-# DO NOT run this directly. COPY and customize for each new workorder.
-# Replace <workorder-files> with the regex pattern of expected modified files.
+# === 用法 ===
+# 1. 复制这份文件: cp verify-template.sh WO-X.X-verify.sh
+# 2. 替换下面 <WO-ID> / <one-line title> / 各 check_* 调用为本工单的实际检查
+# 3. 不要写裸 grep 或 git status 检查 — 用 verify-lib.sh 的函数
+# 4. 工单 README 的 §verify 必须写「base on workorders/verify-template.sh and source verify-lib.sh」
 #
-# Pattern fixes since WO-3.12:
-# - Luna grep excludes utils/demoStory.ts, *demo*, *test*, *mock*, *fixture*, __tests__
-#   (WO-3.12 false-positive FAIL 17: utils/demoStory.ts is mock data, not product code)
-# - Spillover whitelist allows services/api.ts (TS type extensions for backend changes)
-#   and stores/*.ts (state-store type adjustments) — WO-3.12 false-positive FAIL 18
-# - All integer comparisons use `tr -d ' '` to strip whitespace
-# - All `grep -c` calls have `|| true` (avoid the return-code-1 trap on no-match)
-# - No `&&` chaining inside verify subprocess (教训 12)
-# - Build verification cd's into target dir before `npm run build`
-# - Always test: `if [ "${VAR}" -ge N ] 2>/dev/null` (silent error on non-numeric)
+# === 强制规则 ===
+# WO-3.17 起,workorders/WO-*-verify.sh 的第一行(shebang 之后第一句非空非注释)
+# 必须是: source /opt/wonderbear/workorders/verify-lib.sh
+# 否则 WO-3.17-verify.sh 在治理检查中会判定 FAIL。
 
-set -u
+source /opt/wonderbear/workorders/verify-lib.sh
 
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-NC='\033[0m'
-
-PASS=0
-FAIL=0
-TOTAL=0   # set this to the number of checks for your workorder
-
-REPO_ROOT="/opt/wonderbear"
-TV_DIR="${REPO_ROOT}/tv-html"
-SERVER_DIR="${REPO_ROOT}/server-v7"
-
-# ---- File targets — customize per workorder ----
-# Example:
-# COVER="${TV_DIR}/src/screens/StoryCoverScreen.vue"
-# STORY_ROUTE="${SERVER_DIR}/src/routes/story.js"
-# ZH="${TV_DIR}/src/i18n/locales/zh.ts"
-
-check_pass() { PASS=$((PASS + 1)); echo -e "${GREEN}✅ PASS${NC}"; }
-check_fail() { FAIL=$((FAIL + 1)); echo -e "${RED}❌ FAIL${NC} — $1"; }
-
+# ===== 工单基本信息 =====
 echo "============================================================"
-echo "WO-X verify — <one-line title>"
+echo "WO-X.X verify — <one-line title>"
 echo "============================================================"
 echo ""
 
-# ---------------------------------------------------------------
-# [N/TOTAL] target files exist (always check 1)
-# ---------------------------------------------------------------
-# echo "[1/${TOTAL}] all target files exist"
-# ALL_FILES_OK=true
-# for f in "${COVER}" "${STORY_ROUTE}"; do
-#     if [ ! -f "${f}" ]; then
-#         echo "  missing: ${f}"
-#         ALL_FILES_OK=false
-#     fi
-# done
-# if [ "${ALL_FILES_OK}" = "true" ]; then check_pass; else check_fail "missing files"; fi
-# echo ""
+# ===== 工单文件目标(供 spillover 检查用)=====
+# 用 regex 写,例:
+#   EXPECTED_FILES='tv-html/src/screens/(Foo|Bar)\.vue|server-v7/src/routes/baz\.js'
+EXPECTED_FILES='<workorder-files-regex>'
 
-# ---------------------------------------------------------------
-# Generic content check pattern (use grep -c with `|| true`,
-# default empty to 0, then numeric-compare with `2>/dev/null`)
-# ---------------------------------------------------------------
-# echo "[N/${TOTAL}] FOO contains pattern X"
-# HITS=$(grep -cE 'pattern' "${SOME_FILE}" 2>/dev/null || true)
-# if [ -z "${HITS}" ]; then HITS=0; fi
-# echo "  occurrences: ${HITS}"
-# if [ "${HITS}" -ge 1 ] 2>/dev/null; then check_pass; else check_fail "..."; fi
-# echo ""
+# 前置工单已改文件白名单(规则 6,WO-3.16.1 教训):
+# 后续补丁(WO-3.17.1 等)如果要继续改前置工单已改的文件,在这里列出。
+# 留空字符串表示无前置依赖。
+PREVIOUS_WO_FILES=''
 
-# ---------------------------------------------------------------
-# tv-html build (cd FIRST, then run)
-# ---------------------------------------------------------------
-# echo "[N/${TOTAL}] tv-html npm run build passes"
-# cd "${TV_DIR}" || { check_fail "cannot cd"; exit 1; }
-# BUILD_OUT=$(npm run build 2>&1)
-# BUILD_RC=$?
-# if [ ${BUILD_RC} -eq 0 ]; then
-#     if echo "${BUILD_OUT}" | grep -qE '\berror\b|\bERROR\b' 2>/dev/null; then
-#         check_fail "build returned 0 but output contains error"
-#         echo "${BUILD_OUT}" | tail -20 | sed 's/^/    /'
-#     else
-#         check_pass
-#     fi
-# else
-#     check_fail "build exited ${BUILD_RC}"
-#     echo "${BUILD_OUT}" | tail -30 | sed 's/^/    /'
-# fi
-# echo ""
+# ===== 检查列表(按需启用)=====
+# 文件存在性
+# check_files_exist \
+#   "${TV_DIR}/src/screens/Foo.vue" \
+#   "${SERVER_DIR}/src/routes/bar.js"
 
-# ---------------------------------------------------------------
-# server-v7 node require (smoke test)
-# ---------------------------------------------------------------
-# echo "[N/${TOTAL}] server-v7 routes loadable via node -e require"
-# cd "${SERVER_DIR}" || { check_fail "cannot cd"; exit 1; }
-# NODE_OUT=$(node -e "require('./src/routes/story.js')" 2>&1)
-# NODE_RC=$?
-# if [ ${NODE_RC} -eq 0 ]; then check_pass; else check_fail "node require failed"; echo "${NODE_OUT}" | sed 's/^/    /'; fi
-# echo ""
+# 内容检查(自动排除注释、自动多行安全)
+# check_pattern_in_file 'someFunctionName' \
+#   "${TV_DIR}/src/screens/Foo.vue" \
+#   "Foo 调用 someFunctionName"
 
-# ---------------------------------------------------------------
-# WO-3.9 Luna invariant — POST WO-3.15 PATTERN
-# Excludes mock/demo/fixture/test paths so utils/demoStory.ts etc.
-# don't trigger a false-positive product-code regression alarm.
-# ---------------------------------------------------------------
-echo "[N/${TOTAL}] WO-3.9 invariant: Luna doesn't reappear in production code"
-LUNA_REAPPEAR=$(grep -rn 'Luna' "${TV_DIR}/src" \
-    --include='*.ts' --include='*.vue' --include='*.json' 2>/dev/null \
-    | grep -v '/dev/' \
-    | grep -v '\.backup' \
-    | grep -v '/utils/demoStory' \
-    | grep -v '/utils/.*demo' \
-    | grep -v 'test\.' \
-    | grep -v '__tests__' \
-    | grep -v 'mock' \
-    | grep -v 'fixture' \
-    | wc -l | tr -d ' ')
-if [ -z "${LUNA_REAPPEAR}" ]; then LUNA_REAPPEAR=0; fi
-echo "  Luna refs (filtered): ${LUNA_REAPPEAR}"
-if [ "${LUNA_REAPPEAR}" = "0" ]; then check_pass; else check_fail "Luna regression in production code"; fi
-echo ""
+# 反向断言(品牌词清理类)
+# check_pattern_absent_in_file '\bLuna\b' \
+#   "${TV_DIR}/src/screens/HomeScreen.vue" \
+#   "HomeScreen 不再硬编码 Luna"
 
-# ---------------------------------------------------------------
-# Spillover check — POST WO-3.15 WHITELIST
-# services/api.ts is allowed because backend route field changes
-# typically require a corresponding TS type extension on the frontend
-# (else `npm run build` fails). Same for stores/*.ts state types.
-# Replace <workorder-files> with your specific allowed regex.
-# ---------------------------------------------------------------
-echo "[N/${TOTAL}] no spillover into unrelated files"
-cd "${REPO_ROOT}" || exit 1
-EXPECTED='^(<workorder-files>|tv-html/src/services/api\.ts|tv-html/src/stores/.*\.ts)$'
-SPILLOVER=$(git status -s 2>/dev/null \
-    | grep -E '^[ MARC][MARC]?\s' \
-    | awk '{print $2}' \
-    | grep -v '^coordination/' \
-    | grep -v '^workorders/' \
-    | grep -vE "${EXPECTED}" || true)
-if [ -z "${SPILLOVER}" ]; then check_pass; else check_fail "spillover:"; echo "${SPILLOVER}" | sed 's/^/    /'; fi
-echo ""
+# CSS 选择器全栈扫描
+# check_selector_exists '\.tv-stage' "TV 全屏舞台样式存在"
 
-# ---------------------------------------------------------------
-# Summary
-# ---------------------------------------------------------------
-echo "============================================================"
-echo "Summary: ${PASS}/${TOTAL} PASS, ${FAIL} FAIL"
-echo "============================================================"
-echo ""
-if [ ${FAIL} -eq 0 ]; then
-    echo -e "${GREEN}✅ All ${TOTAL} checks PASS${NC}"
-    exit 0
-else
-    echo -e "${RED}❌ ${FAIL}/${TOTAL} FAIL${NC}"
-    exit 1
-fi
+# 构建测试
+# check_npm_build "${TV_DIR}" "tv-html npm run build 通过"
+
+# Node require 烟测
+# check_node_require './src/routes/story.js' "server-v7 routes 可加载"
+
+# ===== 标准跨工单 invariant(每个工单都要跑)=====
+check_no_backup_files                                     # 规则 1
+check_no_luna_regression                                  # 规则 3
+check_no_spillover "${EXPECTED_FILES}" "${PREVIOUS_WO_FILES}"  # 规则 2 + 6
+
+# ===== 终结(必须最后一行)=====
+verify_summary
