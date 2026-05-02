@@ -146,19 +146,17 @@ async function bootstrap(): Promise<void> {
   const isDevQuery = import.meta.env.DEV
     || (typeof window !== 'undefined'
         && new URLSearchParams(window.location.search).has('dev'));
-  if (isDevQuery) {
-    api.onAuthError(() => {
-      bridge.log('boot', { event: 'auth_error_ignored_in_dev' });
-    });
-  } else {
-    // Wire api auth-error → re-activate flow
-    api.onAuthError(() => {
-      api.clearDeviceToken();
-      screen.go('activation');
-    });
-  }
+  // BYPASS-2026-05-03 (Kristy 产品决策): 启动直接进 Home,Activation 屏改为
+  // My Den 主动跳转目标。理由:
+  //   1. 降低首次体验门槛(开机即玩,不卡 QR 码屏)
+  //   2. 激活改为自助行为(My Den → 绑定家长账号)
+  //   3. 消灭整个 401 死循环 bug 类(不用游客模式/onAuthError 短路)
+  //   4. 本机数据保留是 WonderBear 杀手特性
+  // 副作用: 服务器端 device 注册推迟到 My Den 激活时进行
+  bridge.log('boot', { event: 'home_first_bypass_activation' });
+  screen.go('home');
 
-  api.setLocale(getLocale());
+    api.setLocale(getLocale());
 
   // Try to load OEM config (non-blocking on failure)
   device.loadOemConfig().catch(() => { /* fallback already in store */ });
