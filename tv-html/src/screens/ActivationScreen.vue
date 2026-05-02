@@ -98,6 +98,30 @@ function onActivated(): void {
   setTimeout(() => screen.go('home'), 800);
 }
 
+/**
+ * WO-3.27: Skip activation — mark as seen, create guest device token,
+ * and go straight to Home as a free-tier guest.
+ */
+function skipActivation(): void {
+  localStorage.setItem('wb_activation_skipped', '1');
+  localStorage.setItem('wb_activation_skipped_at', String(Date.now()));
+
+  // Create a guest device token if none exists yet so the app boots cleanly.
+  if (!localStorage.getItem('wb_device_token')) {
+    const guestId = 'guest-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+    localStorage.setItem('wb_device_token', guestId);
+  }
+
+  // Clean up timers before jumping.
+  if (pollTimer.value !== null) {
+    clearInterval(pollTimer.value);
+    pollTimer.value = null;
+  }
+  unsubActivation.value?.();
+
+  screen.go('home');
+}
+
 onMounted(async () => {
   // ═══ WO-3.26: dev/QA fast-path — skip activation when ?dev_skip_activation=1
   // and wb_dev_marker=kristy_qa_2026 cookie is present. ═══
@@ -133,6 +157,18 @@ onMounted(async () => {
       } else {
         console.warn('[WO-3.26] dev_skip_activation=1 requested but no dev marker cookie');
       }
+    }
+  }
+
+  // WO-3.27: User who previously skipped activation → go home directly.
+  // Guards against the "forever stuck on Activation" regression.
+  {
+    const alreadySkipped = localStorage.getItem('wb_activation_skipped');
+    const hasDevice = localStorage.getItem('wb_device_token');
+    if (alreadySkipped === '1' && hasDevice) {
+      console.log('[WO-3.27] User skipped activation before, go home');
+      screen.go('home');
+      return;
     }
   }
 
@@ -261,6 +297,11 @@ onBeforeUnmount(() => {
       <span class="dot"></span>
       <span class="t-sm">{{ t('activation.waitingForBinding') }}</span>
     </div>
+
+    <!-- WO-3.27: skip button — secondary option, lets users try free tier -->
+    <button class="skip-btn" @click="skipActivation">
+      {{ t('activation.skipButton') }}
+    </button>
   </div>
 </template>
 
@@ -472,5 +513,31 @@ onBeforeUnmount(() => {
 @keyframes pulse {
   0%, 100% { opacity: 0.4; transform: scale(1); }
   50%      { opacity: 1;   transform: scale(1.3); }
+}
+
+/*
+ * WO-3.27: skip button — deliberately secondary so it doesn't compete
+ * with the primary "scan to bind" CTA. Small, translucent, bottom-right.
+ */
+.skip-btn {
+  position: absolute;
+  bottom: 46px;
+  right: var(--sp-7);
+  z-index: 2;
+  background: rgba(255, 245, 230, 0.1);
+  color: rgba(255, 245, 230, 0.6);
+  border: 1px solid rgba(255, 245, 230, 0.18);
+  padding: 7px 20px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 200ms var(--ease-out), color 200ms var(--ease-out), border-color 200ms var(--ease-out);
+}
+.skip-btn:hover,
+.skip-btn:focus-visible {
+  background: rgba(255, 245, 230, 0.2);
+  color: rgba(255, 245, 230, 0.92);
+  border-color: rgba(255, 245, 230, 0.35);
 }
 </style>
