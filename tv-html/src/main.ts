@@ -153,6 +153,13 @@ async function bootstrap(): Promise<void> {
   } else {
     // Wire api auth-error → re-activate flow
     api.onAuthError(() => {
+      // WO-3.29.5 ESC-fix: 游客模式下不清 token 不弹回(401 是预期的,因为没真激活)
+      const wbSkipped = localStorage.getItem('wb_activation_skipped') === '1';
+      const wbGuestToken = localStorage.getItem('wb_device_token');
+      if (wbSkipped && wbGuestToken) {
+        bridge.log('boot', { event: 'auth_error_suppressed_for_guest' });
+        return;
+      }
       api.clearDeviceToken();
       screen.go('activation');
     });
@@ -179,17 +186,12 @@ async function bootstrap(): Promise<void> {
   } else if (api.getDeviceToken()) {
     try {
       await device.refreshStatus();
-      const wbSkipped = localStorage.getItem('wb_activation_skipped') === '1';
-      const wbGuestToken = localStorage.getItem('wb_device_token');
-      // WO-3.29.1: 游客模式短路 — 跳过 Activation + 有 guest token 就当已激活
-      screen.go((device.isActivated || (wbSkipped && wbGuestToken)) ? 'home' : 'activation');
+      screen.go(device.isAuthorized ? 'home' : 'activation');  // WO-3.29.3
     } catch (e) {
       const code = e instanceof ApiError ? e.code : -1;
       bridge.log('boot', { event: 'status_check_failed', code });
-      // WO-3.29.1 patch 3: catch 时也检查游客模式
-      const wbSkipped3 = localStorage.getItem('wb_activation_skipped') === '1';
-      const wbGuest3 = localStorage.getItem('wb_device_token');
-      screen.go((wbSkipped3 && wbGuest3) ? 'home' : 'activation');
+      // WO-3.29.5: catch 时用 isAuthorized 统一判断
+      screen.go(device.isAuthorized ? 'home' : 'activation');
     }
   } else if (localStorage.getItem('wb_activation_skipped') === '1' && localStorage.getItem('wb_device_token')) {
     // WO-3.29.1 patch 2: 游客模式 — 没 server token,但有 guest token + skip flag,直接 home

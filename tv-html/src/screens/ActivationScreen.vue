@@ -82,6 +82,16 @@ async function renderQrCode(): Promise<void> {
 }
 
 async function pollStatus(): Promise<void> {
+  // WO-3.29.3 ESC-fix: 游客模式短路 — 不调 refreshStatus,不轮询,不弹回
+  if (typeof localStorage !== 'undefined'
+      && localStorage.getItem('wb_activation_skipped') === '1'
+      && localStorage.getItem('wb_device_token')) {
+    if (pollTimer.value !== null) {
+      clearInterval(pollTimer.value);
+      pollTimer.value = null;
+    }
+    return;
+  }
   await device.refreshStatus();
   if (device.status === 'bound') {
     onActivated();
