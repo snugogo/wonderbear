@@ -59,13 +59,6 @@ export const useDeviceStore = defineStore('device', {
       return bn[locale] || bn.en || bn.zh || FALLBACK_BRAND;
     },
     isActivated(): boolean { return this.status === 'bound'; },
-    /** WO-3.29.3 ESC-fix: 游客模式视作已授权(skip + guest token 双 flag) */
-    isAuthorized(): boolean {
-      if (this.status === 'bound') return true;
-      if (typeof localStorage === 'undefined') return false;
-      return localStorage.getItem('wb_activation_skipped') === '1'
-          && !!localStorage.getItem('wb_device_token');
-    },
   },
 
   actions: {
