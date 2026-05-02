@@ -14,7 +14,7 @@
 -->
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
+import { ref, onMounted, onBeforeUnmount, onUnmounted, computed } from 'vue';
 import QRCode from 'qrcode';
 import { useDeviceStore } from '@/stores/device';
 import { useScreenStore } from '@/stores/screen';
@@ -122,6 +122,29 @@ function skipActivation(): void {
   screen.go('home');
 }
 
+/**
+ * WO-3.28: global keyboard handler — lets users skip activation via
+ * Esc / Backspace / D-pad Back on any page, critical for TV projection
+ * scenarios where a mouse isn't available.
+ */
+function handleSkipKey(e: KeyboardEvent): void {
+  if (e.key === 'Escape' || e.key === 'Backspace' || e.key === 'Back' || e.key === 'GoBack') {
+    e.preventDefault();
+    console.log('[WO-3.28] Skip via keyboard:', e.key);
+    skipActivation();
+  }
+}
+
+/**
+ * WO-3.28: browser physical back button / Android back gesture.
+ * We push an extra history entry on mount so popstate fires even
+ * when ActivationScreen is the first page (e.g. fresh TV boot).
+ */
+function handleBrowserBack(_e: PopStateEvent): void {
+  console.log('[WO-3.28] Skip via browser back');
+  skipActivation();
+}
+
 onMounted(async () => {
   // ═══ WO-3.26: dev/QA fast-path — skip activation when ?dev_skip_activation=1
   // and wb_dev_marker=kristy_qa_2026 cookie is present. ═══
@@ -215,6 +238,12 @@ onMounted(async () => {
     };
     window.addEventListener('keydown', backHandler);
   }
+
+  // ═══ WO-3.28: global keyboard + browser-back support for ALL users ═══
+  window.addEventListener('keydown', handleSkipKey);
+  window.addEventListener('popstate', handleBrowserBack);
+  // Push a history entry so popstate fires even when this is the first page.
+  window.history.pushState({ activationScreen: true }, '', window.location.href);
 });
 
 onBeforeUnmount(() => {
@@ -222,6 +251,12 @@ onBeforeUnmount(() => {
   unsubActivation.value?.();
   if (bearTimer !== null) clearInterval(bearTimer);
   if (backHandler) window.removeEventListener('keydown', backHandler);
+});
+
+// WO-3.28: ensure global listeners are cleaned up on unmount (memory leak prevention).
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleSkipKey);
+  window.removeEventListener('popstate', handleBrowserBack);
 });
 </script>
 
@@ -516,28 +551,31 @@ onBeforeUnmount(() => {
 }
 
 /*
- * WO-3.27: skip button — deliberately secondary so it doesn't compete
- * with the primary "scan to bind" CTA. Small, translucent, bottom-right.
+ * WO-3.28: skip button visibility overhaul.
+ * WO-3.27's translucent cream-on-yellow was nearly invisible on TV projection.
+ * Dark semi-transparent bg (rgba 80,60,40,0.6) + 95% white text + larger size
+ * give the button enough presence for both mouse and TV D-pad users.
  */
 .skip-btn {
   position: absolute;
   bottom: 46px;
   right: var(--sp-7);
   z-index: 2;
-  background: rgba(255, 245, 230, 0.1);
-  color: rgba(255, 245, 230, 0.6);
-  border: 1px solid rgba(255, 245, 230, 0.18);
-  padding: 7px 20px;
+  background: rgba(80, 60, 40, 0.6);
+  color: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  padding: 10px 20px;
   border-radius: 999px;
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 500;
   cursor: pointer;
-  transition: background 200ms var(--ease-out), color 200ms var(--ease-out), border-color 200ms var(--ease-out);
+  transition: background 200ms var(--ease-out), color 200ms var(--ease-out), border-color 200ms var(--ease-out), transform 200ms var(--ease-out);
 }
 .skip-btn:hover,
 .skip-btn:focus-visible {
-  background: rgba(255, 245, 230, 0.2);
-  color: rgba(255, 245, 230, 0.92);
-  border-color: rgba(255, 245, 230, 0.35);
+  background: rgba(80, 60, 40, 0.85);
+  color: white;
+  border-color: rgba(255, 255, 255, 0.55);
+  transform: scale(1.05);
 }
 </style>

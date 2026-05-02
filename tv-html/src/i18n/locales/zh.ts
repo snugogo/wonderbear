@@ -25,7 +25,7 @@ export default {
     activationCodeLabel: '激活码',
     waitingForBinding: '等待绑定中…',
     bindingDone: '熊熊认识你啦!',
-    skipButton: '跳过 / 体验免费版',
+    skipButton: '跳过 (Esc) / 体验免费版',
   },
 
   /*

@@ -26,7 +26,7 @@ export default {
     activationCodeLabel: 'Activation code',
     waitingForBinding: 'Waiting for binding…',
     bindingDone: 'The bear knows you now!',
-    skipButton: 'Skip / Try Free',
+    skipButton: 'Skip (Esc) / Try Free',
   },
 
   /*
