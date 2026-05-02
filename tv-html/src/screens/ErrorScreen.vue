@@ -3,9 +3,9 @@
   Reads screen.errorCode + dispatches per errorCodes.ts tvAction map.
 
   All 12 tvAction enum values are handled:
-    silent_reactivate       → screen.go('activation')
+    silent_reactivate       → screen.go('home')
     show_on_h5_only         → screen.back() immediately (kid sees nothing)
-    goto_activation         → screen.go('activation')
+    goto_activation         → screen.go('home')
     show_retry              → "Retry" button → screen.back()
     show_retry_countdown    → 5s countdown then auto-back
     show_upgrade_prompt     → bear + message, no retry (parent acts on H5)
@@ -117,7 +117,7 @@ function performAutoExit(): void {
   switch (info.value.tvAction) {
     case 'silent_reactivate':
     case 'goto_activation':
-      screen.go('activation');
+      screen.go('home');
       break;
     case 'goto_offline':
       screen.go('offline');
