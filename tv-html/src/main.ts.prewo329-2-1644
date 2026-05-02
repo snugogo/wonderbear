@@ -186,15 +186,9 @@ async function bootstrap(): Promise<void> {
     } catch (e) {
       const code = e instanceof ApiError ? e.code : -1;
       bridge.log('boot', { event: 'status_check_failed', code });
-      // WO-3.29.1 patch 3: catch 时也检查游客模式
-      const wbSkipped3 = localStorage.getItem('wb_activation_skipped') === '1';
-      const wbGuest3 = localStorage.getItem('wb_device_token');
-      screen.go((wbSkipped3 && wbGuest3) ? 'home' : 'activation');
+      // Network / server error → activation as safe default
+      screen.go('activation');
     }
-  } else if (localStorage.getItem('wb_activation_skipped') === '1' && localStorage.getItem('wb_device_token')) {
-    // WO-3.29.1 patch 2: 游客模式 — 没 server token,但有 guest token + skip flag,直接 home
-    bridge.log('boot', { event: 'guest_mode_home' });
-    screen.go('home');
   } else {
     screen.go('activation');
   }
