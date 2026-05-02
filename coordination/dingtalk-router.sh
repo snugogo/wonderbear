@@ -48,7 +48,7 @@ esac
 
 if [[ "$AT_KRISTY" == "true" ]]; then
   PAYLOAD=$(jq -n --arg c "${PREFIX}${CONTENT}" \
-    '{msgtype:"text",text:{content:$c},at:{isAtAll:true}}')
+    '{msgtype:"text",text:{content:$c},at:{isAtAll:false}}')
 else
   PAYLOAD=$(jq -n --arg c "${PREFIX}${CONTENT}" \
     '{msgtype:"text",text:{content:$c}}')

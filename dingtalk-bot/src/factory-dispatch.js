@@ -108,7 +108,18 @@ function dispatch(workorderId) {
 
   try {
     // 用 sh -c 跑后台命令并拿 PID
-    const result = require('child_process').execSync(cmd, { encoding: 'utf8', shell: '/bin/bash' });
+    // WO-3.20: 加 timeout 防止 execSync 因 droid CLI 启动慢 / 子 shell 不退出
+    // 而 hang 住整个 bot 事件循环(踩过坑:钉钉 webhook 5s 超时,bot 整个被
+    // 阻塞导致后续派单全卡)。timeout 触发会抛 ETIMEDOUT,被外层 catch 捕获,
+    // 不会冒到 process 顶层。stdio: ['ignore', 'pipe', 'pipe'] 避免继承
+    // bot 进程的 stdin,免得子 shell 等待输入。
+    const result = require('child_process').execSync(cmd, {
+      encoding: 'utf8',
+      shell: '/bin/bash',
+      timeout: 5000,
+      killSignal: 'SIGKILL',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
     const pid = parseInt(result.trim(), 10);
     if (!pid || isNaN(pid)) {
       return { ok: false, reason: '派单失败: 无法获取 PID, output=' + result };

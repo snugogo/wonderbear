@@ -43,12 +43,18 @@ const bgm = useBgmStore();
 
 const COLUMNS = 3;
 /*
- * 2026-04-28 PHASE1: production fetch caps at 3 most-recent stories
- * (workorder §2.1 / §4.6 — Dream Factory shows the latest 3 alongside
- * the "+" plus tile). Dev / gallery seeds 4 mock entries to exercise
- * the row-wrap visual; that stays untouched in the isDevBrowser branch.
+ * WO-3.20 (2026-05-02): bumped to 50 — Dream Factory now shows the
+ * full library on the create hub instead of just the latest 3
+ * (kids hit a wall when their 4th+ story disappeared). 50 is the
+ * server-side hard cap on /story/list?limit=, which is plenty for
+ * the foreseeable subscription tier (5/month × 12 months = 60, and
+ * pagination kicks in beyond that).
+ *
+ * Earlier (WO 2026-04-28 PHASE1): production fetch capped at 3.
+ * Dev / gallery seeds 4 mock entries to exercise row-wrap visuals;
+ * that stays untouched in the isDevBrowser branch.
  */
-const PAGE_SIZE = 3;
+const PAGE_SIZE = 50;
 
 const items = ref<StorySummary[]>([]);
 const loading = ref<boolean>(true);
