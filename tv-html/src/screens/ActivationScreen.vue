@@ -18,7 +18,9 @@ import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
 import QRCode from 'qrcode';
 import { useDeviceStore } from '@/stores/device';
 import { useScreenStore } from '@/stores/screen';
+import { useChildStore } from '@/stores/child';
 import { bridge } from '@/services/bridge';
+import { api } from '@/services/api';
 import { buildBindingUrl } from '@/utils/buildBindingUrl';
 import { asset } from '@/utils/assets';
 import { useI18n } from 'vue-i18n';
@@ -97,6 +99,43 @@ function onActivated(): void {
 }
 
 onMounted(async () => {
+  // ═══ WO-3.26: dev/QA fast-path — skip activation when ?dev_skip_activation=1
+  // and wb_dev_marker=kristy_qa_2026 cookie is present. ═══
+  if (typeof window !== 'undefined') {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('dev_skip_activation') === '1') {
+      const hasDevMarker = document.cookie.includes('wb_dev_marker=kristy_qa_2026');
+      if (hasDevMarker) {
+        console.log('[WO-3.26] Dev fast-path activated (cookie marker present)');
+        // Inject fake device token matching real key 'wb_device_token' (api.ts:55).
+        api.setDeviceToken('dev-fake-token-' + Date.now());
+        // Mark device as bound so isActivated getter returns true.
+        device.status = 'bound';
+        device.serverDeviceId = 'dev-fake-device';
+        // Seed default child Dora so Home/Create screens don't error.
+        useChildStore().setActiveLocal({
+          id: 'dev-fake-child-dora',
+          parentId: 'dev-fake-parent',
+          name: 'Dora',
+          age: 5,
+          gender: 'female',
+          avatar: '',
+          primaryLang: 'zh',
+          secondLang: 'en',
+          birthday: null,
+          coins: 0,
+          voiceId: null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+        screen.go('home');
+        return;
+      } else {
+        console.warn('[WO-3.26] dev_skip_activation=1 requested but no dev marker cookie');
+      }
+    }
+  }
+
   // Subscribe FIRST, before any await — the mock bridge's autobind flag
   // (?autobind=1) fires 'activation-status-change' 2500ms after boot, and
   // if OEM config / QR render takes longer than that, the event would be
