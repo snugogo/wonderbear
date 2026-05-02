@@ -179,10 +179,7 @@ async function bootstrap(): Promise<void> {
   } else if (api.getDeviceToken()) {
     try {
       await device.refreshStatus();
-      const wbSkipped = localStorage.getItem('wb_activation_skipped') === '1';
-      const wbGuestToken = localStorage.getItem('wb_device_token');
-      // WO-3.29.1: 游客模式短路 — 跳过 Activation + 有 guest token 就当已激活
-      screen.go((device.isActivated || (wbSkipped && wbGuestToken)) ? 'home' : 'activation');
+      screen.go(device.isActivated ? 'home' : 'activation');
     } catch (e) {
       const code = e instanceof ApiError ? e.code : -1;
       bridge.log('boot', { event: 'status_check_failed', code });

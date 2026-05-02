@@ -141,17 +141,6 @@ function handleSkipKey(e: KeyboardEvent): void {
  * when ActivationScreen is the first page (e.g. fresh TV boot).
  */
 function handleBrowserBack(_e: PopStateEvent): void {
-  // WO-3.29: guard against re-entry / infinite loop.
-  // If the user already skipped activation (localStorage flag set by skipActivation),
-  // or we're no longer on the activation screen, ignore the popstate event.
-  if (localStorage.getItem('wb_activation_skipped') === '1') {
-    console.log('[WO-3.29] Already skipped, ignore popstate');
-    return;
-  }
-  if (screen.current !== 'activation') {
-    console.log('[WO-3.29] Not on activation screen, ignore popstate');
-    return;
-  }
   console.log('[WO-3.28] Skip via browser back');
   skipActivation();
 }
