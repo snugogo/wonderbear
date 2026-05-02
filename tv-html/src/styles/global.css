@@ -180,3 +180,27 @@ body[data-tv-native='1'] * { cursor: none !important; }
     0 1px 3px rgba(26, 15, 10, 0.7),
     0 0 10px rgba(26, 15, 10, 0.4);
 }
+
+/* ═══════════════════════════════════════════════════════════════
+ * WO-3.25 (2026-05-02): 全局 scrollbar 隐藏(兜底)
+ *
+ * 历史背景: WO-3.21/3.22 在 CreateScreen.vue 等文件 <style scoped> 内
+ * 写了 scrollbar-width: none 三件套,dist 已部署但浏览器仍渲染 scrollbar。
+ * F12 关掉 scrollbar 重现、开了 F12 scrollbar 消失 = Vue scoped CSS 在
+ * Chrome scrollbar 伪元素处理上有竞态,需要全局 !important 兜底。
+ *
+ * 决定: 全局一刀切。TV 投影场景无鼠标永不需要 scrollbar,D-pad 导航
+ * 用 scrollIntoView。Web 端鼠标滚轮/触屏仍可滚 — 仅视觉隐藏,功能完好。
+ *
+ * 不要在新 screen 里再单独写 scrollbar-width: none — 这里全局兜底了。
+ * ═══════════════════════════════════════════════════════════════ */
+
+* {
+  scrollbar-width: none !important;        /* Firefox */
+  -ms-overflow-style: none !important;     /* IE/Edge */
+}
+*::-webkit-scrollbar {
+  display: none !important;                /* Chrome/Safari/WebView */
+  width: 0 !important;
+  height: 0 !important;
+}
