@@ -42,3 +42,8 @@ Thumbs.db
 *.swo
 *~
 secrets/
+
+# WO-3.17: 杜绝 backup 残留
+*.backup
+*.backup-*
+*.bak

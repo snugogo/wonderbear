@@ -144,7 +144,7 @@ function handleCancel(content) {
 // === 帮助 ===
 function handleHelp() {
   return [
-    '🤖 钉钉机器人 v0.9.2',
+    '🤖 钉钉机器人 v0.9.3 (WO-3.17)',
     '',
     '快速命令(中文,无 / 前缀):',
     '派 [工单关键字]     - 派 Factory droid 工单',
@@ -152,17 +152,67 @@ function handleHelp() {
     '日志 [server|dingtalk] - tail PM2 日志 50 行',
     '重启 [server|dingtalk] - pm2 reload',
     '取消 [PID]          - kill droid 进程',
+    '验收 [工单ID]       - 浏览器实测 OK 后,关闭工单',
+    '打回 [工单ID] [原因] - 浏览器实测有 bug,reject 工单',
+    '工单状态            - 列出所有工单当前状态(markers/)',
     '帮助 / ?            - 这条',
     '',
-    '系统命令(/前缀,沿用 v0.9.1):',
+    '系统命令(/前缀):',
     '/ping /status /myid /kill',
     '/freeze /unfreeze',
     '/model sonnet|opus|haiku',
     '/clear /lessons /learn /unlearn',
     '',
-    '其他文字 -> 自由对话(claude CLI,prompt < 1500 字符)',
-    '⚠️ 单条消息超 800 字符会被拒收,复杂请求请 SSH',
+    '其他文字 -> 自由对话',
   ].join('\n');
+}
+
+// === 验收 [工单ID] (WO-3.17) ===
+// 调 auto-coordinator product-confirmed
+function handleAccept(content) {
+  const arg = content.replace(/^验收\s*/, '').trim();
+  if (!arg) {
+    return '用法: 验收 WO-3.18\n(浏览器实测 OK 后用此命令关闭工单)';
+  }
+  // 提取 WO-X.X 格式
+  const m = arg.match(/^(WO-[\w.\-]+)/i);
+  if (!m) {
+    return '❌ 工单 ID 格式错误,应为 WO-X.X.X 格式。例: 验收 WO-3.18';
+  }
+  const woId = m[1];
+  const out = safeExec('bash /opt/wonderbear/coordination/auto-coordinator.sh product-confirmed ' + woId + ' 2>&1', 8000);
+  return '✅ 验收已提交\n' + out.slice(0, 500);
+}
+
+// === 打回 [工单ID] [原因] (WO-3.17) ===
+function handleReject(content) {
+  const arg = content.replace(/^打回\s*/, '').trim();
+  if (!arg) {
+    return '用法: 打回 WO-3.18 进度条没动\n(浏览器实测有 bug 时用此命令)';
+  }
+  const m = arg.match(/^(WO-[\w.\-]+)\s*(.*)$/i);
+  if (!m) {
+    return '❌ 格式错误。例: 打回 WO-3.18 进度条没修';
+  }
+  const woId = m[1];
+  const reason = (m[2] || '未提供原因').trim();
+  // 转义 reason 中的 shell 特殊字符
+  const safeReason = reason.replace(/'/g, "'\\''");
+  const out = safeExec(
+    "bash /opt/wonderbear/coordination/auto-coordinator.sh product-rejected " + woId + " '" + safeReason + "' 2>&1",
+    8000
+  );
+  return '❌ 打回已记录\n' + out.slice(0, 500);
+}
+
+// === 工单状态 (WO-3.17) ===
+// 列出 markers/ 下所有工单状态
+function handleWorkorderStatus() {
+  const out = safeExec('bash /opt/wonderbear/coordination/auto-coordinator.sh status 2>&1', 5000);
+  if (!out || out.length < 5) {
+    return '(无工单 marker 记录)';
+  }
+  return '📊 工单状态\n\n' + out.slice(0, 1500);
 }
 
 // === 总入口:返回 {handled: bool, reply: string} ===
@@ -176,6 +226,9 @@ function route(content, sessionWebhook, atUserId, replyFn) {
   if (c === '进度' || c === '状态') {
     return { handled: true, reply: handleProgress() };
   }
+  if (c === '工单状态' || c === '工单' || c === 'wo') {
+    return { handled: true, reply: handleWorkorderStatus() };
+  }
   if (/^日志(\s|$)/.test(c)) {
     return { handled: true, reply: handleLogs(c) };
   }
@@ -184,6 +237,12 @@ function route(content, sessionWebhook, atUserId, replyFn) {
   }
   if (/^取消(\s|$)/.test(c)) {
     return { handled: true, reply: handleCancel(c) };
+  }
+  if (/^验收\s/.test(c)) {
+    return { handled: true, reply: handleAccept(c) };
+  }
+  if (/^打回\s/.test(c)) {
+    return { handled: true, reply: handleReject(c) };
   }
   if (c === '帮助' || c === '?' || c === 'help') {
     return { handled: true, reply: handleHelp() };

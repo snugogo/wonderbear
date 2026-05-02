@@ -1,5 +1,10 @@
 // done-watcher.js - 后台轮询 coordination/done/, 新文件推送钉钉
-// v0.9.2 (2026-04-29)
+// v0.9.3 (2026-05-01, WO-3.17)
+//
+// WO-3.17 集成 auto-coordinator hook:
+// 当 onNewReport 被调用时,index.js 的 triggerAutoVerify() 会跑 verify.sh,
+// 然后把结果转交 /opt/wonderbear/coordination/auto-coordinator.sh post-droid。
+// auto-coordinator 决定钉钉消息策略(假 FAIL 静默 / 全 PASS 才 @ Kristy / 真 FAIL 嫌疑列表附在验收消息里)。
 
 const fs = require('fs');
 const path = require('path');

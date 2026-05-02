@@ -27,3 +27,8 @@ src/types/components.d.ts
 
 # Env (keep .env.*.example if we add them later)
 .env.local
+
+# WO-3.17: 杜绝 backup 残留
+*.backup
+*.backup-*
+*.bak

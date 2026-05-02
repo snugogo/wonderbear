@@ -1,7 +1,7 @@
 # WonderBear Ground Truth (Auto-maintained)
 
 > **For new Claude conversations**: cat this file FIRST to load all baseline facts.
-> **Last verified**: 2026-05-01 via WO-3.15
+> **Last verified**: WO-3.17 (2026-05-01 晚期 — 治理工单 + verify v3)
 > **Next refresh**: When .env, PM2, dispatch chain, or schema changes
 
 ## §1. Server / Infrastructure
@@ -111,10 +111,40 @@ notify_text DingTalk push (start + end)
 - ImageGenLog table: links to Story via `storyId`, queryable for per-page generation status.
 - Backup script (`backup-daily.sh`) uses raw `pg_dump`, NOT Prisma model layer (per 教训 11).
 
-## §7. verify.sh template (post-WO-3.15)
+## §7. verify.sh 治理 v3(WO-3.17 起)
 
-Standard verify.sh now lives at `/opt/wonderbear/workorders/verify-template.sh`. New workorder verify.sh files derive from it. Key rules embedded:
+**所有新工单 verify 必须 source lib:**
 
+```bash
+#!/usr/bin/env bash
+source /opt/wonderbear/workorders/verify-lib.sh
+
+# 内容...
+verify_summary
+```
+
+**lib 提供的检查函数:**
+
+| 函数 | 收编规则 | 说明 |
+|---|---|---|
+| `check_no_backup_files` | 1 | 强制无 *.backup-* / *.bak |
+| `check_no_spillover <expected> [<prev-wo>]` | 2 + 6 | git status spillover 带白名单 |
+| `check_no_luna_regression` | 3 | Luna 不重现 production |
+| `check_selector_exists` | 7 | CSS 选择器全栈扫(.vue + .css + .scss + .ts) |
+| `check_pattern_in_file` | 4 + 5 底层 | 自动排注释 + 多行安全 |
+| `check_pattern_absent_in_file` | 4 + 5 底层 | 反向断言(品牌词清理类) |
+| `check_files_exist` | - | 文件存在性 |
+| `check_npm_build` | - | 构建测试 |
+| `check_node_require` | - | Node require 烟测 |
+| `verify_summary` | - | 终结(必须最后调用) |
+
+**禁止的写法(违反会被 WO-3.17-verify 之后的治理检查抓出):**
+- ❌ 在 verify.sh 里裸写 `grep -rn ... | wc -l`(用 lib 函数代替)
+- ❌ 在 verify.sh 里裸写 `git status -s | grep ...`(用 check_no_spillover)
+- ❌ 在 verify.sh 不调用 `check_no_backup_files`(每工单必跑)
+- ❌ 在 verify.sh 不调用 `verify_summary` 终结(exit code 不正确)
+
+**Legacy 规则(WO-3.15 时代,现已被 lib 函数收编):**
 1. Luna grep MUST exclude: `/dev/`, `.backup`, `utils/demoStory.ts`, `utils/*demo*`, `*test*`, `*mock*`, `*fixture*`, `__tests__`
 2. Spillover whitelist MUST allow: `services/api.ts` (frontend type extensions for backend changes), `stores/*.ts` (state types)
 3. Use `grep -c ... 2>/dev/null || true` (avoid `-c` return-code-1 trap on no-match)
@@ -149,5 +179,58 @@ Standard verify.sh now lives at `/opt/wonderbear/workorders/verify-template.sh`.
 - git `config user.{name,email}` not globally set (commit author mixed)
 - VPS no swap → any concurrent sharp / image processing must be < 3 in parallel (TODO-19)
 
+## §11. WO-3.16 闭环记录
+
+**Commit:** `3b7e6b5` (2026-05-01)
+
+**交付内容:**
+- 录音键(空格 / 麦克风按钮)按下时打断 TTS 播放,200ms 去抖
+- 全局 SVG 返回按钮组件 `GlobalBackButton.vue`,5 个 screen 接入
+- 多输入设备人体工学:键盘 + 触摸 + 鼠标统一行为
+
+**WO-3.16.1 补丁:** DialogueScreen 在 WO-3.16 后期发现回归,补丁修复。
+
+**学到的假 FAIL 模式:**
+- 规则 4: grep 命中代码注释行(WO-3.16)
+- 规则 5: 数组多元素同行计数失真(WO-3.16)
+- 规则 6: 后续补丁 verify 未排除前置工单已改文件(WO-3.16.1)
+- 规则 7: CSS 选择器在 styles/global.css 而非 .vue(WO-3.16.1)
+
 ---
-Last updated: 2026-05-01 by WO-3.15
+
+## §12. WO-3.17 闭环记录(治理工单)
+
+**Commit:** (本工单 commit hash 由 Kristy commit 后填入)
+
+**Part A: verify 治理(治本)**
+- 引入 `workorders/verify-lib.sh` 函数库,7 类假 FAIL 全部规则函数化
+- `verify-template.sh` v3 改为最小骨架,强制第一行 `source verify-lib.sh`
+- WO-3.18 起所有工单 verify **必须** source lib,WO-3.17-verify 检查这一点
+
+**Part B: coordination/ 入库治理**
+- 入库 `done/*-report.md` 工单完成报告
+- 顶层任务草稿(2026-04-29 / 2026-04-30 ASR/TTS / TV W5)入库
+- 6 个 v2lite 实验草稿迁移到 `coordination/archive/2026-04-30-v2lite/` 后入库
+- 写入 `coordination/.gitignore`:`*.processed` / `markers/` / `auto-coordinator-logs/` / `droid-runs/` / `goals/`
+
+**Part C: 自动化协调器(MVP — 静默 + 验收附嫌疑列表)**
+- `coordination/auto-coordinator.sh` 主协调器(post-droid / product-confirmed / status)
+- `coordination/false-fail-judge.sh` 判定器(7 条规则 + LLM 兜底,**默认放行**)
+- `coordination/dingtalk-router.sh` 钉钉路由器(send-info / send-acceptance / send-decision)
+- `dingtalk-bot/src/index.js` `triggerAutoVerify()` 改造:转交 auto-coordinator
+- `dingtalk-bot/src/done-watcher.js` 集成 hook 注释(verify 完成后调 auto-coordinator)
+- `dingtalk-bot/src/command-router.js` 加分支:`验收 WO-X` / `打回 WO-X` / `工单状态`
+- 钉钉消息策略:**只在产品验收时 @ Kristy**,真 FAIL 静默写 marker 等下次复盘
+
+**Part D: backup 文件历史清理**
+- 删除 12 个 `*.backup-*` 残留(i18n locales x4, screens x6, services/api.ts x1, stores x1)
+- 同步 `tv-html/.gitignore` / `server-v7/.gitignore` / `h5/.gitignore` 加 `*.backup-*` 防新增
+- 治本:每工单 verify 跑 `check_no_backup_files`(verify-lib.sh)
+
+**Part E: 本文件 GROUND-TRUTH.md 更新**
+- 新增 §11 WO-3.16 闭环 / §12 WO-3.17 闭环
+- §7 verify.sh template 章节升级文档为 v3
+- "Last verified" → WO-3.17 / 2026-05-01
+
+---
+Last updated: 2026-05-01 by WO-3.17

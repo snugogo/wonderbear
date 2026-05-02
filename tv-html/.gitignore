@@ -10,3 +10,8 @@ dist/
 
 # Local headless screenshot output (tools/snap.mjs)
 .snaps/
+
+# WO-3.17: 杜绝 backup 残留(用 git stash 替代 cp .backup-*)
+*.backup
+*.backup-*
+*.bak

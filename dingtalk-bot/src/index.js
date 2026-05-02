@@ -279,10 +279,8 @@ let cachedWebhook = null;
 // child_process.exec 异步 + 120s timeout + 1MB maxBuffer + 截尾 30 行/1500 字符
 // 多行消息必须用数组 join('\n'),禁止把多行 markdown 嵌入字符串字面量
 function triggerAutoVerify(reportFilename) {
-  if (!cachedWebhook) {
-    console.log('[AUTO-VERIFY] no cachedWebhook yet, skip', reportFilename);
-    return;
-  }
+  // WO-3.17 改造:不再直接推钉钉,转交 auto-coordinator
+  // auto-coordinator 自己决定推什么消息(假 FAIL 静默 / 全 PASS 才 @ Kristy)
   const m = reportFilename.match(/^(WO-[\w.\-]+)-report\.md$/i);
   if (!m) {
     console.log('[AUTO-VERIFY] filename not WO-*-report.md, skip:', reportFilename);
@@ -291,43 +289,61 @@ function triggerAutoVerify(reportFilename) {
   const woId = m[1];
   const verifyPath = '/opt/wonderbear/workorders/' + woId + '-verify.sh';
   if (!fs.existsSync(verifyPath)) {
-    const noVerifyMsg = 'wonderbear: \uD83D\uDCC4 ' + woId + ' \u62a5\u544a\u5c31\u7eea\uff08\u65e0 verify.sh\uff0c\u8df3\u8fc7\u81ea\u52a8\u9a8c\u8bc1\uff09';
-    reply(cachedWebhook, noVerifyMsg, ALLOWED_USER_IDS[0])
-      .catch(e => console.error('[AUTO-VERIFY] no-verify push failed:', e.message));
+    console.log('[AUTO-VERIFY] no verify.sh, skip auto-coordinator:', woId);
+    // 无 verify 的工单仍走旧通知(罕见,例如纯文档工单)
+    if (cachedWebhook) {
+      const noVerifyMsg = 'wonderbear: \uD83D\uDCC4 ' + woId + ' \u62a5\u544a\u5c31\u7eea\uff08\u65e0 verify.sh\uff09';
+      reply(cachedWebhook, noVerifyMsg, ALLOWED_USER_IDS[0])
+        .catch(e => console.error('[AUTO-VERIFY] no-verify push failed:', e.message));
+    }
     return;
   }
-  const startMsg = 'wonderbear: \uD83D\uDD0D ' + woId + ' \u81ea\u52a8\u8dd1 verify.sh ...';
-  reply(cachedWebhook, startMsg, ALLOWED_USER_IDS[0])
-    .catch(e => console.error('[AUTO-VERIFY] start push failed:', e.message));
-  exec('bash ' + verifyPath, { timeout: 120000, maxBuffer: 1024 * 1024 }, (err, stdout, stderr) => {
-    const exitCode = err ? (err.code || 1) : 0;
-    const rawOut = (stdout || '') + (stderr ? '\n' + stderr : '');
-    const tailLines = rawOut.split('\n').slice(-30).join('\n');
-    const truncated = tailLines.length > 1500 ? tailLines.slice(-1500) : tailLines;
-    let icon, summary, nextStep;
-    if (err && err.killed) {
-      icon = '\u23F1\uFE0F';
-      summary = woId + ' verify \u8d85\u65f6\uff08>120s\uff09';
-      nextStep = '\u5efa\u8bae: \u628a\u4ee5\u4e0a\u8d34 Claude \u5224\u65ad';
-    } else if (exitCode === 0) {
-      icon = '\u2705';
-      summary = woId + ' verify \u5168\u8fc7';
-      nextStep = '\u4e0b\u4e00\u6b65: \u6d4f\u89c8\u5668\u5b9e\u6d4b';
-    } else {
-      icon = '\u274C';
-      summary = woId + ' verify \u5931\u8d25 (exit=' + exitCode + ')';
-      nextStep = '\u5efa\u8bae: \u628a\u4ee5\u4e0a\u8d34 Claude \u5224\u65ad';
+
+  console.log('[AUTO-VERIFY]', woId, '\u2192 running verify, output to file');
+  const verifyOutFile = '/tmp/wo-verify-' + woId + '-' + Date.now() + '.out';
+
+  exec('bash ' + verifyPath + ' > ' + verifyOutFile + ' 2>&1',
+    { timeout: 120000, maxBuffer: 1024 * 1024 },
+    (err) => {
+      const exitCode = err ? (err.code || 1) : 0;
+      console.log('[AUTO-VERIFY]', woId, 'exit=' + exitCode + ', handing off to auto-coordinator');
+
+      // 转交给 auto-coordinator,它会:
+      // - exit 0 \u2192 \u53d1 [\u4ea7\u54c1\u9a8c\u6536] @ Kristy
+      // - exit !=0 \u2192 \u8c03 false-fail-judge,\u5047 FAIL \u9759\u9ed8\u653e\u884c\u4e5f\u53d1\u9a8c\u6536,\u771f FAIL \u5ac0\u7591\u5217\u8868\u9644\u5728\u9a8c\u6536\u6d88\u606f\u91cc
+      const coordCmd = 'bash /opt/wonderbear/coordination/auto-coordinator.sh post-droid '
+        + woId + ' ' + verifyOutFile + ' ' + exitCode;
+      exec(coordCmd, { timeout: 30000 }, (cErr, cOut, cErrStr) => {
+        if (cErr) {
+          console.error('[AUTO-COORDINATOR]', woId, 'FAILED:', cErr.message);
+          // \u534f\u8c03\u5668\u5931\u8d25\u515c\u5e95:\u4ecd\u6309\u65e7\u903b\u8f91\u63a8\u9489\u9489,\u786e\u4fdd Kristy \u4e0d\u4f1a\u5931\u8054
+          if (cachedWebhook) {
+            const fallbackMsg = 'wonderbear: \u26A0\uFE0F ' + woId + ' verify \u5b8c\u6210 (exit=' + exitCode + ') \u4f46\u534f\u8c03\u5668\u6545\u969c,\u8bf7\u624b\u52a8 review';
+            reply(cachedWebhook, fallbackMsg, ALLOWED_USER_IDS[0])
+              .catch(e => console.error('[AUTO-VERIFY] fallback push failed:', e.message));
+          }
+        } else {
+          console.log('[AUTO-COORDINATOR]', woId, 'OK');
+        }
+        // \u4e0d\u5220 verifyOutFile \u2014 \u534f\u8c03\u5668\u5df2 cp \u5230 marker \u76ee\u5f55,\u8fd9\u91cc\u7559 1 \u5c0f\u65f6\u65b9\u4fbf\u6392\u67e5
+        setTimeout(() => {
+          try { fs.unlinkSync(verifyOutFile); } catch (e) { /* ignore */ }
+        }, 3600000);
+      });
     }
-    // 多行消息: 用数组 join('\n'),不许把多行 markdown 嵌入字符串字面量
-    const msgLines = ['wonderbear: ' + icon + ' ' + summary, '', '```', truncated, '```', '', nextStep];
-    reply(cachedWebhook, msgLines.join('\n'), ALLOWED_USER_IDS[0])
-      .catch(e => console.error('[AUTO-VERIFY] result push failed:', e.message));
-  });
+  );
 }
 
 doneWatcher.start((filename, summary, matched) => {
+  // WO-3.17.1: triggerAutoVerify 优先(它通过 auto-coordinator + dingtalk-router
+  // 走永久 webhook,不依赖 cachedWebhook)
+  try {
+    triggerAutoVerify(filename);
+  } catch (e) {
+    console.error('[AUTO-VERIFY] triggerAutoVerify threw:', e.message);
+  }
   if (!cachedWebhook) {
-    console.log('[DONE-WATCHER] no cachedWebhook yet, skip push for', filename);
+    console.log('[DONE-WATCHER] no cachedWebhook, skip done-summary (auto-coordinator handled push)');
     return;
   }
   const head = matched ?
@@ -337,12 +353,6 @@ doneWatcher.start((filename, summary, matched) => {
   reply(cachedWebhook, body, ALLOWED_USER_IDS[0])
     .catch(e => console.error('[DONE-WATCHER] push failed:', e.message));
 
-  // WO-DT-1.3 (v2): 报告就绪后自动跑 verify.sh → 推钉钉
-  try {
-    triggerAutoVerify(filename);
-  } catch (e) {
-    console.error('[AUTO-VERIFY] triggerAutoVerify threw:', e.message);
-  }
 });
 
 client.registerCallbackListener(TOPIC_ROBOT, async (res) => {
