@@ -487,6 +487,19 @@ function coverFor(s: StorySummary): string {
   padding: 4px 64px 48px;
   align-content: start;
   overflow-y: auto;
+  /*
+   * WO-3.21: hide scrollbar on the Dream Factory shelf. TV remote
+   * navigation never benefits from a visible scrollbar — it's both
+   * ugly (cuts into the watercolor canvas) and useless (no pointer).
+   * Cross-browser triple-suppression: Firefox uses scrollbar-width,
+   * legacy Edge/IE uses -ms-overflow-style, Chrome/Safari/WebKit need
+   * the ::-webkit-scrollbar pseudo-element with display:none.
+   */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.grid::-webkit-scrollbar {
+  display: none;
 }
 .cell {
   display: flex;

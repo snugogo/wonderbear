@@ -103,7 +103,7 @@ function dispatch(workorderId) {
   // 派单命令
   const logFile = '/tmp/droid-' + workorderId + '.log';
   const cmd = 'cd /opt/wonderbear && nohup ' + DROID_CLI +
-              ' exec --auto high "请按 coordination/workorders/' + workorderId + '/README.md 完成任务。' +
+              ' exec --model deepseek-v4-pro --auto high "请按 coordination/workorders/' + workorderId + '/README.md 完成任务。' +
               '完成后写报告到 coordination/done/' + reportName + '" > ' + logFile + ' 2>&1 & echo $!';
 
   try {

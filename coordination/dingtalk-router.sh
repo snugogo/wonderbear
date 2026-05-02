@@ -46,13 +46,16 @@ case "$TYPE" in
   *) echo "未知类型: $TYPE" >&2; exit 1 ;;
 esac
 
-if [[ "$AT_KRISTY" == "true" ]]; then
-  PAYLOAD=$(jq -n --arg c "${PREFIX}${CONTENT}" \
-    '{msgtype:"text",text:{content:$c},at:{isAtAll:false}}')
-else
-  PAYLOAD=$(jq -n --arg c "${PREFIX}${CONTENT}" \
-    '{msgtype:"text",text:{content:$c}}')
-fi
+# WO-3.21: removed the legacy `at` field from the payload. It was the
+# real root cause of errcode 450103 ("只有群主可以@全体成员") when calling
+# the custom robot webhook from a shell script — DingTalk's server
+# rejects the call as soon as the AT block is present without a matching
+# mobile whitelist on the bot config, even when no users are referenced.
+# AT_KRISTY now only controls the visual prefix emoji. We keep the
+# variable so callers can still tell info / acceptance / decision apart
+# in router logs.
+PAYLOAD=$(jq -n --arg c "${PREFIX}${CONTENT}" \
+  '{msgtype:"text",text:{content:$c}}')
 
 RESPONSE=$(curl -sS -m 10 -X POST "$WEBHOOK" \
   -H "Content-Type: application/json" \

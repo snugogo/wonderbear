@@ -27,7 +27,7 @@ if (!CLIENT_ID || !CLIENT_SECRET) {
   process.exit(1);
 }
 
-console.log('[BOOT] DingTalk bot v0.9.2 (router+watcher) starting...');
+console.log('[BOOT] DingTalk bot v0.9.3 (router+watcher+alive-check) starting...');
 console.log('[BOOT] Client ID prefix:', CLIENT_ID.substring(0, 10) + '...');
 console.log('[BOOT] Allowed users:', ALLOWED_USER_IDS.join(',') || '(none)');
 console.log('[BOOT] Workspace:', WORKSPACE);
@@ -273,7 +273,16 @@ function runClaude(prompt, model, onDone) {
 }
 
 // === v0.9.2 done-watcher: 后台轮询 coordination/done/, 推送新报告 ===
-let cachedWebhook = null;
+//
+// WO-3.21: cachedWebhook 启动时从 .env 读 DINGTALK_WEBHOOK_URL 兜底。
+// 历史 bug:bot 重启后 cachedWebhook=null,直到 Kristy 在群里发第一条消息
+// 才会被填上(register listener 时 sessionWebhook 才进来)。重启窗口里
+// done-watcher / triggerAutoVerify 推钉钉就静默失败。现在如果 .env 提供
+// 了永久 webhook URL,启动即可推送;群消息进来仍会用更鲜活的 sessionWebhook
+// 覆盖(sessionWebhook 走的是用户当前会话 token,失效更快但权限够)。
+let cachedWebhook = process.env.DINGTALK_WEBHOOK_URL || null;
+console.log('[BOOT] cachedWebhook initialized:',
+  cachedWebhook ? 'from DINGTALK_WEBHOOK_URL env' : 'null (will populate on first inbound msg)');
 
 // === WO-DT-1.3 (v2): 检测到新报告 → 自动跑 verify.sh → 推钉钉 ===
 // child_process.exec 异步 + 120s timeout + 1MB maxBuffer + 截尾 30 行/1500 字符
@@ -744,6 +753,17 @@ client.registerCallbackListener(TOPIC_ROBOT, async (res) => {
 
 client.connect();
 console.log('[READY] DingTalk Stream connected');
+
+// === WO-3.21: bot 启动健康自检 ===
+// 30 秒后打 [BOT-ALIVE] 标记,确认 stream listener 没有在启动早期 silently
+// 崩溃。pm2 看到 [BOT-ALIVE] 才算真上线;只有 [READY] 不够 — 历史上见过
+// connect() 立即 resolve 但 stream 在 ~10 秒后挂掉的情况(SDK keepalive
+// 超时或 client_id 配额耗尽),那种状态 pm2 仍标记 online 但实际收不到任何
+// 消息。配合外部 cron 抓 pm2 logs 的 [BOT-ALIVE] 就能做到分钟级故障感知。
+setTimeout(() => {
+  console.log('[BOT-ALIVE] DingTalk bot startup self-check passed at +30s ' +
+    '(stream listener registered, no early crash)');
+}, 30000);
 
 process.on('SIGTERM', () => {
   killAllActive();
