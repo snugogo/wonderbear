@@ -248,6 +248,71 @@ function route(content, sessionWebhook, atUserId, replyFn) {
     return { handled: true, reply: handleHelp() };
   }
 
+  // === V2 新命令 (auto-coordinator 自动连推) ===
+  const QH = '/opt/wonderbear/coordination/queue-helper.sh';
+  const AC = '/opt/wonderbear/coordination/auto-coordinator.sh';
+
+  // 通过 WO-X
+  let m;
+  if ((m = c.match(/^通过\s+(WO-[\w.\-]+)$/i))) {
+    const woId = m[1].toUpperCase();
+    require('child_process').exec(
+      'bash ' + AC + ' approve-to-main ' + woId + ' > /tmp/approve-' + woId + '.log 2>&1',
+      { timeout: 60000 });
+    return { handled: true, reply: '📥 已收到 "通过 ' + woId + '",正在 cherry-pick 到 main + 接力下一单...' };
+  }
+
+  // 回滚 WO-X
+  if ((m = c.match(/^回滚\s+(WO-[\w.\-]+)$/i))) {
+    const woId = m[1].toUpperCase();
+    require('child_process').exec(
+      'bash ' + AC + ' rollback ' + woId + ' > /tmp/rollback-' + woId + '.log 2>&1',
+      { timeout: 60000 });
+    return { handled: true, reply: '↩️ 已收到 "回滚 ' + woId + '",正在用部署备份秒级回滚 + git revert...' };
+  }
+
+  // 跳过 WO-X
+  if ((m = c.match(/^跳过\s+(WO-[\w.\-]+)$/i))) {
+    const woId = m[1].toUpperCase();
+    try {
+      require('child_process').execSync('bash ' + QH + ' set-status ' + woId + ' skipped', { timeout: 5000 });
+      require('child_process').execSync('bash ' + QH + ' promote ' + woId, { timeout: 5000 });
+      require('child_process').exec('bash ' + AC + ' next-from-queue ' + woId + ' > /tmp/next-skip-' + woId + '.log 2>&1', { timeout: 30000 });
+      return { handled: true, reply: '⏭️ ' + woId + ' 已标记跳过,接力下一单' };
+    } catch (e) {
+      return { handled: true, reply: '❌ 跳过 ' + woId + ' 失败: ' + e.message };
+    }
+  }
+
+  // 查队列 / 队列状态
+  if (/^查队列$|^队列状态$/i.test(c)) {
+    try {
+      const out = require('child_process').execSync('bash ' + QH + ' list', { timeout: 5000, encoding: 'utf8' });
+      const data = JSON.parse(out);
+      const lines = ['📋 队列状态:'];
+      lines.push('当前: ' + (data.current || '无'));
+      if (!data.queue || data.queue.length === 0) {
+        lines.push('  (队列为空)');
+      } else {
+        data.queue.forEach(q => {
+          const blocked = (q.blocked_by && q.blocked_by.length) ? ' (依赖: ' + q.blocked_by.join(',') + ')' : '';
+          const desc = q.description ? ' — ' + q.description.slice(0, 40) : '';
+          lines.push('  • ' + q.wo_id + ' [' + q.status + ']' + blocked + desc);
+        });
+      }
+      lines.push('\n历史 ' + (data.history || []).length + ' 单');
+      return { handled: true, reply: lines.join('\n') };
+    } catch (e) {
+      return { handled: true, reply: '❌ 查队列失败: ' + e.message };
+    }
+  }
+
+  // 继续
+  if (/^继续$/i.test(c)) {
+    require('child_process').exec('bash ' + AC + ' next-from-queue resume > /tmp/resume.log 2>&1', { timeout: 30000 });
+    return { handled: true, reply: '▶️ 已发送队列恢复信号,正在派下一个 pending 工单...' };
+  }
+
   return { handled: false };
 }
 
