@@ -1,0 +1,32 @@
+{
+  "queue": [
+    {
+      "wo_id": "WO-3.26",
+      "status": "awaiting_approval",
+      "priority": 2,
+      "blocked_by": [
+        "WO-3.25"
+      ],
+      "description": "Dev/QA Fast-Path (跳过 Activation 屏)",
+      "risk_level": "L2",
+      "deployed_at": "2026-05-02T14:32:26.886899"
+    }
+  ],
+  "current": null,
+  "history": [
+    {
+      "wo_id": "WO-3.25",
+      "status": "approved",
+      "priority": 1,
+      "blocked_by": [],
+      "description": "Scrollbar 全局兜底修复 (CreateScreen 跨屏)",
+      "risk_level": "L1",
+      "approved_at": "2026-05-02T07:05:11.001984"
+    }
+  ],
+  "_meta": {
+    "created_at": "2026-05-02",
+    "schema_version": "2.0",
+    "note": "Risk-Level: L1 全自动 / L2 验收级 / L3 谨慎级 / L4 隔离级"
+  }
+}

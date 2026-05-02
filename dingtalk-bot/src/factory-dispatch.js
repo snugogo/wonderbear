@@ -110,7 +110,7 @@ function dispatch(workorderId) {
   const envPrefix = dsKey ? 'ANTHROPIC_BASE_URL=' + dsBase + ' ANTHROPIC_API_KEY=' + dsKey + ' ' : '';
 
   const cmd = 'cd /opt/wonderbear && ' + envPrefix + 'nohup ' + DROID_CLI +
-              ' exec --model deepseek-v4-pro --auto high "请按 coordination/workorders/' + workorderId + '/README.md 完成任务。' +
+              ' exec --model custom:deepseek-v4-pro --auto high "请按 coordination/workorders/' + workorderId + '/README.md 完成任务。' +
               '完成后写报告到 coordination/done/' + reportName + '" > ' + logFile + ' 2>&1 & echo $!';
 
   try {
@@ -120,10 +120,13 @@ function dispatch(workorderId) {
     // 阻塞导致后续派单全卡)。timeout 触发会抛 ETIMEDOUT,被外层 catch 捕获,
     // 不会冒到 process 顶层。stdio: ['ignore', 'pipe', 'pipe'] 避免继承
     // bot 进程的 stdin,免得子 shell 等待输入。
+    // V4 Pro 真路由(env 必须在 execSync 之前注入)
+    process.env.ANTHROPIC_BASE_URL = 'https://api.deepseek.com/anthropic';
+    process.env.ANTHROPIC_API_KEY = 'sk-54512f2d28dc405680993d0a29cc887b';
     const result = require('child_process').execSync(cmd, {
       encoding: 'utf8',
       shell: '/bin/bash',
-      timeout: 5000,
+      timeout: 30000,
       killSignal: 'SIGKILL',
       stdio: ['ignore', 'pipe', 'pipe'],
     });
