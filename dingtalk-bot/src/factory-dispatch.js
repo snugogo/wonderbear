@@ -102,7 +102,14 @@ function dispatch(workorderId) {
 
   // 派单命令
   const logFile = '/tmp/droid-' + workorderId + '.log';
-  const cmd = 'cd /opt/wonderbear && nohup ' + DROID_CLI +
+
+  // WO-V4-FIX: 在 nohup 前注入 DeepSeek Anthropic 兼容层环境变量（memory #25）
+  // 如果 DEEPSEEK_ANTHROPIC_KEY 未设，envPrefix 为空 → 退回原行为，向后兼容
+  const dsKey = process.env.DEEPSEEK_ANTHROPIC_KEY || '';
+  const dsBase = process.env.DEEPSEEK_ANTHROPIC_BASE_URL || 'https://api.deepseek.com/anthropic';
+  const envPrefix = dsKey ? 'ANTHROPIC_BASE_URL=' + dsBase + ' ANTHROPIC_API_KEY=' + dsKey + ' ' : '';
+
+  const cmd = 'cd /opt/wonderbear && ' + envPrefix + 'nohup ' + DROID_CLI +
               ' exec --model deepseek-v4-pro --auto high "请按 coordination/workorders/' + workorderId + '/README.md 完成任务。' +
               '完成后写报告到 coordination/done/' + reportName + '" > ' + logFile + ' 2>&1 & echo $!';
 
