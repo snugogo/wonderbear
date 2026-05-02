@@ -328,6 +328,15 @@ export interface DialogueTurnResp {
   arcUpdate?: Partial<Record<DialogueArcStep, string>> | null;
   /** v7.2 — present when done=true; drives StoryPreviewScreen. */
   storyOutline?: DialogueStoryOutline | null;
+  /**
+   * WO-3.18 Phase 3 — bear has produced a coherent summary the child can
+   * confirm. TV moves into `waiting_confirm` state and surfaces the
+   * "开始画故事 / Start painting" CTA. Optional/back-compat: missing or
+   * false keeps the legacy ASKING flow.
+   */
+  should_summarize?: boolean;
+  /** WO-3.18 Phase 3 — the bear's summary line ("我们来一起画 X 的故事吧?"). */
+  story_summary?: string | null;
   /** v7.2 — telemetry only ('mock' | 'gemini-v7_2' | 'default-bank' | ...). */
   _provider?: string | null;
 }

@@ -27,7 +27,7 @@ import {
 import { pickOpener, pickTone } from '../data/dialoguePromptPool.js';
 import { getOpenerTtsUrl } from '../services/staticTtsCache.js';
 import { classify as classifySafety } from '../utils/contentSafety.js';
-import { generateDialogueTurnV2 } from '../services/llm.js';
+import { generateDialogueTurnV2, resolveChildName } from '../services/llm.js';
 import {
   evaluateReply,
   shouldForceFinish,
@@ -429,6 +429,18 @@ export default async function storyRoutes(fastify) {
         }
       }
 
+      // WO-3.19 — capture extractedProtagonist sticky across turns. The
+      // child usually names the hero in round 1; once we have a non-empty
+      // value we keep it so a later turn that doesn't re-mention the
+      // name doesn't blank it out. Priority chain (memory #21 §5):
+      //   verbal extraction || My Den childProfile.name || 'Dora'.
+      if (
+        typeof llm?.extractedProtagonist === 'string' &&
+        llm.extractedProtagonist.trim()
+      ) {
+        session.extractedProtagonist = llm.extractedProtagonist.trim();
+      }
+
       // 6) determine final done flag — server-side hard cap wins
       const done = forceDone || llm.done === true;
 
@@ -453,12 +465,26 @@ export default async function storyRoutes(fastify) {
               'They walk home smiling under the warm sky.',
             ] };
         session.storyOutline = storyOutline;
+        // WO-3.19 — final-name priority chain through resolveChildName:
+        //   1. extractedFromConversation  (session.extractedProtagonist)
+        //   2. childProfile.name          (My Den / Child DB row)
+        //   3. 'Dora'                     (brand-anchor default)
+        // session.arc.character may be a phrase like "a brave bear", so we
+        // use it only as the on-screen mainCharacter label and feed the
+        // CLEANED childName separately so the 12-page LLM prompt receives
+        // a one-or-two-word value.
+        const childName = resolveChildName({
+          extractedProtagonist: session.extractedProtagonist || null,
+          childProfile: session.childProfile,
+        });
         // Backfill summary so /story/generate (existing 12-page LLM) still works.
         session.summary = {
+          childName,
+          extractedProtagonist: session.extractedProtagonist || null,
           mainCharacter:
+            session.extractedProtagonist ||
             session.arc.character ||
-            session.history.find((h) => h.role === 'user' && h.round === 1)?.text ||
-            session.childProfile.name,
+            childName,
           scene: session.arc.setting || 'a sunny meadow',
           conflict: session.arc.obstacle || session.arc.goal || 'a fun little problem',
           outline: storyOutline.paragraphs,
@@ -630,8 +656,19 @@ export default async function storyRoutes(fastify) {
               'They walk home smiling under the warm sky.',
             ] };
         session.storyOutline = v2StoryOutline;
+        // WO-3.19 — same priority chain on the v2-lite branch. The
+        // orchestrator does not yet emit extractedProtagonist itself;
+        // any session.extractedProtagonist we accumulated from earlier
+        // turns still wins via resolveChildName.
+        const v2ChildName = resolveChildName({
+          extractedProtagonist: session.extractedProtagonist || null,
+          childProfile: session.childProfile,
+        });
         session.summary = {
-          mainCharacter: session.childProfile.name,
+          childName: v2ChildName,
+          extractedProtagonist: session.extractedProtagonist || null,
+          mainCharacter:
+            session.extractedProtagonist || session.childProfile.name || v2ChildName,
           scene: 'a sunny meadow',
           conflict: 'a fun little problem',
           outline: v2StoryOutline.paragraphs,

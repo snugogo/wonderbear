@@ -79,6 +79,23 @@ export default {
     },
     demoQuestion: 'What kind of story do you want to hear today?',
     demoReply: 'I want a story about a brave little bear adventuring in the forest!',
+    /*
+     * WO-3.18 Phase 3 — confirm-create button label shown while the
+     * dialogue is in WAITING_CONFIRM state. The verb is intentionally
+     * the same as `dialogue.readyPainter` so the muscle memory carries
+     * over; the surrounding pulse animation is what cues "this is the
+     * thing you should press now".
+     */
+    confirmCreate: 'Start painting',
+    /* WO-3.18 Phase 4 — draft persistence (localStorage) UX strings. */
+    draft: {
+      backConfirmTitle: 'Story not painted yet — keep it?',
+      backConfirmKeep: 'Keep draft',
+      backConfirmDiscard: 'Discard',
+      recoverTitle: 'You had {turns} turns last time — continue this story?',
+      recoverContinue: 'Continue draft',
+      recoverNew: 'New story',
+    },
   },
 
   /*
@@ -107,7 +124,11 @@ export default {
       thinking: 'The bear is thinking up a story...',
       firstPage: 'Painting the first page...',
       morePages: 'Painting the rest of the pages...',
-      recording: 'The bear is recording...',
+      // WO-3.18 Phase 1A: was 'The bear is recording...' which misled
+      // users into thinking the bear was recording audio. The TTS phase
+      // is part of "painting the story" from the child's perspective —
+      // unify all generation-stage copy under the painting metaphor.
+      recording: 'Bear is painting your story...',
       almost: 'Almost ready!',
     },
   },

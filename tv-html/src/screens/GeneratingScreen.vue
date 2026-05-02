@@ -66,9 +66,14 @@ const progressPercent = computed<number>(() =>
   isDemoMode() ? demoPercent.value : storyStore.percent,
 );
 
-const progressRatio = computed<number>(() =>
-  Math.max(0.04, Math.min(progressPercent.value / 100, 1)),
-);
+/*
+ * WO-3.18 Phase 2 — `progressRatio` (the 0-1 form previously used by
+ * the scaleX transform) was retired when the fill switched to
+ * width-as-percent. Kept the computed removed entirely so vue-tsc
+ * doesn't flag the unused value (TS6133). progressPercent is the
+ * single source of truth for both the bar fill and the bear's `left`
+ * offset on the track.
+ */
 
 /*
  * TV v1.0 §4.6 + PHASE2 §3.5: stage-based progress copy.
@@ -356,9 +361,19 @@ useFocusable(libraryBtnRef, {
           class="progress-board"
           :style="{ backgroundImage: `url(${asset('ui/ui_progress_bar.webp')})` }"
         >
+          <!--
+            WO-3.18 Phase 2 — progress bar fill width and the traveling
+            bear's `left` offset both come from `progressPercent` (single
+            source of truth), so they CANNOT drift. Earlier the fill used
+            `transform: scaleX(progressRatio)` while the bear used
+            `left: progressPercent%` — same ultimate source, but the two
+            different units (ratio 0-1 vs % 0-100) made it easy for a
+            future tweak to break sync. Switching to width-as-percent
+            keeps both expressions visually equivalent.
+          -->
           <div
             class="progress-fill"
-            :style="{ transform: `scaleX(${progressRatio})` }"
+            :style="{ width: progressPercent + '%' }"
           />
         </div>
         <img
@@ -503,10 +518,21 @@ useFocusable(libraryBtnRef, {
  *   + a traveling bear sprite; below it, the progress-text pill.
  *   Zone pins directly above the bottom CTA row (bottom: 130 px).
  */
+/*
+ * WO-3.18 Phase 1B — give the progress zone a tall enough pedestal that
+ * the bottom hint pill ("This takes a few minutes — visit Stories…")
+ * can never overlap the bar at any TV viewport (1280×720 / 1920×1080).
+ * Pre-3.18 layout: bottom 150 px on the zone + bottom 50 px on the CTA
+ * row. The traveling bear's bottom: -30px sprite + 124 px play button
+ * could collide with the bar's lower edge on some panels with overscan.
+ * Bumping to 180 px gives a guaranteed 24 px safety margin under the
+ * bar, with `margin-bottom: 24px` on the text pill enforcing spacing
+ * even if the parent flex shrinks.
+ */
 .progress-zone {
   position: absolute;
   left: 50%;
-  bottom: 150px;
+  bottom: 180px;
   transform: translateX(-50%);
   z-index: 3;
   width: 820px;
@@ -514,6 +540,7 @@ useFocusable(libraryBtnRef, {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  margin-bottom: 24px;
 }
 .progress-track-with-bear {
   position: relative;
@@ -558,14 +585,23 @@ useFocusable(libraryBtnRef, {
   overflow: hidden;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
 }
+/*
+ * WO-3.18 Phase 2: width-driven (single source of truth with the
+ * traveling bear's `left` offset). Pinned to the inner inset of the
+ * progress board so the fill visually starts inside the cream art
+ * border. `width: 0%` is the resting state; the inline style overrides
+ * it with `progressPercent + '%'`.
+ */
 .progress-fill {
   position: absolute;
-  inset: 8px 10px;
+  top: 8px;
+  bottom: 8px;
+  left: 10px;
+  width: 0%;
+  max-width: calc(100% - 20px);
   background: linear-gradient(90deg, var(--c-focus), #ffd089);
   border-radius: 999px;
-  transform-origin: left center;
-  transform: scaleX(0);
-  transition: transform 600ms var(--ease-out);
+  transition: width 600ms var(--ease-out);
   box-shadow: 0 0 18px var(--c-focus-soft);
   mix-blend-mode: multiply;
   opacity: 0.85;

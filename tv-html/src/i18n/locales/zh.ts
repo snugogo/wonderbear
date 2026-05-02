@@ -86,6 +86,20 @@ export default {
     },
     demoQuestion: '今天想听一个关于什么的故事呀?',
     demoReply: '我想听一只勇敢的小熊去森林冒险的故事!',
+    /*
+     * WO-3.18 Phase 3 — 确认创作按钮文案. 在 dialogueState=waiting_confirm
+     * 时按钮带 pulse 呼吸动效, 提示孩子点击进入绘本生成.
+     */
+    confirmCreate: '开始画故事',
+    /* WO-3.18 Phase 4 — 草稿持久化 (localStorage) 的弹窗文案. */
+    draft: {
+      backConfirmTitle: '故事还没画,要保留吗?',
+      backConfirmKeep: '保留草稿',
+      backConfirmDiscard: '取消',
+      recoverTitle: '上次聊了 {turns} 轮还没画,继续吗?',
+      recoverContinue: '继续草稿',
+      recoverNew: '新故事',
+    },
   },
 
   /*
@@ -122,7 +136,10 @@ export default {
       thinking: '小熊在想故事呢...',
       firstPage: '正在画第一页...',
       morePages: '画其余 11 页...',
-      recording: '小熊在录音...',
+      // WO-3.18 Phase 1A: 原本是 '小熊在录音...' — 让用户以为熊熊在
+      // 录音(实际是 TTS 合成阶段). 从孩子视角看, 整个生成阶段都是
+      // "熊熊在画故事", 统一文案降低误解.
+      recording: '小熊正在画你的故事...',
       almost: '快好了!',
     },
   },

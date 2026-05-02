@@ -9,7 +9,7 @@
 -->
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useChildStore } from '@/stores/child';
 import { useScreenStore } from '@/stores/screen';
 import { useBgmStore } from '@/stores/bgm';
@@ -18,6 +18,12 @@ import MenuCard from '@/components/MenuCard.vue';
 // HintBar removed from Home 2026-04-24 iter6; kept import-free.
 import type { FocusableNeighbors } from '@/services/focus';
 import { asset } from '@/utils/assets';
+// WO-3.18 Phase 4 — surface the saved draft (if any) when the kid taps
+// the "Create" home card so they can pick "继续草稿 / Continue draft" or
+// "新故事 / New story" instead of silently overwriting yesterday's
+// session. Lives on HomeScreen because it's the canonical CREATE entry
+// per WO §previous-wo-files-allowed-to-modify.
+import { loadDraft, clearDraft } from '@/stores/draft';
 
 const child = useChildStore();
 const screen = useScreenStore();
@@ -62,6 +68,42 @@ function stubAction(kind: string): () => void {
   };
 }
 
+/*
+ * WO-3.18 Phase 4 — draft recovery state. When the kid presses the
+ * "Create" home card we first check localStorage for a saved draft
+ * (loadDraft auto-purges expired entries). If one exists we open the
+ * recover-prompt modal; otherwise we route straight to /create as
+ * before. The modal then either (a) routes to /dialogue with
+ * `restoreDraft: true` so DialogueScreen seeds the pinia store from
+ * the draft, or (b) clears the draft and routes to /create fresh.
+ */
+const showRecoverPrompt = ref<boolean>(false);
+const recoverTurnCount = ref<number>(0);
+
+function onCreateCardPressed(): void {
+  const drafted = loadDraft();
+  if (drafted && drafted.turnCount >= 1) {
+    recoverTurnCount.value = drafted.turnCount;
+    showRecoverPrompt.value = true;
+    return;
+  }
+  // No draft (or zero-turn stub) → original behaviour: open the
+  // CreateScreen hub. Wipe any stale draft to keep localStorage tidy.
+  clearDraft();
+  screen.go('create');
+}
+
+function onRecoverContinue(): void {
+  showRecoverPrompt.value = false;
+  screen.go('dialogue', { restoreDraft: true });
+}
+
+function onRecoverNew(): void {
+  showRecoverPrompt.value = false;
+  clearDraft();
+  screen.go('create');
+}
+
 const menus: MenuItem[] = [
   // Row 1
   {
@@ -70,7 +112,7 @@ const menus: MenuItem[] = [
     letter: 'C', icon: 'ui/ui_home_create.webp',
     enabled: true,
     neighbors: { right: 'home-card-stories', down: 'home-card-cast' },
-    action: () => screen.go('create'),
+    action: onCreateCardPressed,
   },
   {
     id: 'home-card-stories',
@@ -197,7 +239,41 @@ onMounted(async () => {
       (Other screens still use HintBar; this is a Home-only removal.)
     -->
 
-    
+    <!--
+      WO-3.18 Phase 4 — recover-draft modal. Shown when the kid presses
+      the "Create" card AND a non-empty draft exists in localStorage.
+      Two outcomes:
+        · 继续草稿 → /dialogue with restoreDraft: true (DialogueScreen
+                     re-seeds pinia from localStorage)
+        · 新故事   → clearDraft + /create (fresh hub)
+      Mouse / touch users tap; remote users press OK on the autofocused
+      primary button (browser focus, no useFocusable since this is a
+      transient modal).
+    -->
+    <div v-if="showRecoverPrompt" class="draft-recover-overlay" role="dialog" aria-modal="true">
+      <div class="draft-recover-card">
+        <div class="draft-recover-title">
+          {{ t('dialogue.draft.recoverTitle', { turns: recoverTurnCount }) }}
+        </div>
+        <div class="draft-recover-actions">
+          <button
+            type="button"
+            class="draft-recover-btn draft-recover-btn-primary"
+            autofocus
+            @click="onRecoverContinue"
+          >
+            {{ t('dialogue.draft.recoverContinue') }}
+          </button>
+          <button
+            type="button"
+            class="draft-recover-btn"
+            @click="onRecoverNew"
+          >
+            {{ t('dialogue.draft.recoverNew') }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -302,5 +378,74 @@ onMounted(async () => {
   gap: 0;
   padding: 0 64px 96px;
   min-height: 0;
+}
+
+/*
+ * WO-3.18 Phase 4 — recover-draft modal styling. Mirrors the back-key
+ * save modal in DialogueScreen.vue (same color/typography), so the
+ * "draft" surface reads as one consistent UI vocabulary across screens.
+ * z-index 200 sits above HomeScreen menu cards (z-index 1) and the
+ * GlobalBackButton (z-index 9000 in App.vue) is hidden on home anyway.
+ */
+.draft-recover-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 200;
+  background: rgba(20, 12, 6, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+}
+.draft-recover-card {
+  width: min(680px, 80%);
+  background: rgba(255, 245, 230, 0.97);
+  border: 2px solid var(--c-amber, #d97706);
+  border-radius: 28px;
+  padding: 36px 40px 32px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+}
+.draft-recover-title {
+  font-family: var(--ff-display);
+  color: #2b1a0f;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-align: center;
+  line-height: 1.3;
+}
+.draft-recover-actions {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.draft-recover-btn {
+  font-family: var(--ff-display);
+  color: #2b1a0f;
+  font-size: 22px;
+  font-weight: 700;
+  background: rgba(255, 241, 200, 0.6);
+  border: 2px solid rgba(245, 158, 11, 0.55);
+  border-radius: 999px;
+  padding: 12px 28px;
+  cursor: pointer;
+  transition: transform var(--t-fast) var(--ease-out),
+              border-color var(--t-fast) var(--ease-out),
+              box-shadow var(--t-fast) var(--ease-out);
+}
+.draft-recover-btn-primary {
+  background: var(--c-amber, #f59e0b);
+  border-color: var(--c-amber, #d97706);
+}
+.draft-recover-btn:hover,
+.draft-recover-btn:focus {
+  outline: none;
+  transform: scale(1.05);
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.4);
 }
 </style>

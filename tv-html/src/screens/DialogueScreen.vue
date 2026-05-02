@@ -44,11 +44,15 @@ import { useBgmStore } from '@/stores/bgm';
 import { useI18n } from 'vue-i18n';
 import { bridge } from '@/services/bridge';
 import { emit as bridgeEmit } from '@/services/bridge/pushBus';
-import { useFocusable, setFocus } from '@/services/focus';
+import { useFocusable, setFocus, pushBackHandler } from '@/services/focus';
 import { api, ApiError } from '@/services/api';
 import type { Locale } from '@/utils/errorCodes';
 import { ERR } from '@/utils/errorCodes';
 import { asset } from '@/utils/assets';
+// WO-3.18 Phase 4 — draft persistence helpers (saveDraft / loadDraft /
+// clearDraft live in stores/draft.ts; this screen owns the lifecycle of
+// "save on back" + "clear on generation kickoff").
+import { saveDraft, loadDraft, clearDraft } from '@/stores/draft';
 
 const dialogue = useDialogueStore();
 const storyStore = useStoryStore();
@@ -61,6 +65,39 @@ const { t, locale } = useI18n();
 const okCaptureEl = ref<HTMLElement | null>(null);
 const softHint = ref<string>('');
 let softHintTimer: number | null = null;
+
+/*
+ * WO-3.18 Phase 3 — explicit dialogue state machine for the "waiting on
+ * the child to confirm the story" beat.
+ *
+ *   ASKING (default)        — bear is asking, child will respond. The
+ *                             standard 5-7 round flow applies.
+ *
+ *   WAITING_CONFIRM         — server returned `should_summarize=true` (or
+ *                             the legacy `done=true` summary path). Bear
+ *                             has surfaced a 1-line story summary and is
+ *                             waiting for one of:
+ *                               · child presses 开始画故事 button → generate
+ *                               · child holds mic to keep talking      → ASKING
+ *                               · child presses BACK                   → Phase 4 confirm
+ *                               · neither → stay here, button pulses ∞
+ *                             We DO NOT auto-advance from this state.
+ *
+ * The state is intentionally local (not in pinia) — it's pure UI surface
+ * driven by the latest /dialogue/turn response.
+ */
+type DialogueWaitingState = 'asking' | 'waiting_confirm';
+const dialogueState = ref<DialogueWaitingState>('asking');
+/** The bear's summary line surfaced when entering waiting_confirm. */
+const pendingStorySummary = ref<string>('');
+
+/*
+ * WO-3.18 Phase 4 — back-key save-draft confirm dialog. Visibility ref
+ * is a plain boolean rather than a focusable so the focus system stays
+ * unaware of it; the modal traps clicks inside its overlay div instead.
+ */
+const showBackConfirm = ref<boolean>(false);
+let unregisterBackHandler: (() => void) | null = null;
 
 let unsubVoiceDown: (() => void) | null = null;
 let unsubVoiceUp: (() => void) | null = null;
@@ -215,7 +252,49 @@ function speakOrAdvance(): void {
   }
 }
 
+/*
+ * WO-3.18 Phase 4 — utility: does this screen currently hold "draft-worthy"
+ * content? We avoid showing the save-draft prompt for empty sessions
+ * (e.g. user pressed CREATE → BACK before saying anything) since saving
+ * an empty draft would just clutter the recover-prompt logic later.
+ */
+function hasDraftableContent(): boolean {
+  if (dialogueState.value === 'waiting_confirm') return true;
+  if (dialogue.summary) return true;
+  // Per dialogue store contract round starts at 1 even on opener — only
+  // round >= 2 means at least one user turn was contributed.
+  return dialogue.round >= 2;
+}
+
+/*
+ * WO-3.18 Phase 4 — write the current dialogue state into localStorage so
+ * the kid can resume from CreateScreen later. Called from the back-key
+ * save flow below; clearDraft() takes the opposite path on "discard".
+ */
+function persistCurrentDraft(): void {
+  saveDraft({
+    dialogueId: dialogue.dialogueId,
+    conversationHistory: [],
+    outlineSummary:
+      pendingStorySummary.value ||
+      (dialogue.summary
+        ? [
+            dialogue.summary.mainCharacter,
+            dialogue.summary.scene,
+            dialogue.summary.conflict,
+          ]
+            .filter(Boolean)
+            .join(' · ')
+        : ''),
+    protagonistName: '',
+    turnCount: dialogue.round,
+  });
+}
+
 async function startGenerationAndNavigate(): Promise<void> {
+  // WO-3.18 Phase 4 — successful kickoff means the draft is no longer
+  // "in progress"; wipe it so the next CREATE entry starts clean.
+  clearDraft();
   // 2026-04-27 dev/gallery: skip the real /story/generate call, seed the
   // store with a mock id and let GeneratingScreen run its built-in demo
   // progress animation. Lets reviewers walk the full create→cover→body
@@ -361,6 +440,14 @@ function schedulePressDownAfterDebounce(): void {
  */
 function actuallyStartRecord(): void {
   if (inFlight) return;
+  // WO-3.18 Phase 3 — child speaking again exits WAITING_CONFIRM. Per WO
+  // §execution Phase 3 spec: "按话筒说话 → 回到 ASKING (继续聊)". The
+  // bear's previous summary becomes stale; they may produce a new one
+  // after another 2-4 turns.
+  if (dialogueState.value === 'waiting_confirm') {
+    dialogueState.value = 'asking';
+    pendingStorySummary.value = '';
+  }
   try {
     const ret = bridge.startVoiceRecord('dialogue');
     if (ret && typeof (ret as Promise<void>).then === 'function') {
@@ -542,6 +629,29 @@ async function submitTurn(payload: {
       storyOutline: data.storyOutline ?? null,
     });
 
+    // WO-3.18 Phase 3 — switch to WAITING_CONFIRM the moment the bear
+    // produces a summary the child can act on. We accept either:
+    //   · the new `should_summarize=true` field (Phase 3 prompt revamp), or
+    //   · the legacy `done=true` path (back-compat with v7.2 servers that
+    //     don't yet emit should_summarize).
+    // The legacy path also gets the debounced auto-advance (timeout
+    // below) — we keep it as a fallback so older servers still finish
+    // the dialogue. Once should_summarize is in production this branch
+    // is the primary path.
+    const should_summarize_flag = (data as { should_summarize?: boolean }).should_summarize === true;
+    const story_summary_text = (data as { story_summary?: string | null }).story_summary;
+    if (should_summarize_flag) {
+      dialogueState.value = 'waiting_confirm';
+      pendingStorySummary.value =
+        typeof story_summary_text === 'string' && story_summary_text.trim()
+          ? story_summary_text.trim()
+          : t('dialogue.demoReply');
+      // Park focus on the confirm button so OK starts generation.
+      void nextTick().then(() => setFocus('dialogue-ready-painter'));
+      // No further action — we explicitly DO NOT navigate or auto-finish.
+      return;
+    }
+
     if (data.done) {
       // v7.2: when the server provides a storyOutline (3-5 paragraphs)
       // we route through the new StoryPreviewScreen so the kid sees their
@@ -658,6 +768,31 @@ useFocusable(readyBtnRef, {
   onEnter: () => { void startGenerationAndNavigate(); },
 });
 
+/*
+ * WO-3.18 Phase 4 — handlers for the back-key save-draft modal. Both
+ * close the modal and pop the screen; the difference is whether we
+ * write to localStorage or wipe it. Per WO §execution Phase 4 Step 4.3:
+ *   [保留] → saveDraft + go home
+ *   [取消] → clearDraft + go home
+ *
+ * We route via screen.back() (not screen.go('home')) so flows that
+ * entered DialogueScreen from CreateScreen / FavoritesScreen pop back
+ * to the actual entry point rather than always landing at home.
+ */
+function onBackConfirmKeep(): void {
+  persistCurrentDraft();
+  showBackConfirm.value = false;
+  // Defer screen.back so the modal v-if has time to unmount cleanly
+  // and the focus reset doesn't try to refocus a vanished dialog.
+  void nextTick().then(() => screen.back());
+}
+
+function onBackConfirmDiscard(): void {
+  clearDraft();
+  showBackConfirm.value = false;
+  void nextTick().then(() => screen.back());
+}
+
 function startMicAlternation(): void {
   if (micTimer != null) return;
   micTimer = window.setInterval(() => {
@@ -711,6 +846,59 @@ onMounted(() => {
       dialogue.setPhase('waiting-for-child');
     }
   });
+
+  /*
+   * WO-3.18 Phase 4 — back-key intercept.
+   * pushBackHandler returns `true` to mark the key consumed; we open the
+   * "故事还没画,要保留吗?" confirm dialog instead of letting the
+   * default onBack pop the screen. If there is no draft-worthy content
+   * (empty session, user just pressed CREATE → BACK), we return false
+   * and let the default fallback take the user back to the previous
+   * screen as usual.
+   */
+  unregisterBackHandler = pushBackHandler(() => {
+    if (!mounted) return false;
+    if (showBackConfirm.value) return true; // already showing — swallow
+    if (!hasDraftableContent()) return false;
+    showBackConfirm.value = true;
+    return true;
+  });
+
+  /*
+   * WO-3.18 Phase 4 — recover-draft path. Triggered when CreateScreen's
+   * "+" handler detects an active draft and routes here with
+   * { restoreDraft: true } in the payload. We seed the dialogue store
+   * with the draft contents so the kid lands directly on the same
+   * waiting_confirm UI they left earlier.
+   *
+   * Failure-mode: if loadDraft returns null (expired between CreateScreen
+   * decision and DialogueScreen mount), we silently fall through to
+   * startDialogue() — same outcome as picking "新故事".
+   */
+  const restoreDraft = !!screen.payload?.restoreDraft;
+  if (restoreDraft) {
+    const drafted = loadDraft();
+    if (drafted) {
+      // Seed the store enough that the WAITING_CONFIRM UI shows.
+      dialogue.dialogueId = drafted.dialogueId;
+      dialogue.round = Math.max(1, drafted.turnCount);
+      dialogue.canEarlyEnd = true;
+      dialogue.setPhase('bear-speaking');
+      dialogueState.value = 'waiting_confirm';
+      pendingStorySummary.value = drafted.outlineSummary || t('dialogue.demoReply');
+      // Show the bear's last-known summary in the bubble — the kid
+      // recognises the screen they left and sees the same CTA.
+      dialogue.currentQuestion = {
+        text: drafted.outlineSummary || t('dialogue.demoReply'),
+        textLearning: null,
+        ttsUrl: null,
+      };
+      void nextTick().then(() => setFocus('dialogue-ready-painter'));
+      return;
+    }
+    // Stale draft — drop and fall through.
+    clearDraft();
+  }
 
   // Demo / dev mode — skip server calls entirely; pin to demoPhase
   // (or default to 3A). This is what keeps ?dev=1 URLs from 401→ErrorScreen.
@@ -789,6 +977,12 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   mounted = false;
+  // WO-3.18 Phase 4 — drop the back-key handler so it can't fire
+  // against an unmounted screen and trip the modal phantom-state bug.
+  if (unregisterBackHandler) {
+    unregisterBackHandler();
+    unregisterBackHandler = null;
+  }
   if (softHintTimer != null) {
     window.clearTimeout(softHintTimer);
     softHintTimer = null;
@@ -989,11 +1183,24 @@ onBeforeUnmount(() => {
         button did nothing (focus had never moved there). v-show keeps
         DOM/focusable alive; CSS hides it for rounds 1-4.
       -->
-      <div v-show="dialogue.summary" class="ready-row">
+      <!--
+        WO-3.18 Phase 3 — confirm-create button (also called
+        ConfirmCreateButton in the work order spec). Visible whenever the
+        bear has produced a confirmable summary, either via the new
+        `should_summarize` path (dialogueState === 'waiting_confirm') or
+        the legacy `done=true` summary path (dialogue.summary set).
+        The .is-waiting-confirm modifier turns on the keyframe pulse so
+        the kid's eye is drawn to it; the button NEVER auto-presses.
+      -->
+      <div
+        v-show="dialogue.summary || dialogueState === 'waiting_confirm'"
+        class="ready-row"
+      >
         <button
           ref="readyBtnRef"
           type="button"
-          class="ready-btn wb-focus-feedback"
+          class="ready-btn wb-focus-feedback confirm-button ConfirmCreateButton"
+          :class="{ 'is-waiting-confirm': dialogueState === 'waiting_confirm' }"
           @click="startGenerationAndNavigate()"
         >
           <img
@@ -1077,6 +1284,36 @@ onBeforeUnmount(() => {
     />
 
     <div ref="okCaptureEl" class="ok-capture" tabindex="-1" aria-hidden="true" />
+
+    <!--
+      WO-3.18 Phase 4 — back-key save-draft confirm modal. Renders only
+      while showBackConfirm is true. Mouse/touch users tap the buttons;
+      remote users press OK on whichever button is highlighted (browser-
+      level focus, no useFocusable registration since the modal is short-
+      lived enough that the global key router stays inactive).
+    -->
+    <div v-if="showBackConfirm" class="draft-modal-overlay" role="dialog" aria-modal="true">
+      <div class="draft-modal-card">
+        <div class="draft-modal-title">{{ t('dialogue.draft.backConfirmTitle') }}</div>
+        <div class="draft-modal-actions">
+          <button
+            type="button"
+            class="draft-modal-btn draft-modal-btn-primary"
+            autofocus
+            @click="onBackConfirmKeep"
+          >
+            {{ t('dialogue.draft.backConfirmKeep') }}
+          </button>
+          <button
+            type="button"
+            class="draft-modal-btn"
+            @click="onBackConfirmDiscard"
+          >
+            {{ t('dialogue.draft.backConfirmDiscard') }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -1531,6 +1768,37 @@ onBeforeUnmount(() => {
     0 0 28px 6px var(--c-focus-soft);
 }
 
+/*
+ * WO-3.18 Phase 3 — pulse / breath animation for the
+ * "Start painting your story" confirm button while the dialogue is in
+ * WAITING_CONFIRM state. The keyframe is per WO §execution Phase 3 spec:
+ *   - 1.8s loop, ease in-out implicit
+ *   - subtle scale(1.05) at 50%
+ *   - amber radial glow expanding 0 → 20px and fading
+ * The animation runs forever; per WO product rules the screen NEVER
+ * times out on its own — only an explicit child action can advance it.
+ */
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(255, 200, 0, 0.7);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 20px rgba(255, 200, 0, 0);
+  }
+}
+.confirm-button.is-waiting-confirm {
+  animation: pulse 1.8s infinite;
+}
+/* Focused + pulsing — focus ring takes precedence so the pulse doesn't
+ * fight the amber border highlight. */
+.confirm-button.is-waiting-confirm.is-focused,
+.confirm-button.is-waiting-confirm[data-focused='true'] {
+  animation: pulse 1.8s infinite;
+  border-color: var(--c-amber);
+}
+
 /* Give the 3C stage room at the bottom for the pill + painter-bear CTA. */
 .stage-3c {
   padding-bottom: 120px;
@@ -1667,6 +1935,77 @@ onBeforeUnmount(() => {
   width: 1px; height: 1px;
   opacity: 0;
   pointer-events: none;
+}
+
+/*
+ * WO-3.18 Phase 4 — draft-save confirm modal. Sits at z-index 200 so it
+ * always covers the floating mic / remote-icon globals (z-index 99/100)
+ * and the painter-bear ready CTA. We use a flat dark overlay rather
+ * than a watercolor backdrop because the modal is intentionally
+ * "interruption" UI — visual continuity with the dialogue ceremony is
+ * the wrong message here.
+ */
+.draft-modal-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 200;
+  background: rgba(20, 12, 6, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+}
+.draft-modal-card {
+  width: min(640px, 80%);
+  background: rgba(255, 245, 230, 0.97);
+  border: 2px solid var(--c-amber, #d97706);
+  border-radius: 28px;
+  padding: 36px 40px 32px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+}
+.draft-modal-title {
+  font-family: var(--ff-display);
+  color: #2b1a0f;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-align: center;
+  line-height: 1.3;
+}
+.draft-modal-actions {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.draft-modal-btn {
+  font-family: var(--ff-display);
+  color: #2b1a0f;
+  font-size: 22px;
+  font-weight: 700;
+  background: rgba(255, 241, 200, 0.6);
+  border: 2px solid rgba(245, 158, 11, 0.55);
+  border-radius: 999px;
+  padding: 12px 28px;
+  cursor: pointer;
+  transition: transform var(--t-fast) var(--ease-out),
+              border-color var(--t-fast) var(--ease-out),
+              box-shadow var(--t-fast) var(--ease-out);
+}
+.draft-modal-btn-primary {
+  background: var(--c-amber, #f59e0b);
+  color: #2b1a0f;
+  border-color: var(--c-amber, #d97706);
+}
+.draft-modal-btn:hover,
+.draft-modal-btn:focus {
+  outline: none;
+  transform: scale(1.05);
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.4);
 }
 
 /*

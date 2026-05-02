@@ -50,6 +50,82 @@ export function isMockMode() {
 }
 
 // ---------------------------------------------------------------------------
+// WO-3.19 — Protagonist name resolution + verbal extraction
+//
+// Real bug (memory #21 §5): Kristy says "DORA", server emits a story about
+// "LUNA". Root cause = no extraction layer between ASR transcript and the
+// 12-page LLM prompt. The LLM-tracked `arc.character` was the only signal,
+// and it tended to be a phrase ("a small bear") rather than the name the
+// kid actually said.
+//
+// Priority chain (memory #21 §5):
+//   1. extractedFromConversation    — child's verbal mention this dialogue
+//   2. childProfile.name            — My Den / Child DB record
+//   3. 'Dora'                       — brand-anchor default (memory #1)
+//
+// `extractProtagonist` gets exposed as a parsed LLM field per turn; the
+// caller threads it through `dialogueSummary.extractedProtagonist` so
+// `generateStoryJson` can settle the final name with `resolveChildName`.
+// ---------------------------------------------------------------------------
+export function resolveChildName({
+  extractedProtagonist = null,
+  childProfile = null,
+} = {}) {
+  if (
+    typeof extractedProtagonist === 'string' &&
+    extractedProtagonist.trim().length > 0
+  ) {
+    return extractedProtagonist.trim();
+  }
+  if (
+    childProfile &&
+    typeof childProfile.name === 'string' &&
+    childProfile.name.trim().length > 0
+  ) {
+    return childProfile.name.trim();
+  }
+  return 'Dora';
+}
+
+// Appended to every v7.2 dialogue system prompt so Gemini can hand back
+// the child-named protagonist alongside the existing arc / outline fields.
+// Kept here (not in storyPrompt.js) because storyPrompt.js is out of WO-3.19
+// spillover scope and llm.js already owns the LLM contract surface.
+const PROTAGONIST_EXTRACTION_ADDENDUM = [
+  '',
+  '— WO-3.19 PROTAGONIST EXTRACTION (additional contract field) —',
+  'If anywhere in the conversation the child mentioned a SPECIFIC NAME they',
+  'want to be the hero (examples: "I want a boy named Tom", "the hero is',
+  'Lily", "let\'s make it about Mia"), set the field:',
+  '  "extractedProtagonist": "<just the name, one or two words>"',
+  'If no name was clearly mentioned, set:',
+  '  "extractedProtagonist": null',
+  'Use ONLY the cleaned name (e.g. "Tom"), not a phrase like "a boy named',
+  'Tom". The downstream story-expansion LLM consumes this as `${childName}`',
+  'in every page so a wrong value leaks into 12 pages.',
+].join('\n');
+
+// Lightweight regex extractor for the mock branch + tests. Production
+// path relies on the LLM, but we mirror the contract in mock so smoke
+// tests can assert the chain end-to-end without hitting Gemini.
+function mockExtractProtagonist(history = [], userInput = '') {
+  const corpus = [
+    ...(Array.isArray(history)
+      ? history.filter((h) => h && h.role === 'user').map((h) => h.text || '')
+      : []),
+    String(userInput || ''),
+  ].join(' ');
+  // EN: "named Tom", "called Lily"; ZH: "叫小明" / "名字叫 Mia"
+  const enMatch = corpus.match(
+    /\b(?:named|called|named is|hero is|main character is|protagonist is|the hero called)\s+([A-Z][a-zA-Z'\u00C0-\u017F-]{1,20})/,
+  );
+  if (enMatch && enMatch[1]) return enMatch[1];
+  const zhMatch = corpus.match(/(?:叫|叫做|名字叫|主角是|主角叫)\s*([\u4e00-\u9fff]{1,4}|[A-Z][a-zA-Z]{1,15})/);
+  if (zhMatch && zhMatch[1]) return zhMatch[1];
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Dialogue default question bank — used by mock mode AND as live-mode fallback
 // when Gemini fails / returns malformed JSON. Indexed by round (1-based via
 // round-1). Round 1 is the opener (handled in dialoguePromptPool); these cover
@@ -366,6 +442,9 @@ export function defaultDialogueTurnV2({
       },
       safetyLevel: 'ok',
       safetyReplacement: null,
+      // WO-3.19 — fallback bank can't extract; caller falls through to
+      // childProfile.name → 'Dora' via resolveChildName.
+      extractedProtagonist: null,
       _provider: 'default-bank-finished',
     };
   }
@@ -382,6 +461,7 @@ export function defaultDialogueTurnV2({
     storyOutline: null,
     safetyLevel: 'ok',
     safetyReplacement: null,
+    extractedProtagonist: null,
     _provider: 'default-bank',
   };
 }
@@ -440,10 +520,15 @@ function mockDialogueTurnV2({
   roundCount,
   primaryLang = 'en',
   forceDone = false,
+  history = [],
+  userInput = '',
 }) {
   // Deterministic mock that walks the arc steps, used by smoke tests.
   const arcByRound = ['character', 'setting', 'goal', 'obstacle', 'climax', 'resolution'];
   const willFinish = forceDone || round >= roundCount || round >= 4;
+  // WO-3.19 — surface extracted protagonist via mock regex so end-to-end
+  // smoke tests exercise the full priority chain without a live LLM.
+  const extractedProtagonist = mockExtractProtagonist(history, userInput);
   if (willFinish) {
     return {
       mode: 'storyteller',
@@ -454,6 +539,7 @@ function mockDialogueTurnV2({
       storyOutline: { paragraphs: defaultStoryOutline(primaryLang) },
       safetyLevel: 'ok',
       safetyReplacement: null,
+      extractedProtagonist,
       _provider: 'mock-finished',
     };
   }
@@ -467,6 +553,7 @@ function mockDialogueTurnV2({
     storyOutline: null,
     safetyLevel: 'ok',
     safetyReplacement: null,
+    extractedProtagonist,
     _provider: 'mock',
   };
 }
@@ -615,6 +702,21 @@ function coerceDialogueV2Payload(parsed, { round, primaryLang, forceDone }) {
       ? parsed.safetyReplacement.trim()
       : null;
 
+  // WO-3.19 — protagonist extraction. Accept either canonical
+  // `extractedProtagonist` or a couple of common LLM aliases. The string is
+  // sanitized to a 24-char single-line value so a malformed phrase from the
+  // LLM cannot leak into the 12-page prompt as the hero's name.
+  let extractedProtagonist = null;
+  const epRaw =
+    parsed.extractedProtagonist ??
+    parsed.extracted_protagonist ??
+    parsed.protagonistName ??
+    null;
+  if (typeof epRaw === 'string' && epRaw.trim()) {
+    const cleaned = epRaw.trim().replace(/[\n\r"]/g, '').slice(0, 24);
+    if (cleaned) extractedProtagonist = cleaned;
+  }
+
   return {
     mode,
     lastTurnSummary,
@@ -624,6 +726,7 @@ function coerceDialogueV2Payload(parsed, { round, primaryLang, forceDone }) {
     storyOutline,
     safetyLevel,
     safetyReplacement,
+    extractedProtagonist,
     _provider: 'gemini-v7_2',
   };
 }
@@ -638,11 +741,18 @@ async function liveDialogueTurnV2({
   learningLang = 'none',
   forceDone = false,
 }) {
+  // WO-3.19 — append protagonist-extraction addendum so Gemini returns the
+  // child-named hero alongside the v7.2 contract. Stays out of
+  // storyPrompt.js because that file is not in WO-3.19's spillover scope.
+  const enrichedSystemPrompt =
+    typeof systemPrompt === 'string' && systemPrompt
+      ? systemPrompt + '\n' + PROTAGONIST_EXTRACTION_ADDENDUM
+      : PROTAGONIST_EXTRACTION_ADDENDUM;
   let payload = null;
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
       const parsed = await callGeminiDialogueV2Once({
-        systemPrompt,
+        systemPrompt: enrichedSystemPrompt,
         history,
         userInput,
         round,
@@ -696,17 +806,27 @@ export const __test = {
  * @returns {Promise<{ title:string, titleEn:string, characterDescription:string, pages: StoryPage[] }>}
  */
 export async function generateStoryJson(args) {
-  // WO-3.8: childName variabilization + brand-anchor fallback. Protagonist
-  // name follows the chain: req childProfile.name (parent system) → 'Dora'
-  // (Kristy's brand anchor, memory #1). Earlier paths leaked moon-themed
-  // / generic Little-One fallbacks which broke product identity on first
-  // run. Inject the resolved childName into childProfile so every
-  // downstream code path (mock + live + retry feedback) sees Dora when no
-  // real child is bound.
-  const childName = args?.childProfile?.name || 'Dora';
+  // WO-3.19: protagonist resolution now follows the full priority chain
+  // (verbal extraction > My Den child name > brand-anchor "Dora").
+  // Builds on WO-3.8: childName is variabilized into ${childName} so
+  // every downstream code path (mock + live + retry feedback) sees the
+  // same resolved name. Earlier paths leaked moon-themed / generic
+  // Little-One fallbacks which broke product identity on first run.
+  const childName = resolveChildName({
+    extractedProtagonist: args?.dialogueSummary?.extractedProtagonist,
+    childProfile: args?.childProfile,
+  });
   const safeArgs = {
     ...args,
-    childProfile: { ...(args?.childProfile || {}), name: childName },
+    childProfile: { ...(args?.childProfile || {}), name: childName, childName },
+    dialogueSummary: {
+      ...(args?.dialogueSummary || {}),
+      childName,
+      // Default mainCharacter to the resolved childName when the dialog
+      // never produced one (skipRemaining / forceDone fallback path).
+      mainCharacter:
+        args?.dialogueSummary?.mainCharacter || childName,
+    },
   };
   if (isMockMode()) return mockStoryJson(safeArgs);
   return liveStoryJson(safeArgs);
@@ -714,8 +834,14 @@ export async function generateStoryJson(args) {
 
 function mockStoryJson({ dialogueSummary, childProfile }) {
   const child = childProfile || {};
-  // WO-3.8: brand-anchor fallback (was 'Little One').
-  const name = child.name || 'Dora';
+  // WO-3.19: route through the priority-chain helper rather than relying
+  // on `name || 'Dora'` so an extractedProtagonist that arrives via
+  // dialogueSummary still beats My Den fallbacks.
+  const childName = resolveChildName({
+    extractedProtagonist: dialogueSummary?.extractedProtagonist,
+    childProfile: child,
+  });
+  const name = childName;
   const age = child.age || 5;
   const primary = child.primaryLang || 'en';
   const learning = child.secondLang || 'none';
