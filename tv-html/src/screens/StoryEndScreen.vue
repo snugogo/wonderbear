@@ -12,8 +12,7 @@
       from this terminal screen.
     - "Play again" = reset story playback to page 0 → screen.go('story-body')
     - "Create sequel" = screen.go('dialogue') seeded with current story
-    - "Favorite" = local toggle (will persist via favorites store once
-      the API/store is wired)
+    - "Favorite" = optimistic local toggle + server persist via POST /api/story/:id/favorite
 
   Hard rules respected:
     - All focusables registered with explicit neighbors (no geometric drift)
@@ -46,6 +45,8 @@ import { useBgmStore } from '@/stores/bgm';
 import { useI18n } from 'vue-i18n';
 import { useFocusable, getCurrentFocusId, onFocusChange } from '@/services/focus';
 import { asset } from '@/utils/assets';
+import { api } from '@/services/api';
+import { bridge } from '@/services/bridge';
 
 const storyStore = useStoryStore();
 const screen = useScreenStore();
@@ -71,10 +72,16 @@ function playAgain(): void {
 }
 
 function toggleFavorite(): void {
-  // Local toggle only for now — favorites store / API wiring lands in a
-  // follow-up. The amber heart state still gives the kid the "yes I
-  // liked it" feedback they expect.
-  isFavorited.value = !isFavorited.value;
+  const next = !isFavorited.value;
+  isFavorited.value = next;
+  const storyId = storyStore.active?.id;
+  if (storyId) {
+    api.storyFavorite(storyId, { favorited: next })
+      .catch((err) => {
+        isFavorited.value = !next;
+        bridge.log('story_end', { event: 'favorite_failed', storyId, err: String(err) });
+      });
+  }
 }
 
 function createSequel(): void {
@@ -108,6 +115,12 @@ onMounted(() => {
   // §6.1: 'story_ending' scene maps to volume 0 → bgm.play() will call stop()
   // (per bgm store SCENE_VOLUMES table). This gives the kid a "the story is done" beat.
   bgm.play('story_ending');
+
+  // WO-3.30: init favorite state from the active story so the heart reflects
+  // the persisted server state.
+  if (storyStore.active) {
+    isFavorited.value = storyStore.active.favorited;
+  }
 
   focusedId.value = getCurrentFocusId() ?? '';
   unsubFocus = onFocusChange((id) => {

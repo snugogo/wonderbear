@@ -232,14 +232,11 @@ function toggleFavorite(summary: StorySummary): void {
   summary.favorited = next;
   bridge.log('create', { event: 'favorite_pressed', storyId: summary.id, value: next });
   // Server call is best-effort — revert on failure, no toast.
-  if (typeof (api as unknown as Record<string, unknown>).storyFavorite === 'function') {
-    (api as unknown as { storyFavorite: (id: string, v: boolean) => Promise<unknown> })
-      .storyFavorite(summary.id, next)
-      .catch((err) => {
-        summary.favorited = !next;
-        bridge.log('create', { event: 'favorite_failed', err: String(err) });
-      });
-  }
+  api.storyFavorite(summary.id, { favorited: next })
+    .catch((err) => {
+      summary.favorited = !next;
+      bridge.log('create', { event: 'favorite_failed', err: String(err) });
+    });
 }
 function downloadStory(summary: StorySummary): void {
   if (summary.downloaded) return;
